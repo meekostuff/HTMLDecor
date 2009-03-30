@@ -1,0 +1,53 @@
+srcdir = @srcdir@
+VPATH = @srcdir@
+
+PKGNAME = @PKGNAME@
+PKGVERSION = @PKGVERSION@
+
+include @top_srcdir@/mk/gnu.bsdvars.mk
+
+# FIXME we need these first four because pkglibdir, etc
+# aren't expanded by configure
+basedir ?= @basedir@
+prefix ?= @prefix@
+pkgreldir ?= ${PKGNAME}/${PKGVERSION}
+destdir ?= @destdir@
+toolsdir ?= @top_srcdir@/tools
+
+pkglibdir ?= @pkglibdir@
+pkgdefaultlibdir ?= @pkgdefaultlibdir@
+pkglibexecdir ?= @pkglibexecdir@
+pkgdemodir ?= @pkgdemodir@
+destpkglibdir ?= @destpkglibdir@
+destpkglibexecdir ?= @destpkglibexecdir@
+destpkgdemodir ?= @destpkgdemodir@
+
+.SUFFIXES :
+.SUFFIXES : .html .xhtml .js .xml .xpl .xbl
+
+RESOURCES = 
+TARGETS = htmlpp htmlwrap
+
+XSLTPROC = /usr/bin/xsltproc
+INSTALL = /usr/bin/install
+
+# Rules
+all : build
+
+build : ${TARGETS}
+
+install: ${TARGETS}
+	[ -d ${destpkglibexecdir} ] || ${INSTALL} -d ${destpkglibexecdir}
+	for FILE in ${.ALLSRC}; do\
+		${INSTALL} $${FILE} ${destpkglibexecdir}/$${FILE};\
+	done;
+
+clean : 
+	-rm ${TARGETS}
+
+htmlpp: htmlpp.pl htmlpp.xsl
+	cat ${.ALLSRC} > ${.TARGET}
+	
+htmlwrap: htmlwrap.pl htmlwrap.xsl
+	cat ${.ALLSRC} > ${.TARGET}
+	

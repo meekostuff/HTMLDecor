@@ -1,0 +1,40 @@
+srcdir = @srcdir@
+VPATH = @srcdir@
+
+PKGNAME = @PKGNAME@
+PKGVERSION = @PKGVERSION@
+SUBDIRS = source 
+
+include @top_srcdir@/mk/gnu.bsdvars.mk
+
+# Configuration
+# FIXME we need these first four because pkglibdir, etc 
+# aren't expanded by configure
+basedir ?= @basedir@
+prefix ?= @prefix@
+pkgreldir ?= @pkgreldir@
+destdir ?= @destdir@
+
+pkglibdir ?= @pkglibdir@
+pkglibexecdir ?= @pkglibexecdir@
+pkgdemodir ?= @pkgdemodir@
+destpkglibdir ?= @destpkglibdir@
+destpkglibexecdir ?= @destpkglibexecdir@
+destpkgdemodir ?= @destpkgdemodir@
+
+.SUFFIXES :
+.SUFFIXES : .html .xhtml .js .xml .exbl
+
+toolsdir = @top_srcdir@/tools
+
+# Rules
+all : build
+
+build :
+	for dir in ${SUBDIRS}; do make -C $${dir} build; done
+
+clean :
+	for dir in ${SUBDIRS}; do make -C $${dir} clean; done
+
+install : 
+	for dir in ${SUBDIRS}; do make -C $${dir} install; done

@@ -1,0 +1,154 @@
+#!/usr/bin/perl
+use warnings;
+use strict;
+use Data::Dumper;
+use Cwd;
+use File::Basename;
+use FindBin;
+
+# Config variables
+our @configVars = qw(PKGNAME PKGVERSION basedir destdir prefix pkgreldir pkglibdir pkgdefaultlibdir pkglibexecdir pkgdemodir pkgdocdir destpkglibdir destpkglibexecdir destpkgdemodir destpkgdocdir);
+
+# Preset variables
+our @presetVars = qw(top_builddir top_srcdir builddir srcdir configure_input);
+our $top_builddir = getcwd;
+our $top_srcdir = $FindBin::RealBin;
+our $builddir = $top_builddir;
+our $srcdir = $top_srcdir;
+our $configure_input = "";
+
+# Predeclared subroutines
+sub read_config($);
+sub expand_configVars();
+sub process_dir($);
+sub process_file($);
+sub get_subdirs($);
+
+read_config($top_srcdir . "/config.options");
+read_config($top_builddir . "/config.options");
+expand_configVars();
+
+for (@configVars) {
+	no strict 'refs';
+	defined($$_) or die "$_ not defined!\n";
+}
+
+process_dir("");
+
+sub read_config($) {
+	
+my $configfile = shift;
+open (CONFIG, "< $configfile") or return; # TODO notify failure opening config file
+while (<CONFIG>) {
+	/^\s*$/ and next; # skip empty lines
+	/^#/ and next; # and comments
+	/^\s*(\S+)\s*=\s*(.*)\s*(#.*)?$/ or die "Error reading $configfile: \n\t$_";
+	no strict 'refs';
+	$$1 = $2;
+}
+
+close (CONFIG);
+
+}
+
+sub expand_configVars() {
+	
+for my $name (@configVars) {
+	no strict 'refs';
+	my $val = $$name;
+	$val =~ s/\$\((\w+)\)/$$1/eg;
+	$val =~ s/\$\{(\w+)\}/$$1/eg;
+	$$name = $val;
+}
+
+}
+
+sub process_dir($) {
+
+my $reldir = shift;
+$builddir = $top_builddir;
+$builddir .= "/" . $reldir if $reldir;
+$srcdir = $top_srcdir;
+$srcdir .= "/" . $reldir if $reldir;
+
+if (! -d $builddir) {
+	mkdir $builddir || die "Error creating $builddir directory";
+}
+
+my @input_files = split(/\s+/, `ls ${srcdir}`);
+
+for my $fname (@input_files) {
+	$fname =~ s/\.in$// or next;
+	my $relpath = ($reldir) ? $reldir . "/" . $fname : $fname;
+	process_file($relpath);	
+}
+
+my @subdirs = get_subdirs($reldir);
+foreach my $dir (@subdirs) {
+	my $subreldir = ($reldir) ? $reldir . "/" : "";
+	$subreldir .= $dir;
+	process_dir($subreldir);
+}
+
+}
+
+
+sub process_file($) {
+
+my $relpath = shift;
+
+my $infile = $top_srcdir . "/$relpath.in";
+open(IN, "< " . $infile) || die "Error opening $infile";
+
+my $outfile = $top_builddir . "/$relpath";
+open(OUT, "> " . $outfile) || die "Error opening $outfile";
+
+$configure_input = $infile;
+
+while (<IN>) {
+	no strict 'refs';
+	foreach my $name (@presetVars, @configVars) {
+		my $value = $$name;
+		s/\@$name\@/$value/g;
+	}
+	print OUT;
+}
+
+close IN;
+close OUT;
+
+}
+
+
+sub get_subdirs($) {
+
+my $reldir = shift;
+my $builddir = $top_builddir . "/" . $reldir;
+my $Makefile = << 'EOF';
+include Makefile
+
+VAR:
+	@echo ${${VAR}}
+EOF
+
+my $cmd = "echo '$Makefile' | make -I $top_srcdir/mk -C $builddir -f - VAR=SUBDIRS VAR";
+my $text = `$cmd`;
+return split(/\s+/, $text);
+}
+
+
+sub get_vars_from_makefile($@) { # FIXME test and integrate
+
+my $makefile = shift;
+my $wrapper = << 'EOF';
+include $makefile
+
+VARS:
+	@echo ${foreach _var,${VARS},${_var} = ${${_var}}}
+EOF
+
+my $cmd = "echo '$wrapper' | make -C $builddir -f - VARS='@_' VARS";
+my $text = `$cmd`;
+return $text;
+
+}
