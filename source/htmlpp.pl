@@ -1,8 +1,8 @@
 #!/usr/bin/perl
 use Cwd;
-use IPC::Open2;
 $PWD = getcwd();
 $XSLTPROC = "/usr/bin/xsltproc --novalid --nonet";
+$TEMPLATE = "$0.xsl";
 $SRC = $ARGV[$#ARGV];
 $SRCPATH = `dirname $SRC`;
 chomp $SRCPATH;
@@ -13,14 +13,4 @@ for $i (0 .. $n) {
 	$PARAMS .= ("" eq $ARG || $ARG =~ /\s/) ? "'$ARG'" : $ARG;
 	$PARAMS .= " ";
 }
-#system("$XSLTPROC --path $SRCPATH --path $PWD $PARAMS $TEMPLATE $SRC");
-open2($rd, $wr, "$XSLTPROC --path $SRCPATH --path $PWD $PARAMS - $SRC");
-while (<main::DATA>) {
-	print $wr $_;
-}
-close $wr;
-$output = do { local $/; <$rd>; };
-close $rd;
-print $output;
-exit $?;
-__DATA__
+system("$XSLTPROC --path $SRCPATH --path $PWD $PARAMS $TEMPLATE $SRC");

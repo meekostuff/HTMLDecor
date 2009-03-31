@@ -25,7 +25,7 @@ destpkgdemodir ?= @destpkgdemodir@
 .SUFFIXES :
 .SUFFIXES : .html .xhtml .js .xml .xpl .xbl
 
-RESOURCES = 
+RESOURCES = htmlpp.xsl htmlwrap.xsl
 TARGETS = htmlpp htmlwrap
 
 XSLTPROC = /usr/bin/xsltproc
@@ -41,13 +41,16 @@ install: ${TARGETS}
 	for FILE in ${.ALLSRC}; do\
 		${INSTALL} $${FILE} ${destpkglibexecdir}/$${FILE};\
 	done;
+	for FILE in ${RESOURCES}; do\
+		${INSTALL} ${srcdir}/$${FILE} ${destpkglibexecdir}/$${FILE};\
+	done;
 
 clean : 
 	-rm ${TARGETS}
 
-htmlpp: htmlpp.pl htmlpp.xsl
-	cat ${.ALLSRC} > ${.TARGET}
+htmlpp: htmlpp.pl
+	cp ${.IMPSRC} ${.TARGET}
 	
-htmlwrap: htmlwrap.pl htmlwrap.xsl
-	cat ${.ALLSRC} > ${.TARGET}
+htmlwrap: htmlwrap.pl
+	cp ${.IMPSRC} ${.TARGET}
 	
