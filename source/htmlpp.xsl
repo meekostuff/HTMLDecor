@@ -5,14 +5,28 @@
 	xmlns="http://www.w3.org/1999/xhtml"
 	xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
 	xmlns:dyn="http://exslt.org/dynamic"
-	extension-element-prefixes="dyn">
+	xmlns:str="http://exslt.org/strings"
+	extension-element-prefixes="dyn str">
 
-<xsl:output method="xml" omit-xml-declaration="yes"
+<xsl:output method="xml" omit-xml-declaration="yes" 
 	doctype-public="-//W3C//DTD XHTML 1.0 Transitional//EN"/>
 
 <xsl:template match="@*|node()">
 	<xsl:copy>
 		<xsl:apply-templates select="@*|node()"/>
+	</xsl:copy>
+</xsl:template>
+
+<xsl:template match="html:head">
+	<xsl:copy>
+		<xsl:apply-templates select="@*"/>
+		<xsl:for-each select="str:split($SCRIPT_URLS)">
+<script src="{string()}"></script>
+		</xsl:for-each>
+		<xsl:apply-templates select="node()"/>
+		<xsl:for-each select="str:split($POST_SCRIPT_URLS)">
+<script src="{string()}"></script>
+		</xsl:for-each>
 	</xsl:copy>
 </xsl:template>
 
@@ -24,7 +38,7 @@
 </style>
 </xsl:template>
 
-<xsl:template match="html:*/@src | html:*/@href | xbl:*/@src | xbl:*/@extends">
+<xsl:template match="html:form/@action | html:*/@src | html:*/@href | xbl:*/@src | xbl:*/@extends">
         <xsl:variable name="name" select="name()"/>
         <xsl:attribute name="{$name}">
                 <xsl:call-template name="href_template">
