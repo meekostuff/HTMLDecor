@@ -3,7 +3,7 @@
 # Variables are expanded as they are read
 
 PKGNAME = HTMLPP
-PKGVERSION = 0.5
+PKGVERSION = 0.7
 basedir = http://localhost
 destdir = /Library/WebServer/Documents
 prefix = tools/
