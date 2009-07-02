@@ -1,26 +1,7 @@
 srcdir = @srcdir@
 VPATH = @srcdir@
 
-PKGNAME = @PKGNAME@
-PKGVERSION = @PKGVERSION@
-
 include @top_srcdir@/mk/gnu.bsdvars.mk
-
-# FIXME we need these first four because pkglibdir, etc
-# aren't expanded by configure
-basedir ?= @basedir@
-prefix ?= @prefix@
-pkgreldir ?= ${PKGNAME}/${PKGVERSION}
-destdir ?= @destdir@
-toolsdir ?= @top_srcdir@/tools
-
-pkglibdir ?= @pkglibdir@
-pkgdefaultlibdir ?= @pkgdefaultlibdir@
-pkglibexecdir ?= @pkglibexecdir@
-pkgdemodir ?= @pkgdemodir@
-destpkglibdir ?= @destpkglibdir@
-destpkglibexecdir ?= @destpkglibexecdir@
-destpkgdemodir ?= @destpkgdemodir@
 
 .SUFFIXES :
 .SUFFIXES : .html .xhtml .js .xml .xpl .xbl
@@ -37,12 +18,12 @@ all : build
 build : ${TARGETS}
 
 install: ${TARGETS}
-	[ -d ${destpkglibexecdir} ] || ${INSTALL} -d ${destpkglibexecdir}
+	[ -d ${pkglibexecdir} ] || ${INSTALL} -d ${pkglibexecdir}
 	for FILE in ${.ALLSRC}; do\
-		${INSTALL} $${FILE} ${destpkglibexecdir}/$${FILE};\
+		${INSTALL} $${FILE} ${pkglibexecdir}/$${FILE};\
 	done;
 	for FILE in ${RESOURCES}; do\
-		${INSTALL} ${srcdir}/$${FILE} ${destpkglibexecdir}/$${FILE};\
+		${INSTALL} ${srcdir}/$${FILE} ${pkglibexecdir}/$${FILE};\
 	done;
 
 clean : 

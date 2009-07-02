@@ -58,5 +58,6 @@ for my $name (keys %{$PARAMS}) {
 $OUTARGS .= "--stringparam SCRIPT_URLS \"" . join(" ", @{$SCRIPTS}) . "\" ";
 $OUTARGS .= "--stringparam POST_SCRIPT_URLS \"" . join(" ", @{$POST_SCRIPTS}) . "\" ";
 
-print STDERR "$XSLTPROC --path $SRCPATH --path $PWD $OUTARGS $TEMPLATE $SRC";
-system("$XSLTPROC --path $SRCPATH --path $PWD $OUTARGS $TEMPLATE $SRC");
+my $execStr = "$XSLTPROC --path $SRCPATH --path $PWD $OUTARGS $TEMPLATE $SRC";
+print STDERR "$execStr\n";
+system($execStr);
