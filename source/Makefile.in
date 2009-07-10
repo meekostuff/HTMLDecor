@@ -17,14 +17,9 @@ all : build
 
 build : ${TARGETS}
 
-install: ${TARGETS}
+install: ${TARGETS} ${RESOURCES}
 	[ -d ${pkglibexecdir} ] || ${INSTALL} -d ${pkglibexecdir}
-	for FILE in ${.ALLSRC}; do\
-		${INSTALL} $${FILE} ${pkglibexecdir}/$${FILE};\
-	done;
-	for FILE in ${RESOURCES}; do\
-		${INSTALL} ${srcdir}/$${FILE} ${pkglibexecdir}/$${FILE};\
-	done;
+	${INSTALL} ${.ALLSRC} ${pkglibexecdir}/
 
 clean : 
 	-rm ${TARGETS}
