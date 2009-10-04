@@ -4,7 +4,7 @@
 	xmlns:html="http://www.w3.org/1999/xhtml"
 	xmlns="http://www.w3.org/1999/xhtml">
 
-<xsl:output method="xml" omit-xml-declaration="yes"
+<xsl:output method="xml" omit-xml-declaration="yes" cdata-section-elements=""
 	doctype-public="-//W3C//DTD XHTML 1.0 Transitional//EN"/>
 <xsl:variable name="top" select="/" />
 <xsl:param name="WRAPPER_URL"/>
@@ -52,6 +52,14 @@
 
 <xsl:template match="html:script" mode="wrapper">
 	<xsl:copy-of select="." /><xsl:text>
+</xsl:text>
+</xsl:template>
+
+<xsl:template match="html:script[not(@src) and (not(@type) or @type='text/javascript')]" mode="wrapper">
+	<xsl:text disable-output-escaping="yes">&lt;script&gt;// &lt;![CDATA[
+</xsl:text>
+	<xsl:value-of select="text()" /><xsl:text disable-output-escaping="yes">
+// ]]&gt;&lt;/script&gt;
 </xsl:text>
 </xsl:template>
 
