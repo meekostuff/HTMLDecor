@@ -6,11 +6,8 @@ include @top_srcdir@/mk/gnu.bsdvars.mk
 .SUFFIXES :
 .SUFFIXES : .html .xhtml .js .xml .xpl .xbl
 
-RESOURCES = htmlpp.xsl htmlwrap.xsl
-TARGETS = htmlpp htmlwrap
-
-XSLTPROC = /usr/bin/xsltproc
-INSTALL = /usr/bin/install
+RESOURCES = htmlpp.xsl htmldecor.xsl
+TARGETS = htmlpp htmldecor HTMLDecor.js
 
 # Rules
 all : build
@@ -27,6 +24,9 @@ clean :
 htmlpp: htmlpp.pl
 	cp ${.IMPSRC} ${.TARGET}
 	
-htmlwrap: htmlwrap.pl
+htmldecor: htmldecor.pl
+	cp ${.IMPSRC} ${.TARGET}
+	
+HTMLDecor.js: ${srcdir}/lib/Meeko/HTMLDecor.js
 	cp ${.IMPSRC} ${.TARGET}
 	
