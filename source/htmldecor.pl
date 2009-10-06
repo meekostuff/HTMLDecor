@@ -4,10 +4,10 @@ $PWD = getcwd();
 $XSLTPROC = "/usr/bin/xsltproc --novalid --nonet";
 $TEMPLATE = "$0.xsl";
 $PARAMS = {};
-$WRAPPER = "";
+$DECOR = "";
 $SRC = "";
 
-my $usage = "$0 [--wrapper wrapperURL] file\n";
+my $usage = "$0 [--decor decorURL] file\n";
 
 my $n = scalar @ARGV;
 for (my $i=0; $i<$n; $i++) {
@@ -16,9 +16,9 @@ for (my $i=0; $i<$n; $i++) {
 		print STDERR $usage;
 		exit 1;
 	}
-	elsif ("--wrapper" eq $arg) {
+	elsif ("--decor" eq $arg) {
 		my $uri = $ARGV[++$i];
-		$WRAPPER = $uri;
+		$DECOR = $uri;
 		next;
 	}
 	elsif ($arg =~ /^-.+/) {
@@ -39,7 +39,7 @@ $SRCPATH = `dirname $SRC`;
 chomp $SRCPATH;
 
 $OUTARGS = "";
-$OUTARGS .= "--stringparam WRAPPER_URL \"" . $WRAPPER . "\" ";
+$OUTARGS .= "--stringparam DECOR_URL \"" . $DECOR . "\" ";
 
 my $execStr = "$XSLTPROC --path $SRCPATH --path $PWD $OUTARGS $TEMPLATE $SRC";
 print STDERR "$execStr\n";

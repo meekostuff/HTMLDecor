@@ -10,7 +10,7 @@ var logger = {
 
 if (!Meeko) this.Meeko = {};
 if (!Meeko.stuff) Meeko.stuff = {};
-if (!Meeko.stuff.wrapper) Meeko.stuff.wrapper = (function() {
+if (!Meeko.stuff.decorSystem) Meeko.stuff.decorSystem = (function() {
 
 var readyState = "uninitialized",
 	trigger = "head";
@@ -27,7 +27,7 @@ function checkTrigger() {
 	else return readyStateLookup[document.readyState] || false;
 }
 function init() {
-	if (trigger == "head" && checkTrigger()) trigger == "body"; // FIXME
+	if (trigger == "head" && checkTrigger()) trigger = "body"; // FIXME
 	onprogress();
 }
 function onprogress() {
@@ -38,11 +38,11 @@ function onprogress() {
 var _initializing = false; // guard against re-entrancy
 function _init() {
 	if (_initializing) {
-		logger.warn("Reentrancy in wrapper initialization.");
+		logger.warn("Reentrancy in decorSystem initialization.");
 		return;
 	}
 	if (readyState == "complete") {
-		logger.warn("wrapper initialization requested after complete");
+		logger.warn("decorSystem initialization requested after complete");
 		return;
 	}
 	
@@ -56,7 +56,7 @@ function _init() {
 
 function manualInit() {
 	if (readyState != "uninitialized") {
-		logger.warn("Manual wrapper initialization requested after automatic start");
+		logger.warn("Manual decorSystem initialization requested after automatic start");
 		return;		
 	}
 	__init();
@@ -71,7 +71,7 @@ function __init() {
 		case "uninitialized":
 			head = document.querySelector("head");
 			body = document.body;
-			var linkElt = document.querySelector("link[rel=wrapper]");
+			var linkElt = document.querySelector("link[rel=decor]");
 			if (!linkElt) {
 				readyState = "complete";
 				break MAIN;
