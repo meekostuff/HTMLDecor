@@ -169,7 +169,7 @@ function fixBody() {
 		var node = wNode.cloneNode(true);
 		wBody.removeChild(wNode);
 		if (wNode.nodeType == 1 && wNode.getAttribute("role") == "main") break;
-		try { body.insertBefore(node, main); }
+		try { if (!body.insertBefore(node, main)) throw ""; } // NOTE IE6 occasionally silently fails on insertBefore()
 		catch (error) { main.insertAdjacentHTML("beforeBegin", node.outerHTML); }
 	}	
 }
