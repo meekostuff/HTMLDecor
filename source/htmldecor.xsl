@@ -41,21 +41,18 @@
 <xsl:template match="html:head" mode="decor">
 	<xsl:copy>
 		<xsl:apply-templates select="@*" mode="decor"/>
-		<xsl:if test="not($top/html:html/html:head/html:title)">
-			<xsl:copy-of select="html:title"/>
-		</xsl:if>
-		<xsl:apply-templates select="node()[not(self::html:title | self::html:script)]" mode="decor"/>
-		<xsl:apply-templates select="$top/html:html/html:head/node()[not(self::html:script)]"/>
-		<xsl:apply-templates select="html:script" mode="decor"/>
+		<xsl:apply-templates select="$top/html:html/html:head/node()"/>
+		<xsl:apply-templates select="node()" mode="decor"/>
 	</xsl:copy>
 </xsl:template>
 
-<xsl:template match="html:script" mode="decor">
-	<xsl:copy-of select="." /><xsl:text>
-</xsl:text>
+<xsl:template match="html:title" mode="decor">
+	<xsl:if test="not($top/html:html/html:head/html:title)">
+		<xsl:copy-of select="."/>
+	</xsl:if>
 </xsl:template>
-
-<xsl:template match="html:script[not(@src) and (not(@type) or @type='text/javascript')]" mode="decor">
+	
+<xsl:template match="html:script[not(@src) and (not(@type) or @type='text/javascript')]">
 	<xsl:text disable-output-escaping="yes">&lt;script&gt;// &lt;![CDATA[
 </xsl:text>
 	<xsl:value-of select="text()" /><xsl:text disable-output-escaping="yes">
