@@ -2,9 +2,15 @@
 use Cwd;
 $PWD = getcwd();
 $XSLTPROC = "/usr/bin/xsltproc --novalid --nonet";
+#$TIDY = "/usr/bin/tidy -asxhtml -q --tidy-mark no";
+$BINPATH = `dirname $0`;
+chomp $BINPATH;
+$TIDY = "$XSLTPROC --html $BINPATH/xhtml2xhtml.xsl";
 $TEMPLATE = "$0.xsl";
 $PARAMS = {};
 $DECOR = "";
+$IS_HTML = 0;
+$VERBOSE = 0;
 $SRC = "";
 
 my $usage = "$0 [--decor decorURL] file\n";
@@ -19,6 +25,14 @@ for (my $i=0; $i<$n; $i++) {
 	elsif ("--decor" eq $arg) {
 		my $uri = $ARGV[++$i];
 		$DECOR = $uri;
+		next;
+	}
+	elsif ("--html" eq $arg) {
+		$IS_HTML = 1;
+		next;
+	}
+	elsif ("--verbose" eq $arg) {
+		$VERBOSE = 1;
 		next;
 	}
 	elsif ($arg =~ /^-.+/) {
@@ -41,6 +55,8 @@ chomp $SRCPATH;
 $OUTARGS = "";
 $OUTARGS .= "--stringparam DECOR_URL \"" . $DECOR . "\" ";
 
-my $execStr = "$XSLTPROC --path $SRCPATH --path $PWD $OUTARGS $TEMPLATE $SRC";
-print STDERR "$execStr\n";
+my $execStr = ($IS_HTML) ? "$TIDY $SRC | " : "";
+$execStr .= "$XSLTPROC --path $SRCPATH --path $PWD $OUTARGS $TEMPLATE ";
+$execStr .= ($IS_HTML) ? "-" : "$SRC";
+$VERBOSE and print STDERR "$execStr\n";
 system($execStr);
