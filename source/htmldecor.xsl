@@ -41,9 +41,15 @@
 <xsl:template match="html:head" mode="decor">
 	<xsl:copy>
 		<xsl:apply-templates select="@*" mode="decor"/>
-		<xsl:apply-templates select="$top/html:html/html:head/node()"/>
+		<xsl:if test="not(html:meta[@role='placeholder'])">
+			<xsl:apply-templates select="$top/html:html/html:head/node()"/>
+		</xsl:if>
 		<xsl:apply-templates select="node()" mode="decor"/>
 	</xsl:copy>
+</xsl:template>
+
+<xsl:template match="html:head/html:meta[@role='placeholder']" mode="decor">
+	<xsl:apply-templates select="$top/html:html/html:head/node()"/>
 </xsl:template>
 
 <xsl:template match="html:title" mode="decor">
