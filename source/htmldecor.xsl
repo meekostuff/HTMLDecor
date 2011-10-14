@@ -58,6 +58,10 @@
 	</xsl:if>
 </xsl:template>
 	
+<xsl:template match="html:script" mode="decor">
+	<xsl:apply-templates select="." />
+</xsl:template>
+
 <xsl:template match="html:script[not(@src) and (not(@type) or @type='text/javascript')]">
 	<xsl:text disable-output-escaping="yes">&lt;script&gt;// &lt;![CDATA[
 </xsl:text>
