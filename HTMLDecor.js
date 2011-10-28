@@ -12,25 +12,14 @@ var logger = {
 	error: log
 };
 
-var each = function(o, fn) {
-	for (var name in o) {
-		if (o.hasOwnProperty && !o.hasOwnProperty(name)) continue;
-		fn(name, o[name], o);
-	}
-}
-var filter = ([].filter) ? 
-function(a, fn) { return [].filter.call(a, fn); } :
-function(a, fn) { 
-	var a2 = []; 
-	for (var n=a.length, i=0, item; i<n; i++) 
-		if (item = a[i], fn(item, i)) a2.push(item);
-	return a2;
-}
 var forEach = ([].forEach) ? 
 function(a, fn) { return [].forEach.call(a, fn); } :
-function(a, fn) { 
-	for (var n=a.length, i=0; i<n; i++) fn(a[i], i, a);
-}
+function(a, fn) { for (var n=a.length, i=0; i<n; i++) fn(a[i], i, a); }
+
+/* 
+  NOTE the selector matching only supports tagName, class, id, attr
+	No combination selectors or selector lists are supported 
+*/ 
 var selectorLookup = [];
 var parseSelector = function(text) {
 	var o = selectorLookup[text];
@@ -80,58 +69,10 @@ var firstMatch = function(nodeList, selector) {
 	}
 }
 
-var contains = document.documentElement.contains ?
-function(n1, n2) { return n1.contains(n2); } :
-function(n1, n2) { 
-	for (var node=n2; node; node=node.parentNode) 
-		if (node == n1) return true;
-	return false;
-}
-var _find = function(node, o, single) {
-	var list = [], item;
-	if (o.id) { 
-		item = node.ownerDocument.getElementById(o.id);
-		if (!_matches(item, o)) return single ? null : list;
-		if (!contains(node, item)) return single ? null : list;
-		if (single) return item;
-		list.push(item); 
-		return list; 
-	}
-	var tagName = o.tagName || "*";
-	var items = node.getElementsByTagName("*");
-	for (var n=items.length, i=0; i<n; i++) {
-		item = items[i];
-		if (!_matches(item, o)) continue;
-		if (single) return item;
-		list.push(item);
-	}
-	return (single) ? null : list;
-}
-
-var find = function(node, selector, single) {
-	return _find(node, parseSelector(selector), single);
-}
-var $ = document.querySelector ?
-function(selector, node) {
-	var node = node || document;
-	return node.querySelector(selector);
-} :
-function(selector, node) { 
-	var node = node || document;
-	return find(selector, node, true);
-}
-var $$ = document.querySelectorAll ? 
-function(selector, node) { 
-	var node = node || document;
-	return node.querySelectorAll(selector);
-} :
-function(selector, node) { 
-	var node = node || document;
-	return find(selector, node);	
-}
-
+var isIE = /*@cc_on!@*/false;
+var isIE8 = isIE && document.querySelector;
 var readyState = "uninitialized",
-	trigger = "head";
+	trigger = (!isIE || isIE8) ? "head" : "body";
 
 var readyStateLookup = {
 	"uninitialized": false,
@@ -140,11 +81,20 @@ var readyStateLookup = {
 	"loaded": false,
 	"complete": true
 }
+
+for (var script=document; script.lastChild; script=script.lastChild);
+var head = document.head || firstMatch(document.documentElement.childNodes, "head");
+
+var style = document.createElement("style");
+
 function checkTrigger() {
-	if (trigger == "head") return (document.body) ? true : false;
+	if (trigger == "head") return !!document.body;
 	else return readyStateLookup[document.readyState] || false;
 }
 function init() {
+	head.insertBefore(style, script);
+	if (style.styleSheet) style.styleSheet.addRule("body", "display: none; ");
+	else style.textContent = "body { display: none; }";
 	if (trigger == "head" && checkTrigger()) trigger = "body"; // FIXME
 	onprogress();
 }
@@ -181,15 +131,14 @@ function manualInit() {
 	onprogress();
 }
 
-var head, body, main;
-var httpRequest, iframe, contentDocument;
+var body, main, linkElt;
+var httpRequest, iframe, decorDocument;
 
 function __init() {
 	MAIN: switch (readyState) { // NOTE all these branches can fall-thru when they result in a state transition
 	case "uninitialized":
-		head = document.head || firstMatch(document.documentElement.childNodes, "head");
 		body = document.body;
-		var linkElt = firstMatch(head.childNodes, "link[rel=decor]");
+		linkElt = firstMatch(head.childNodes, "link[rel=decor]");
 		if (!linkElt) {
 			readyState = "complete";
 			break MAIN;
@@ -210,21 +159,22 @@ function __init() {
 		createDocument();
 	case "parsing":
 		;;;logger.debug("parsing");
-		if (contentDocument.readyState && !readyStateLookup[contentDocument.readyState]) break MAIN;
+		if (decorDocument.readyState && !readyStateLookup[decorDocument.readyState]) break MAIN;
 		readyState = "interactive";
 		fixHead();
 	case "interactive":
 		;;;logger.debug("interactive");
 		fixBody();
+		head.removeChild(style);
 		if (!readyStateLookup[document.readyState]) break MAIN;
 		readyState = "loaded";
 		finalizeBody();
+		decorDocument = null;
+		head.removeChild(iframe);
 	case "loaded":
 		;;;logger.debug("loaded");
 		if (document.readyState != "complete") break MAIN;
 		readyState = "complete";
-		contentDocument = null;
-		head.removeChild(iframe);
 	}
 
 	// NOTE it is an error if we don't get to this point
@@ -233,16 +183,16 @@ function __init() {
 function createDocument() {
 	iframe = document.createElement("iframe");
 	iframe.setAttribute("style", "height: 0; position: absolute; top: -10000px;");
-	head.appendChild(iframe);
-	contentDocument = iframe.contentDocument || iframe.contentWindow.document;
-	contentDocument.open();
-	contentDocument.write(httpRequest.responseText);
-	contentDocument.close();
+	head.insertBefore(iframe, script);
+	decorDocument = iframe.decorDocument || iframe.contentWindow.document;
+	decorDocument.open();
+	decorDocument.write(httpRequest.responseText);
+	decorDocument.close();
 }
 
 function fixHead() {
 	var cursor = head.firstChild;
-	var wHead = contentDocument.head || firstMatch("head", contentDocument.documentElement.childNodes);
+	var wHead = decorDocument.head || firstMatch(contentDocument.documentElement.childNodes, "head");
 	for (var wNode; wNode=wHead.firstChild;) {
 		var node; 
 		try { node = document.importNode(wNode, true); }
@@ -251,7 +201,7 @@ function fixHead() {
 		if (node.nodeType != 1) continue;
 		switch (node.tagName.toLowerCase()) {
 		case "title":
-			if (firstMatch(head, "title")) continue;
+			if (firstMatch(head.childNodes, "title")) continue;
 			break;
 		case "link": // TODO
 			break;
@@ -262,7 +212,7 @@ function fixHead() {
 		case "script": // TODO
 			break;
 		}
-		head.appendChild(node);
+		head.insertBefore(node, linkElt);
 	}
 }
 
@@ -274,7 +224,7 @@ function fixBody() {
 		if (cursor == main) break;
 		body.removeChild(cursor);
 	}
-	var wBody = contentDocument.body;
+	var wBody = decorDocument.body;
 	for (var wNode; wNode=wBody.firstChild; ) {
 		var node = wNode.cloneNode(true);
 		wBody.removeChild(wNode);
@@ -290,7 +240,7 @@ function finalizeBody() {
 		body.removeChild(cursor);
 	}
 
-	var wBody = contentDocument.body;
+	var wBody = decorDocument.body;
 	forEach(wBody.childNodes, function(wNode) {
 		var node = wNode.cloneNode(true);
 		wBody.removeChild(wNode);
