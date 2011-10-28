@@ -184,7 +184,7 @@ function createDocument() {
 	iframe = document.createElement("iframe");
 	iframe.setAttribute("style", "height: 0; position: absolute; top: -10000px;");
 	head.insertBefore(iframe, script);
-	decorDocument = iframe.decorDocument || iframe.contentWindow.document;
+	decorDocument = iframe.contentDocument || iframe.contentWindow.document;
 	decorDocument.open();
 	decorDocument.write(httpRequest.responseText);
 	decorDocument.close();
@@ -192,13 +192,13 @@ function createDocument() {
 
 function fixHead() {
 	var cursor = head.firstChild;
-	var wHead = decorDocument.head || firstMatch(contentDocument.documentElement.childNodes, "head");
+	var wHead = decorDocument.head || firstMatch(decorDocument.documentElement.childNodes, "head");
+	var node;
 	for (var wNode; wNode=wHead.firstChild;) {
-		var node; 
-		try { node = document.importNode(wNode, true); }
-		catch (error) { node = wNode.cloneNode(true); }
 		wHead.removeChild(wNode);
-		if (node.nodeType != 1) continue;
+		if (wNode.nodeType != 1) continue;
+		if (document.importNode) node = document.importNode(wNode, true);
+		else node = document.createElement(wNode.outerHTML);
 		switch (node.tagName.toLowerCase()) {
 		case "title":
 			if (firstMatch(head.childNodes, "title")) continue;
