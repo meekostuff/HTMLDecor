@@ -145,7 +145,9 @@ function __init() {
 		}
 		readyState = "loading";
 		var href = linkElt.href;
-		httpRequest = new XMLHttpRequest();
+		httpRequest = window.XMLHttpRequest ?
+			new XMLHttpRequest() :
+			new ActiveXObject("Microsoft.XMLHTTP"); 
 		httpRequest.open("GET", href, true); // FIXME sync or async??
 		httpRequest.send("");
 	case "loading":
