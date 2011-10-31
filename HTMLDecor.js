@@ -16,6 +16,16 @@ var forEach = ([].forEach) ?
 function(a, fn) { return [].forEach.call(a, fn); } :
 function(a, fn) { for (var n=a.length, i=0; i<n; i++) fn(a[i], i, a); }
 
+var $ = function(selector) {
+	var m = selector.match(/^#([-_a-zA-Z0-9]+)$/);
+	if (!m[0]) throw (selector + " can only be an ID selector in $()");
+	return document.getElementById(m[1]);
+}
+var $$ = function(selector) {
+	var m = selector.match(/^([a-zA-Z]+)$/);
+	if (!m[0]) throw (selector + " can only be a tagName selector in $$()");
+	return document.getElementsByTagName(m[1]);
+}
 /* 
   NOTE the selector matching only supports tagName, class, id, attr
 	No combination selectors or selector lists are supported 
@@ -132,7 +142,7 @@ function manualInit() {
 }
 
 var body, main, linkElt;
-var httpRequest, iframe, decorDocument;
+var httpRequest, iframe, decorURL, decorDocument;
 
 function __init() {
 	MAIN: switch (readyState) { // NOTE all these branches can fall-thru when they result in a state transition
@@ -144,11 +154,11 @@ function __init() {
 			break MAIN;
 		}
 		readyState = "loading";
-		var href = linkElt.href;
+		decorURL = linkElt.href;
 		httpRequest = window.XMLHttpRequest ?
 			new XMLHttpRequest() :
 			new ActiveXObject("Microsoft.XMLHTTP"); 
-		httpRequest.open("GET", href, true); // FIXME sync or async??
+		httpRequest.open("GET", decorURL, true); // FIXME sync or async??
 		httpRequest.send("");
 	case "loading":
 		;;;logger.debug("loading");
@@ -190,6 +200,16 @@ function createDocument() {
 	decorDocument.open();
 	decorDocument.write(httpRequest.responseText);
 	decorDocument.close();
+	var base = decorDocument.createElement("base");
+	base.setAttribute("href", decorURL);
+	var decorHead = document.head || firstMatch(decorDocument.documentElement.childNodes, "head");
+	decorHead.appendChild(base);
+	function setHref(el) { el.setAttribute("href", el.href); }
+	function setSrc(el) { el.setAttribute("src", el.src); }
+	forEach($$("link"), setHref);
+	forEach($$("a"), setHref);
+	forEach($$("script"), setSrc);
+	forEach($$("img"), setSrc);
 }
 
 function fixHead() {
