@@ -39,6 +39,11 @@ if (!Meeko.stuff.decorSystem) Meeko.stuff.decorSystem = new function() {
 var sys = this;
 var logger = Meeko.stuff.syslog;
 
+var addEvent = 
+	document.addEventListener && function(node, event, fn) { return node.addEventListener(event, fn, false); } ||
+	document.attachEvent && function(node, event, fn) { return node.attachEvent("on" + event, fn); } ||
+	function(node, event, fn) { node["on" + event] = fn; }
+
 var $ = function(selector, context) {
 	if (!context) context = document;
 	else if (context.nodeType != 9) context = context.ownerDocument;
@@ -97,8 +102,10 @@ var _matches = function(node, o) {
 var matches = function(node, selector) { 
 	return _matches(node, parseSelector(selector)); 
 }
-var firstMatch = function(nodeList, selector) {
-	var o = parseSelector(selector);
+var firstChild = function(parent, selector) {
+	var nodeList = parent.childNodes;
+	if (selector.call) 
+	var o = parseSelector(selector),
 	for (var n=nodeList.length, i=0; i<n; i++) {
 		var node = nodeList[i];
 		if (_matches(node, o)) return node;
@@ -141,7 +148,7 @@ var readyStateLookup = {
 }
 
 for (var script=document; script.lastChild; script=script.lastChild);
-var head = document.head || firstMatch(document.documentElement.childNodes, "head");
+var head = document.head || firstChild(document.documentElement, "head");
 
 var fragment = document.createDocumentFragment();
 var style = document.createElement("style");
@@ -196,38 +203,28 @@ function manualInit() {
 }
 
 var body, main, linkElt;
-var httpRequest, iframe, decorURL, decorDocument;
+var iframe, decorURL, decorDocument;
 
 function __init() {
 	switch (sys.readyState) { // NOTE all these branches can fall-thru when they result in a state transition
 	case "uninitialized":
 		body = document.body;
-		linkElt = firstMatch(head.childNodes, "link[rel=decor]");
+		linkElt = firstChild(head, "link[rel=decor]");
 		if (!linkElt) {
 			sys.readyState = "complete";
 			break;
 		}
 		sys.readyState = "loading";
 		decorURL = resolveURL(linkElt.getAttribute("href"));
-		httpRequest = window.XMLHttpRequest ?
-			new XMLHttpRequest() :
-			new ActiveXObject("Microsoft.XMLHTTP"); 
-		httpRequest.open("GET", decorURL, true); // FIXME sync or async??
-		httpRequest.send("");
+		//importDocument(function() { sys.readyState = "parsing"; });
+		loadDocument(function() { sys.readyState = "parsing"; });
 	case "loading":
 		;;;logger.debug("loading");
-		if (httpRequest.readyState != 4) break;
-		if (httpRequest.status != 200) {
-			sys.readyState = "complete";
-			break;
-		}
-		sys.readyState = "parsing";
-		createDocument();
+		break;
 	case "parsing":
 		;;;logger.debug("parsing");
-		if (decorDocument.readyState && !readyStateLookup[decorDocument.readyState]) break;
-		sys.readyState = "pending";
 		fixHead();
+		sys.readyState = "pending";
 	case "pending":
 		;;;logger.debug("pending");
 		if (fixBody()) sys.readyState = "pending2";
@@ -257,22 +254,25 @@ function __init() {
 	// NOTE it is an error if we don't get to this point
 }
 
-function createDocument() {
-	var html = httpRequest.responseText;
-	var baseURL = decorURL.replace(/\/[^\/]*$/, "/");
-	html = html.replace(/(<head>|<head\s+[^>]*>)/i, '$1<base href="' + decorURL + '"><!--[if lte IE 6]></base><![endif]-->');
-
+function loadDocument(callback) {
 	iframe = document.createElement("iframe");
 	iframe.setAttribute("style", "height: 0; position: absolute; top: -10000px;");
-	head.insertBefore(iframe, script);
-	decorDocument = iframe.contentDocument || iframe.contentWindow.document;
-	decorDocument.open();
-	decorDocument.write(html);
+	var onload = function() {
+		decorDocument = iframe.contentWindow.document;
+		normalizeDocument(decorDocument);
+		callback();
+	}
+	addEvent(iframe, "load", onload);
 
+	iframe.src = decorURL;
+	head.insertBefore(iframe, script);
+}
+
+function normalizeDocument(doc) {
 	function normalize(tagName, attrName) { 
-		forEach($$(tagName, decorDocument), function(el) { 
+		forEach($$(tagName, doc), function(el) { 
 			var val = el[attrName];
-			if (val) el.setAttribute(attrName, resolveURL(val, decorDocument)); 
+			if (val) el.setAttribute(attrName, resolveURL(val, doc)); 
 		});
 	}
 	normalize("link", "href");
@@ -280,6 +280,36 @@ function createDocument() {
 	normalize("script", "src");
 	normalize("img", "src");
 	normalize("form", "action");
+}
+
+function importDocument(callback) {
+	var xhr = window.XMLHttpRequest ?
+		new XMLHttpRequest() :
+		new ActiveXObject("Microsoft.XMLHTTP"); 
+	xhr.onreadystatechange = function() {
+		if (xhr.readyState != 4) return;
+		if (xhr.status != 200) { // FIXME
+			sys.readyState = "complete";
+			return;
+		}
+		writeDocument(xhr.responseText, callback);
+	}
+	xhr.open("GET", decorURL, true); // FIXME sync or async??
+	xhr.send("");
+}
+
+function writeDocument(html, callback) {
+	html = html.replace(/(<head>|<head\s+[^>]*>)/i, '$1<base href="' + decorURL + '" /><!--[if lte IE 6]></base><![endif]-->');
+
+	iframe = document.createElement("iframe");
+	addEvent(iframe, "load", callback);
+	iframe.setAttribute("style", "height: 0; position: absolute; top: -10000px;");
+	head.insertBefore(iframe, script);
+	decorDocument = iframe.contentDocument || iframe.contentWindow.document;
+	decorDocument.open();
+	decorDocument.write(html);
+
+	normalizeDocument(decorDocument);
 
 	forEach($$("base", decorDocument), function(base) { 
 		base.parentNode.removeChild(base); 
@@ -295,7 +325,7 @@ function createDocument() {
 
 function fixHead() {
 	var cursor = head.firstChild;
-	var wHead = decorDocument.head || firstMatch(decorDocument.documentElement.childNodes, "head");
+	var wHead = decorDocument.head || firstChild(decorDocument.documentElement, "head");
 	var node;
 	for (var wNode; wNode=wHead.firstChild;) {
 		wHead.removeChild(wNode);
@@ -304,7 +334,7 @@ function fixHead() {
 		else node = document.createElement(wNode.outerHTML);
 		switch (wNode.tagName.toLowerCase()) {
 		case "title": // NOTE only import title if not already present
-			if (firstMatch(head.childNodes, "title")) continue;
+			if (firstChild(head, "title")) continue;
 			break;
 		case "link": // TODO
 			break;
@@ -326,7 +356,7 @@ function fixBody() {
 	// probably using an element ID.
 
 	if (main) return true;
-	main = firstMatch(body.childNodes, "[role=main]");
+	main = firstChild(body, "[role=main]");
 	if (!main) return false;
 	for (var cursor; cursor=body.firstChild;) {
 		if (cursor == main) break;
@@ -350,7 +380,7 @@ function finalizeBody() {
 	}
 
 	var wBody = decorDocument.body;
-	forEach(wBody.childNodes, function(wNode) {
+	forEach(wBody, function(wNode) {
 		var node = wNode.cloneNode(true);
 		wBody.removeChild(wNode);
 		try { body.appendChild(node); }
