@@ -199,13 +199,13 @@ var body, main, linkElt;
 var httpRequest, iframe, decorURL, decorDocument;
 
 function __init() {
-	MAIN: switch (sys.readyState) { // NOTE all these branches can fall-thru when they result in a state transition
+	switch (sys.readyState) { // NOTE all these branches can fall-thru when they result in a state transition
 	case "uninitialized":
 		body = document.body;
 		linkElt = firstMatch(head.childNodes, "link[rel=decor]");
 		if (!linkElt) {
 			sys.readyState = "complete";
-			break MAIN;
+			break;
 		}
 		sys.readyState = "loading";
 		decorURL = resolveURL(linkElt.getAttribute("href"));
@@ -216,22 +216,22 @@ function __init() {
 		httpRequest.send("");
 	case "loading":
 		;;;logger.debug("loading");
-		if (httpRequest.readyState != 4) break MAIN;
+		if (httpRequest.readyState != 4) break;
 		if (httpRequest.status != 200) {
 			sys.readyState = "complete";
-			break MAIN;
+			break;
 		}
 		sys.readyState = "parsing";
 		createDocument();
 	case "parsing":
 		;;;logger.debug("parsing");
-		if (decorDocument.readyState && !readyStateLookup[decorDocument.readyState]) break MAIN;
+		if (decorDocument.readyState && !readyStateLookup[decorDocument.readyState]) break;
 		sys.readyState = "pending";
 		fixHead();
 	case "pending":
 		;;;logger.debug("pending");
 		if (fixBody()) sys.readyState = "pending2";
-		break MAIN;
+		break; // NOTE allow page reflow before un-hiding
 	case "pending2":
 		;;;logger.debug("pending2");
 		sys.readyState = "interactive";
@@ -243,14 +243,14 @@ function __init() {
 		body.style.visibility = "";
 	case "interactive":
 		;;;logger.debug("interactive");
-		if (!readyStateLookup[document.readyState]) break MAIN;
+		if (!readyStateLookup[document.readyState]) break;
 		sys.readyState = "loaded";
 		finalizeBody();
 		decorDocument = null;
 		head.removeChild(iframe);
 	case "loaded":
 		;;;logger.debug("loaded");
-		if (document.readyState != "complete") break MAIN;
+		if (document.readyState != "complete") break;
 		sys.readyState = "complete";
 	}
 
