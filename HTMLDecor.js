@@ -1,22 +1,43 @@
 if (!this.Meeko) this.Meeko = {};
 if (!Meeko.stuff) Meeko.stuff = {};
+
+(function() {
+
+var forEach = ([].forEach) ? 
+function(a, fn, context) { return [].forEach.call(a, fn, context); } :
+function(a, fn, context) { for (var n=a.length, i=0; i<n; i++) fn.call(context, a[i], i, a); }
+
+
+if (!Meeko.stuff.syslog) Meeko.stuff.syslog = new function() {
+
+var levels = "DEBUG INFO WARN ERROR".split(" ");
+
+forEach(levels, function(name, num) {
+	
+this["LOG_"+name] = num;	
+this[name.toLowerCase()] = function() { this._log({ level: num, message: arguments }); }
+
+}, this);
+
+this.LOG_LEVEL = this.LOG_WARN;
+
+this._log = function(data) { 
+	if (data.level < this.LOG_LEVEL) return;
+	data.timeStamp = +(new Date);
+        data.message = [].join.call(data.message, " ");
+        if (this.write) this.write(data);
+}
+
+this.write = (window.console) &&
+function(data) { console.log(levels[data.level], ": ", data.message); };
+
+} // end syslog defn
+
+
 if (!Meeko.stuff.decorSystem) Meeko.stuff.decorSystem = new function() {
 
 var sys = this;
-
-var log = (window.console) ? function(data) { console.log(data); } : function(data) {};
-
-var logger = {
-	log: log,
-	debug: log,
-	info: log,
-	warn: log,
-	error: log
-};
-
-var forEach = ([].forEach) ? 
-function(a, fn) { return [].forEach.call(a, fn); } :
-function(a, fn) { for (var n=a.length, i=0; i<n; i++) fn(a[i], i, a); }
+var logger = Meeko.stuff.syslog;
 
 var $ = function(selector, context) {
 	if (!context) context = document;
@@ -342,4 +363,6 @@ init();
 
 sys.initialize = manualInit;
 
-}
+} // end decorSystem defn
+
+})();
