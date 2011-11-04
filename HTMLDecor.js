@@ -19,7 +19,7 @@ this[name.toLowerCase()] = function() { this._log({ level: num, message: argumen
 
 }, this);
 
-this.LOG_LEVEL = this.LOG_WARN;
+this.LOG_LEVEL = this.LOG_DEBUG;
 
 this._log = function(data) { 
 	if (data.level < this.LOG_LEVEL) return;
@@ -104,8 +104,7 @@ var matches = function(node, selector) {
 }
 var firstChild = function(parent, selector) {
 	var nodeList = parent.childNodes;
-	if (selector.call) 
-	var o = parseSelector(selector),
+	var o = parseSelector(selector);
 	for (var n=nodeList.length, i=0; i<n; i++) {
 		var node = nodeList[i];
 		if (_matches(node, o)) return node;
@@ -147,11 +146,13 @@ var readyStateLookup = {
 	"complete": true
 }
 
-for (var script=document; script.lastChild; script=script.lastChild);
-var head = document.head || firstChild(document.documentElement, "head");
+var head, script, style, body, main, fragment, iframe, decorURL, decorDocument;
 
-var fragment = document.createDocumentFragment();
-var style = document.createElement("style");
+for (script=document; script.lastChild; script=script.lastChild);
+head = document.head || firstChild(document.documentElement, "head");
+
+fragment = document.createDocumentFragment();
+style = document.createElement("style");
 fragment.appendChild(style); // NOTE on IE this realizes style.styleSheet !!??
 
 // NOTE hide the page until the decor is ready
@@ -159,6 +160,14 @@ fragment.appendChild(style); // NOTE on IE this realizes style.styleSheet !!??
 // doesn't leave the window blank
 if (style.styleSheet) style.styleSheet.cssText = "body { visibility: hidden; }";
 else style.textContent = "body { visibility: hidden; }";
+function unhide() {
+	head.removeChild(style);
+	// NOTE on IE sometimes content stays hidden although 
+	// the stylesheet has been removed.
+	// The following forces the content to be revealed
+	body.style.visibility = "hidden";
+	body.style.visibility = "";
+}
 
 function checkTrigger() {
 	if (sys.trigger == "head") return !!document.body;
@@ -202,20 +211,20 @@ function manualInit() {
 	onprogress();
 }
 
-var body, main, linkElt;
-var iframe, decorURL, decorDocument;
-
 function __init() {
 	switch (sys.readyState) { // NOTE all these branches can fall-thru when they result in a state transition
 	case "uninitialized":
 		body = document.body;
-		linkElt = firstChild(head, "link[rel=decor]");
-		if (!linkElt) {
+		var href = script.getAttribute("data-href");
+		decorURL = resolveURL(href);
+		if (decorURL == document.URL) {
+			if (!href) logger.info("No decor URL specified. Processing is complete.");
+			else logger.warn("Decor URL is same as current page. Abandoning processing.");
+			unhide();
 			sys.readyState = "complete";
 			break;
 		}
 		sys.readyState = "loading";
-		decorURL = resolveURL(linkElt.getAttribute("href"));
 		//importDocument(function() { sys.readyState = "parsing"; });
 		loadDocument(function() { sys.readyState = "parsing"; });
 	case "loading":
@@ -232,12 +241,7 @@ function __init() {
 	case "pending2":
 		;;;logger.debug("pending2");
 		sys.readyState = "interactive";
-		head.removeChild(style);
-		// NOTE on IE sometimes content stays hidden although 
-		// the stylesheet has been removed.
-		// The following forces the content to be revealed
-		body.style.visibility = "hidden";
-		body.style.visibility = "";
+		unhide();
 	case "interactive":
 		;;;logger.debug("interactive");
 		if (!readyStateLookup[document.readyState]) break;
@@ -347,7 +351,7 @@ function fixHead() {
 		case "script": // TODO
 			break;
 		}
-		head.insertBefore(node, linkElt);
+		head.insertBefore(node, head.firstChild);
 	}
 }
 
