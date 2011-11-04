@@ -1,6 +1,8 @@
 if (!this.Meeko) this.Meeko = {};
 if (!Meeko.stuff) Meeko.stuff = {};
-if (!Meeko.stuff.decorSystem) Meeko.stuff.decorSystem = (function() {
+if (!Meeko.stuff.decorSystem) Meeko.stuff.decorSystem = new function() {
+
+var sys = this;
 
 var log = (window.console) ? function(data) { console.log(data); } : function(data) {};
 
@@ -16,15 +18,18 @@ var forEach = ([].forEach) ?
 function(a, fn) { return [].forEach.call(a, fn); } :
 function(a, fn) { for (var n=a.length, i=0; i<n; i++) fn(a[i], i, a); }
 
-var $ = function(selector) {
+var $ = function(selector, context) {
+	if (!context) context = document;
+	else if (context.nodeType != 9) context = context.ownerDocument;
 	var m = selector.match(/^#([-_a-zA-Z0-9]+)$/);
 	if (!m[0]) throw (selector + " can only be an ID selector in $()");
-	return document.getElementById(m[1]);
+	return context.getElementById(m[1]);
 }
-var $$ = function(selector) {
+var $$ = function(selector, context) {
+	var context = context || document;
 	var m = selector.match(/^([a-zA-Z]+)$/);
 	if (!m[0]) throw (selector + " can only be a tagName selector in $$()");
-	return document.getElementsByTagName(m[1]);
+	return context.getElementsByTagName(m[1]);
 }
 /* 
   NOTE the selector matching only supports tagName, class, id, attr
@@ -80,9 +85,31 @@ var firstMatch = function(nodeList, selector) {
 }
 
 var isIE = /*@cc_on!@*/false;
+var isIE7 = isIE && window.XMLHttpRequest;
 var isIE8 = isIE && document.querySelector;
-var readyState = "uninitialized",
-	trigger = (!isIE || isIE8) ? "head" : "body";
+// NOTE resolveURL shouldn't be needed, or at least
+// el.setAttribute(attr, el[attr]) should suffice.
+// But IE doesn't return relative URLs for <link>, and
+// does funny things on anchors
+// FIXME might be able to refactor to only resolve for <link>
+var resolveURL = (!isIE || isIE8) ? 
+function(relURL, context) { 
+	if (!context) context = document;
+	var a = context.createElement("a");
+	a.setAttribute("href", relURL);
+	return a.href;
+} :
+function(relURL, context) { 
+	if (!context) context = document;
+	var a = context.createElement('<a href="'+ relURL + '" />');
+	if (context == document) return a.href;
+	context.body.appendChild(a);
+	var href = a.href;
+	context.body.removeChild(a);
+	return href;
+}
+sys.readyState = "uninitialized";
+sys.trigger = (!isIE || isIE8) ? "head" : "body";
 
 var readyStateLookup = {
 	"uninitialized": false,
@@ -95,22 +122,28 @@ var readyStateLookup = {
 for (var script=document; script.lastChild; script=script.lastChild);
 var head = document.head || firstMatch(document.documentElement.childNodes, "head");
 
+var fragment = document.createDocumentFragment();
 var style = document.createElement("style");
+fragment.appendChild(style); // NOTE on IE this realizes style.styleSheet !!??
+
+// NOTE hide the page until the decor is ready
+// FIXME this should have a configurable timeout so slow loading
+// doesn't leave the window blank
+if (style.styleSheet) style.styleSheet.cssText = "body { visibility: hidden; }";
+else style.textContent = "body { visibility: hidden; }";
 
 function checkTrigger() {
-	if (trigger == "head") return !!document.body;
+	if (sys.trigger == "head") return !!document.body;
 	else return readyStateLookup[document.readyState] || false;
 }
 function init() {
 	head.insertBefore(style, script);
-	if (style.styleSheet) style.styleSheet.addRule("body", "display: none; ");
-	else style.textContent = "body { display: none; }";
-	if (trigger == "head" && checkTrigger()) trigger = "body"; // FIXME
+	if (sys.trigger == "head" && checkTrigger()) sys.trigger = "body"; // FIXME
 	onprogress();
 }
 function onprogress() {
-	if (readyState == "uninitialized" && checkTrigger() || readyState != "uninitialized") _init();
-	if (readyState != "complete") timerId = window.setTimeout(onprogress, 50);
+	if (sys.readyState == "uninitialized" && checkTrigger() || sys.readyState != "uninitialized") _init();
+	if (sys.readyState != "complete") timerId = window.setTimeout(onprogress, 50);
 }
 
 var _initializing = false; // guard against re-entrancy
@@ -119,7 +152,7 @@ function _init() {
 		logger.warn("Reentrancy in decorSystem initialization.");
 		return;
 	}
-	if (readyState == "complete") {
+	if (sys.readyState == "complete") {
 		logger.warn("decorSystem initialization requested after complete");
 		return;
 	}
@@ -133,7 +166,7 @@ function _init() {
 }
 
 function manualInit() {
-	if (readyState != "uninitialized") {
+	if (sys.readyState != "uninitialized") {
 		logger.warn("Manual decorSystem initialization requested after automatic start");
 		return;		
 	}
@@ -145,16 +178,16 @@ var body, main, linkElt;
 var httpRequest, iframe, decorURL, decorDocument;
 
 function __init() {
-	MAIN: switch (readyState) { // NOTE all these branches can fall-thru when they result in a state transition
+	MAIN: switch (sys.readyState) { // NOTE all these branches can fall-thru when they result in a state transition
 	case "uninitialized":
 		body = document.body;
 		linkElt = firstMatch(head.childNodes, "link[rel=decor]");
 		if (!linkElt) {
-			readyState = "complete";
+			sys.readyState = "complete";
 			break MAIN;
 		}
-		readyState = "loading";
-		decorURL = linkElt.href;
+		sys.readyState = "loading";
+		decorURL = resolveURL(linkElt.getAttribute("href"));
 		httpRequest = window.XMLHttpRequest ?
 			new XMLHttpRequest() :
 			new ActiveXObject("Microsoft.XMLHTTP"); 
@@ -164,52 +197,79 @@ function __init() {
 		;;;logger.debug("loading");
 		if (httpRequest.readyState != 4) break MAIN;
 		if (httpRequest.status != 200) {
-			readyState = "complete";
+			sys.readyState = "complete";
 			break MAIN;
 		}
-		readyState = "parsing";
+		sys.readyState = "parsing";
 		createDocument();
 	case "parsing":
 		;;;logger.debug("parsing");
 		if (decorDocument.readyState && !readyStateLookup[decorDocument.readyState]) break MAIN;
-		readyState = "interactive";
+		sys.readyState = "pending";
 		fixHead();
+	case "pending":
+		;;;logger.debug("pending");
+		if (fixBody()) sys.readyState = "pending2";
+		break MAIN;
+	case "pending2":
+		;;;logger.debug("pending2");
+		sys.readyState = "interactive";
+		head.removeChild(style);
+		// NOTE on IE sometimes content stays hidden although 
+		// the stylesheet has been removed.
+		// The following forces the content to be revealed
+		body.style.visibility = "hidden";
+		body.style.visibility = "";
 	case "interactive":
 		;;;logger.debug("interactive");
-		fixBody();
-		head.removeChild(style);
 		if (!readyStateLookup[document.readyState]) break MAIN;
-		readyState = "loaded";
+		sys.readyState = "loaded";
 		finalizeBody();
 		decorDocument = null;
 		head.removeChild(iframe);
 	case "loaded":
 		;;;logger.debug("loaded");
 		if (document.readyState != "complete") break MAIN;
-		readyState = "complete";
+		sys.readyState = "complete";
 	}
 
 	// NOTE it is an error if we don't get to this point
 }
 
 function createDocument() {
+	var html = httpRequest.responseText;
+	var baseURL = decorURL.replace(/\/[^\/]*$/, "/");
+	html = html.replace(/(<head>|<head\s+[^>]*>)/i, '$1<base href="' + decorURL + '"><!--[if lte IE 6]></base><![endif]-->');
+
 	iframe = document.createElement("iframe");
 	iframe.setAttribute("style", "height: 0; position: absolute; top: -10000px;");
 	head.insertBefore(iframe, script);
 	decorDocument = iframe.contentDocument || iframe.contentWindow.document;
 	decorDocument.open();
-	decorDocument.write(httpRequest.responseText);
+	decorDocument.write(html);
+
+	function normalize(tagName, attrName) { 
+		forEach($$(tagName, decorDocument), function(el) { 
+			var val = el[attrName];
+			if (val) el.setAttribute(attrName, resolveURL(val, decorDocument)); 
+		});
+	}
+	normalize("link", "href");
+	normalize("a", "href");
+	normalize("script", "src");
+	normalize("img", "src");
+	normalize("form", "action");
+
+	forEach($$("base", decorDocument), function(base) { 
+		base.parentNode.removeChild(base); 
+	});
+
+	// NOTE IE doesn't always get to document.readyState == "complete
+	// if document.close() is called BEFORE normalizing URLs.
 	decorDocument.close();
-	var base = decorDocument.createElement("base");
-	base.setAttribute("href", decorURL);
-	var decorHead = document.head || firstMatch(decorDocument.documentElement.childNodes, "head");
-	decorHead.appendChild(base);
-	function setHref(el) { el.setAttribute("href", el.href); }
-	function setSrc(el) { el.setAttribute("src", el.src); }
-	forEach($$("link"), setHref);
-	forEach($$("a"), setHref);
-	forEach($$("script"), setSrc);
-	forEach($$("img"), setSrc);
+
+	// FIXME need warning for doc property mismatches between page and decor
+	// eg. charset, doc-mode, content-type, etc
 }
 
 function fixHead() {
@@ -221,13 +281,15 @@ function fixHead() {
 		if (wNode.nodeType != 1) continue;
 		if (document.importNode) node = document.importNode(wNode, true);
 		else node = document.createElement(wNode.outerHTML);
-		switch (node.tagName.toLowerCase()) {
-		case "title":
+		switch (wNode.tagName.toLowerCase()) {
+		case "title": // NOTE only import title if not already present
 			if (firstMatch(head.childNodes, "title")) continue;
 			break;
 		case "link": // TODO
 			break;
 		case "meta": // TODO
+			// FIXME importing meta's in IE < 8 cause grief
+			if (wNode.httpEquiv) continue;
 			break;
 		case "style": // TODO
 			break;
@@ -239,9 +301,12 @@ function fixHead() {
 }
 
 function fixBody() {
-	if (main) return;
+	// FIXME the [role=main] container should be configurable, 
+	// probably using an element ID.
+
+	if (main) return true;
 	main = firstMatch(body.childNodes, "[role=main]");
-	if (!main) return;
+	if (!main) return false;
 	for (var cursor; cursor=body.firstChild;) {
 		if (cursor == main) break;
 		body.removeChild(cursor);
@@ -254,6 +319,7 @@ function fixBody() {
 		try { if (!body.insertBefore(node, main)) throw ""; } // NOTE IE6 occasionally silently fails on insertBefore()
 		catch (error) { main.insertAdjacentHTML("beforeBegin", node.outerHTML); }
 	}
+	return true;
 }
 
 function finalizeBody() {
@@ -274,8 +340,6 @@ function finalizeBody() {
 
 init();
 
-return {
-	initialize: manualInit
-}
+sys.initialize = manualInit;
 
-})();
+}
