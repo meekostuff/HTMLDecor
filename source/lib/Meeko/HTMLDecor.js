@@ -1,7 +1,9 @@
-if (!this.Meeko) this.Meeko = {};
-if (!Meeko.stuff) Meeko.stuff = {};
-
 (function() {
+
+if (window.name == "_decor") return; // NOTE don't run if included in decor document
+
+var Meeko = window.Meeko || (window.Meeko = {});
+if (!Meeko.stuff) Meeko.stuff = {};
 
 var forEach = ([].forEach) ? 
 function(a, fn, context) { return [].forEach.call(a, fn, context); } :
@@ -111,6 +113,7 @@ var firstChild = function(parent, selector) {
 	}
 }
 
+// TODO the best way to do IE detection is to insert conditional comments
 var isIE = /*@cc_on!@*/false;
 var isIE7 = isIE && window.XMLHttpRequest;
 var isIE8 = isIE && document.querySelector;
@@ -180,7 +183,7 @@ function init() {
 }
 function onprogress() {
 	if (sys.readyState == "uninitialized" && checkTrigger() || sys.readyState != "uninitialized") _init();
-	if (sys.readyState != "complete") timerId = window.setTimeout(onprogress, 50);
+	if (sys.readyState != "complete") timerId = window.setTimeout(onprogress, 25); // FIXME make interval config option
 }
 
 var _initializing = false; // guard against re-entrancy
@@ -260,6 +263,7 @@ function __init() {
 
 function loadDocument(callback) {
 	iframe = document.createElement("iframe");
+	iframe.name = "_decor";
 	iframe.setAttribute("style", "height: 0; position: absolute; top: -10000px;");
 	var onload = function() {
 		decorDocument = iframe.contentWindow.document;
@@ -269,7 +273,7 @@ function loadDocument(callback) {
 	addEvent(iframe, "load", onload);
 
 	iframe.src = decorURL;
-	head.insertBefore(iframe, script);
+	head.insertBefore(iframe, head.firstChild);
 }
 
 function normalizeDocument(doc) {
@@ -306,9 +310,10 @@ function writeDocument(html, callback) {
 	html = html.replace(/(<head>|<head\s+[^>]*>)/i, '$1<base href="' + decorURL + '" /><!--[if lte IE 6]></base><![endif]-->');
 
 	iframe = document.createElement("iframe");
+	iframe.name = "_decor";
 	addEvent(iframe, "load", callback);
 	iframe.setAttribute("style", "height: 0; position: absolute; top: -10000px;");
-	head.insertBefore(iframe, script);
+	head.insertBefore(iframe, head.firstChild);
 	decorDocument = iframe.contentDocument || iframe.contentWindow.document;
 	decorDocument.open();
 	decorDocument.write(html);
@@ -351,7 +356,7 @@ function fixHead() {
 		case "script": // TODO
 			break;
 		}
-		head.insertBefore(node, head.firstChild);
+		head.insertBefore(node, cursor);
 	}
 }
 
@@ -400,3 +405,4 @@ sys.initialize = manualInit;
 } // end decorSystem defn
 
 })();
+
