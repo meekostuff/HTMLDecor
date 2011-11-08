@@ -134,7 +134,7 @@ var readyStateLookup = {
 	"complete": true
 }
 
-var head, style, body, main, mainID, mainContainer, fragment, iframe, decorURL, decorDocument;
+var head, style, body, main, mainID, lastDecorNode, fragment, iframe, decorURL, decorDocument;
 
 head = document.head || firstChild(document.documentElement, "head");
 
@@ -372,19 +372,19 @@ function insertDecor() {
 	decorMain.id = decorID;
 	var div = document.createElement("div");
 	div.innerHTML = wBody.innerHTML;
+	lastDecorNode = div.lastChild;
 	for (var node; node=div.firstChild; ) {
 		body.insertBefore(node, main);
 	}
 	var _main = $("#"+decorID);
 	// TODO compat check between main and _main
 	_main.parentNode.replaceChild(main, _main);
-	for (var node=main; node.parentNode!==body; node=node.parentNode);
-	mainContainer = node;
+	if (!lastDecorNode.parentNode) lastDecorNode = main;
 }
 
 function removeAfter() {
 	var cursor;
-	while (cursor = mainContainer.nextSibling) {
+	while (cursor = lastDecorNode.nextSibling) {
 		body.removeChild(cursor);
 	}
 }
