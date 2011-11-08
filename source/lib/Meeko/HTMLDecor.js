@@ -1,6 +1,18 @@
+// TODO Move script and options detection outside of the decorSystem module
+// Eventually syslog and decorSystem could be in separate modules
+// and built into this script.
+
 (function() {
 
-if (window.name == "_decor") return; // NOTE don't run if included in decor document
+var script;
+for (script=document; script.lastChild; script=script.lastChild);
+
+if (window.name == "_decor") { 
+	// NOTE if HTMLDecor is included in a decor document then abort and 
+	// remove script so it doesn't get copied into the page
+	script.parentNode.removeChild(script);
+	return; 
+}
 
 var Meeko = window.Meeko || (window.Meeko = {});
 if (!Meeko.stuff) Meeko.stuff = {};
@@ -105,9 +117,8 @@ var readyStateLookup = {
 	"complete": true
 }
 
-var head, script, style, body, main, mainID, mainContainer, fragment, iframe, decorURL, decorDocument;
+var head, style, body, main, mainID, mainContainer, fragment, iframe, decorURL, decorDocument;
 
-for (script=document; script.lastChild; script=script.lastChild);
 head = document.head || firstChild(document.documentElement, "head");
 
 fragment = document.createDocumentFragment();
