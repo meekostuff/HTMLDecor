@@ -44,8 +44,8 @@ var firstChild = function(parent, selector) {
 	selector = selector.toLowerCase();
 	var nodeList = parent.childNodes;
 	for (var n=nodeList.length, i=0; i<n; i++) {
-		var node = nodeList[i];
-		if (node.tagName.toLowerCase() == selector) return node;
+		var node = nodeList[i], tagName = node.tagName;
+		if (tagName && tagName.toLowerCase() == selector) return node;
 	}
 }
 
@@ -106,8 +106,8 @@ function(relURL, context) {
 	context.body.removeChild(a);
 	return href;
 }
+
 sys.readyState = "uninitialized";
-sys.trigger = (!isIE || isIE8) ? "head" : "body";
 
 var readyStateLookup = {
 	"uninitialized": false,
@@ -139,17 +139,12 @@ function unhide() {
 	body.style.visibility = "";
 }
 
-function checkTrigger() {
-	if (sys.trigger == "head") return !!document.body;
-	else return readyStateLookup[document.readyState] || false;
-}
 function init() {
 	head.insertBefore(style, script);
-	if (sys.trigger == "head" && checkTrigger()) sys.trigger = "body"; // FIXME
 	onprogress();
 }
 function onprogress() {
-	if (sys.readyState == "uninitialized" && checkTrigger() || sys.readyState != "uninitialized") _init();
+	_init();
 	if (sys.readyState != "complete") timerId = window.setTimeout(onprogress, 25); // FIXME make interval config option
 }
 
@@ -209,6 +204,8 @@ function __init() {
 		break;
 	case "parsing":
 		;;;logger.debug("parsing");
+		body = document.body;
+		if (!body) break;
 		fixHead();
 		sys.readyState = "pending";
 	case "pending":
