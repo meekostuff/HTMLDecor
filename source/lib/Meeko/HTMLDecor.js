@@ -27,57 +27,13 @@ var $$ = function(selector, context) {
 	if (!m[0]) throw (selector + " can only be a tagName selector in $$()");
 	return context.getElementsByTagName(m[1]);
 }
-/* 
-  NOTE the selector matching only supports tagName, class, id, attr
-	No combination selectors or selector lists are supported 
-*/ 
-var selectorLookup = [];
-var parseSelector = function(text) {
-	var o = selectorLookup[text];
-	if (o) return o;
-	var m = text.match(/^([a-zA-Z]+)?(#[-_a-zA-Z0-9]+)?(\.[-_a-zA-Z0-9]+)?(\[([-_a-zA-Z]+)(?:=([-_a-zA-Z0-9]+))\])?$/);
-	if (!m[0]) throw (text + " is not a recognized selector");
-	o = {
-		tagName: m[1],
-		id: m[2],
-		className: m[3]
-	}
-	if (m[4]) o[m[5]] = m[6];
-	selectorLookup[text] = o;
-	return o;
-}
-var _matches = function(node, o) {
-	if (node.nodeType != 1) return false;
-	for (var name in o) {
-		var val = o[name];
-		switch (name) {
-		case "tagName": 
-			if (val && val.toLowerCase() != node.tagName.toLowerCase()) return false;
-			break;
-		case "className": 
-			if (val && node.className.match(val) < 0) return false;
-			break;
-		case "id": 
-			if (val && node.id != val) return false;
-			break;
-		default:
-			var attrVal = node.getAttribute(name);
-			if (val && attrVal != val) return false;
-			else if (!attrVal) return false;
-			break;
-		}
-	}
-	return true;
-}
-var matches = function(node, selector) { 
-	return _matches(node, parseSelector(selector)); 
-}
+
 var firstChild = function(parent, selector) {
+	selector = selector.toLowerCase();
 	var nodeList = parent.childNodes;
-	var o = parseSelector(selector);
 	for (var n=nodeList.length, i=0; i<n; i++) {
 		var node = nodeList[i];
-		if (_matches(node, o)) return node;
+		if (node.tagName.toLowerCase() == selector) return node;
 	}
 }
 
