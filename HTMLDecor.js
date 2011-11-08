@@ -50,9 +50,16 @@ var firstChild = function(parent, selector) {
 }
 
 // TODO the best way to do IE detection is to insert conditional comments
-var isIE = /*@cc_on!@*/false;
-var isIE7 = isIE && window.XMLHttpRequest;
-var isIE8 = isIE && document.querySelector;
+var IE_VER, isIE = /*@cc_on!@*/false;
+if (isIE) {
+	IE_VER = 9;
+	var div = document.createElement("div");
+	div.innerHTML = 
+		"<!--[if lte IE 6]>6<![endif]-->" + 
+		"<!--[if IE 7]>7<![endif]-->" + 
+		"<!--[if IE 8]>8<![endif]-->";
+	IE_VER = 1 * div.innerHTML;
+}
 
 if (!Meeko.stuff.syslog) Meeko.stuff.syslog = new function() {
 
@@ -96,7 +103,7 @@ var logger = Meeko.stuff.syslog;
 // But IE doesn't return relative URLs for <link>, and
 // does funny things on anchors
 // FIXME might be able to refactor to only resolve for <link>
-var resolveURL = (!isIE || isIE8) ? 
+var resolveURL = (!isIE || IE_VER >= 8) ? 
 function(relURL, context) { 
 	if (!context) context = document;
 	var a = context.createElement("a");
@@ -123,7 +130,7 @@ var readyStateLookup = {
 	"uninitialized": false,
 	"loading": false,
 	"interactive": false,
-	"loaded": false,
+	"loaded": true, // TODO is this correct??
 	"complete": true
 }
 
@@ -141,6 +148,7 @@ fragment.appendChild(style); // NOTE on IE this realizes style.styleSheet !!??
 if (style.styleSheet) style.styleSheet.cssText = "body { visibility: hidden; }";
 else style.textContent = "body { visibility: hidden; }";
 function unhide() {
+	if (style.parentNode != head) return;
 	head.removeChild(style);
 	// NOTE on IE sometimes content stays hidden although 
 	// the stylesheet has been removed.
@@ -205,33 +213,42 @@ function __init() {
 			setReadyState("complete");
 			break;
 		}
-		setReadyState("loading");
-		//importDocument(function() { setReadyState("parsing"); });
-		loadDocument(function() { setReadyState("parsing"); });
-	case "loading":
+		setReadyState("loadDecor");
+		//importDocument(function() { setReadyState("fixHead"); });
+		loadDocument(function() { setReadyState("fixHead"); });
+	case "loadDecor":
 		break;
-	case "parsing":
+	case "fixHead":
 		body = document.body;
 		if (!body) break;
 		fixHead();
-		setReadyState("pending");
-	case "pending":
+		setReadyState("removeBefore");
+	case "removeBefore":
 		main = $("#"+mainID);
 		if (!main) break;
 		if (main.parentNode != body) {
 			logger.error("#" + mainID + " is not an immediate child of document.body. Abandoning processing. ");
 			setReadyState("complete");
+			break;
 		}
-		setReadyState("pending2");
-		fixBody();
-		break; // NOTE allow page reflow before un-hiding
-	case "pending2":
-		setReadyState("interactive");
-		unhide();
-	case "interactive":
-		if (!readyStateLookup[document.readyState]) break;
+		removeBefore();
+		setReadyState("insertDecor");
+		if (isIE && IE_VER <= 8) break; // NOTE allow page reflow before un-hiding
+	case "insertDecor":
+		if (isIE && IE_VER <= 8) {
+			unhide();
+			if (!readyStateLookup[document.readyState]) break;
+		}
+		insertDecor();
+		setReadyState("removeAfter");
+		if (!isIE || IE_VER > 8) break; // NOTE allow page reflow before un-hiding
+	case "removeAfter":
+		if (!isIE || IE_VER > 8) {
+			unhide();
+			if (!readyStateLookup[document.readyState]) break;
+		}
+		removeAfter();
 		setReadyState("loaded");
-		finalizeBody();
 		decorDocument = null;
 		head.removeChild(iframe);
 	case "loaded":
@@ -341,11 +358,14 @@ function fixHead() {
 	}
 }
 
-function fixBody() {
+function removeBefore() {
 	for (var cursor; cursor=body.firstChild;) {
 		if (cursor == main) break;
 		body.removeChild(cursor);
 	}
+}
+
+function insertDecor() {
 	var wBody = decorDocument.body;
 	var decorMain = $("#"+mainID, decorDocument);
 	var decorID = "_decor_" + mainID;
@@ -362,7 +382,7 @@ function fixBody() {
 	mainContainer = node;
 }
 
-function finalizeBody() {
+function removeAfter() {
 	var cursor;
 	while (cursor = mainContainer.nextSibling) {
 		body.removeChild(cursor);
