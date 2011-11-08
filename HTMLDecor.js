@@ -9,38 +9,6 @@ var forEach = ([].forEach) ?
 function(a, fn, context) { return [].forEach.call(a, fn, context); } :
 function(a, fn, context) { for (var n=a.length, i=0; i<n; i++) fn.call(context, a[i], i, a); }
 
-
-if (!Meeko.stuff.syslog) Meeko.stuff.syslog = new function() {
-
-var levels = "DEBUG INFO WARN ERROR".split(" ");
-
-forEach(levels, function(name, num) {
-	
-this["LOG_"+name] = num;	
-this[name.toLowerCase()] = function() { this._log({ level: num, message: arguments }); }
-
-}, this);
-
-this.LOG_LEVEL = this.LOG_DEBUG;
-
-this._log = function(data) { 
-	if (data.level < this.LOG_LEVEL) return;
-	data.timeStamp = +(new Date);
-        data.message = [].join.call(data.message, " ");
-        if (this.write) this.write(data);
-}
-
-this.write = (window.console) &&
-function(data) { console.log(levels[data.level], ": ", data.message); };
-
-} // end syslog defn
-
-
-if (!Meeko.stuff.decorSystem) Meeko.stuff.decorSystem = new function() {
-
-var sys = this;
-var logger = Meeko.stuff.syslog;
-
 var addEvent = 
 	document.addEventListener && function(node, event, fn) { return node.addEventListener(event, fn, false); } ||
 	document.attachEvent && function(node, event, fn) { return node.attachEvent("on" + event, fn); } ||
@@ -117,6 +85,38 @@ var firstChild = function(parent, selector) {
 var isIE = /*@cc_on!@*/false;
 var isIE7 = isIE && window.XMLHttpRequest;
 var isIE8 = isIE && document.querySelector;
+
+if (!Meeko.stuff.syslog) Meeko.stuff.syslog = new function() {
+
+var levels = "DEBUG INFO WARN ERROR".split(" ");
+
+forEach(levels, function(name, num) {
+	
+this["LOG_"+name] = num;	
+this[name.toLowerCase()] = function() { this._log({ level: num, message: arguments }); }
+
+}, this);
+
+this.LOG_LEVEL = this.LOG_DEBUG;
+
+this._log = function(data) { 
+	if (data.level < this.LOG_LEVEL) return;
+	data.timeStamp = +(new Date);
+        data.message = [].join.call(data.message, " ");
+        if (this.write) this.write(data);
+}
+
+this.write = (window.console) &&
+function(data) { console.log(levels[data.level], ": ", data.message); };
+
+} // end syslog defn
+
+
+if (!Meeko.stuff.decorSystem) Meeko.stuff.decorSystem = new function() {
+
+var sys = this;
+var logger = Meeko.stuff.syslog;
+
 // NOTE resolveURL shouldn't be needed, or at least
 // el.setAttribute(attr, el[attr]) should suffice.
 // But IE doesn't return relative URLs for <link>, and
@@ -149,7 +149,7 @@ var readyStateLookup = {
 	"complete": true
 }
 
-var head, script, style, body, main, fragment, iframe, decorURL, decorDocument;
+var head, script, style, body, main, mainID, mainContainer, fragment, iframe, decorURL, decorDocument;
 
 for (script=document; script.lastChild; script=script.lastChild);
 head = document.head || firstChild(document.documentElement, "head");
@@ -227,6 +227,13 @@ function __init() {
 			sys.readyState = "complete";
 			break;
 		}
+		mainID = script.getAttribute("data-main");
+		if (!mainID) {
+			logger.warn("No main content identifier specified. Abandoning processing.");
+			unhide();
+			sys.readyState = "complete";
+			break;
+		}
 		sys.readyState = "loading";
 		//importDocument(function() { sys.readyState = "parsing"; });
 		loadDocument(function() { sys.readyState = "parsing"; });
@@ -239,7 +246,14 @@ function __init() {
 		sys.readyState = "pending";
 	case "pending":
 		;;;logger.debug("pending");
-		if (fixBody()) sys.readyState = "pending2";
+		main = $("#"+mainID);
+		if (!main) break;
+		if (main.parentNode != body) {
+			logger.error("#" + mainID + " is not an immediate child of document.body. Abandoning processing. ");
+			sys.readyState = "complete";
+		}
+		sys.readyState = "pending2";
+		fixBody();
 		break; // NOTE allow page reflow before un-hiding
 	case "pending2":
 		;;;logger.debug("pending2");
@@ -361,41 +375,31 @@ function fixHead() {
 }
 
 function fixBody() {
-	// FIXME the [role=main] container should be configurable, 
-	// probably using an element ID.
-
-	if (main) return true;
-	main = firstChild(body, "[role=main]");
-	if (!main) return false;
 	for (var cursor; cursor=body.firstChild;) {
 		if (cursor == main) break;
 		body.removeChild(cursor);
 	}
 	var wBody = decorDocument.body;
-	for (var wNode; wNode=wBody.firstChild; ) {
-		var node = wNode.cloneNode(true);
-		wBody.removeChild(wNode);
-		if (matches(node, "[role=main]")) break;
-		try { if (!body.insertBefore(node, main)) throw ""; } // NOTE IE6 occasionally silently fails on insertBefore()
-		catch (error) { main.insertAdjacentHTML("beforeBegin", node.outerHTML); }
+	var decorMain = $("#"+mainID, decorDocument);
+	var decorID = "_decor_" + mainID;
+	decorMain.id = decorID;
+	var div = document.createElement("div");
+	div.innerHTML = wBody.innerHTML;
+	for (var node; node=div.firstChild; ) {
+		body.insertBefore(node, main);
 	}
-	return true;
+	var _main = $("#"+decorID);
+	// TODO compat check between main and _main
+	_main.parentNode.replaceChild(main, _main);
+	for (var node=main; node.parentNode!==body; node=node.parentNode);
+	mainContainer = node;
 }
 
 function finalizeBody() {
 	var cursor;
-	while (cursor = main.nextSibling) {
+	while (cursor = mainContainer.nextSibling) {
 		body.removeChild(cursor);
 	}
-
-	var wBody = decorDocument.body;
-	forEach(wBody, function(wNode) {
-		var node = wNode.cloneNode(true);
-		wBody.removeChild(wNode);
-		try { body.appendChild(node); }
-		catch (error) { body.insertAdjacentHTML("beforeEnd", node.outerHTML); }
-	});
-	
 }
 
 init();
