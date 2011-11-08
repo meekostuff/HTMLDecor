@@ -74,8 +74,14 @@ this._log = function(data) {
         if (this.write) this.write(data);
 }
 
-this.write = (window.console) &&
-function(data) { console.log(levels[data.level], ": ", data.message); };
+var startTime = +(new Date), padding = "      ";
+
+this.write = (window.console) && function(data) { 
+	var offset = padding + (data.timeStamp - startTime), 
+		first = offset.length-padding.length-1,
+		offset = offset.substring(first);
+	console.log(offset+"ms " + levels[data.level]+": " + data.message); 
+}
 
 } // end syslog defn
 
@@ -107,7 +113,11 @@ function(relURL, context) {
 	return href;
 }
 
-sys.readyState = "uninitialized";
+var setReadyState = function(state) {
+	sys.readyState = state;
+	logger.debug("readyState: ", state);
+}
+setReadyState("uninitialized");
 
 var readyStateLookup = {
 	"uninitialized": false,
@@ -179,61 +189,54 @@ function manualInit() {
 function __init() {
 	switch (sys.readyState) { // NOTE all these branches can fall-thru when they result in a state transition
 	case "uninitialized":
-		body = document.body;
 		var href = script.getAttribute("data-href");
 		decorURL = resolveURL(href);
 		if (decorURL == document.URL) {
 			if (!href) logger.info("No decor URL specified. Processing is complete.");
 			else logger.warn("Decor URL is same as current page. Abandoning processing.");
 			unhide();
-			sys.readyState = "complete";
+			setReadyState("complete");
 			break;
 		}
 		mainID = script.getAttribute("data-main");
 		if (!mainID) {
 			logger.warn("No main content identifier specified. Abandoning processing.");
 			unhide();
-			sys.readyState = "complete";
+			setReadyState("complete");
 			break;
 		}
-		sys.readyState = "loading";
-		//importDocument(function() { sys.readyState = "parsing"; });
-		loadDocument(function() { sys.readyState = "parsing"; });
+		setReadyState("loading");
+		//importDocument(function() { setReadyState("parsing"); });
+		loadDocument(function() { setReadyState("parsing"); });
 	case "loading":
-		;;;logger.debug("loading");
 		break;
 	case "parsing":
-		;;;logger.debug("parsing");
 		body = document.body;
 		if (!body) break;
 		fixHead();
-		sys.readyState = "pending";
+		setReadyState("pending");
 	case "pending":
-		;;;logger.debug("pending");
 		main = $("#"+mainID);
 		if (!main) break;
 		if (main.parentNode != body) {
 			logger.error("#" + mainID + " is not an immediate child of document.body. Abandoning processing. ");
-			sys.readyState = "complete";
+			setReadyState("complete");
 		}
-		sys.readyState = "pending2";
+		setReadyState("pending2");
 		fixBody();
 		break; // NOTE allow page reflow before un-hiding
 	case "pending2":
-		;;;logger.debug("pending2");
-		sys.readyState = "interactive";
+		setReadyState("interactive");
 		unhide();
 	case "interactive":
-		;;;logger.debug("interactive");
 		if (!readyStateLookup[document.readyState]) break;
-		sys.readyState = "loaded";
+		setReadyState("loaded");
 		finalizeBody();
 		decorDocument = null;
 		head.removeChild(iframe);
 	case "loaded":
-		;;;logger.debug("loaded");
 		if (document.readyState != "complete") break;
-		sys.readyState = "complete";
+		setReadyState("complete");
 	}
 
 	// NOTE it is an error if we don't get to this point
@@ -275,7 +278,7 @@ function importDocument(callback) {
 	xhr.onreadystatechange = function() {
 		if (xhr.readyState != 4) return;
 		if (xhr.status != 200) { // FIXME
-			sys.readyState = "complete";
+			setReadyState("complete");
 			return;
 		}
 		writeDocument(xhr.responseText, callback);
