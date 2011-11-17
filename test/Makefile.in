@@ -1,12 +1,12 @@
 srcdir = @srcdir@
 VPATH = @srcdir@
 
-SUBDIRS = source test
-
 include @top_srcdir@/mk/gnu.bsdvars.mk
 
+SUBDIRS = html
+
 .SUFFIXES :
-.SUFFIXES : .html .xhtml .js .xml .exbl
+.SUFFIXES : .html .xhtml .js .css
 
 # Rules
 all : build

@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+<link rel="stylesheet" href="normal.css" />
+<script src="../../HTMLDecor.js" data-href="decor.html" data-type="text/decor+html" data-main="main"></script>
+<style type="text/css">
+div { margin: 0.5em; border: 1px dashed black; }
+.error { background-color: red; color: white; }
+</style>
+</head>
+<body>
+<div class="error">
+You should not be able to see this content that precedes #main.
+</div>
+<div id="main">
+<p>Main content</p>
+<div class="normal">
+This content is styled by normal.css <br />
+<code>
+.normal { border: 2px solid green; }
+</code>
+</div>
+
+<div class="decor">
+This content is styled by decor.css <br />
+<code>
+.decor { border: 2px solid blue; }
+</code>
+</div>
+
+</div>
+<div class="error">
+You should not be able to see this content that follows #main.
+</div>
+</body>
+</html>
+

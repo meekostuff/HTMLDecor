@@ -1,0 +1,27 @@
+srcdir = @srcdir@
+VPATH = @srcdir@
+
+include @top_srcdir@/mk/gnu.bsdvars.mk
+
+# WARN notdir trims everything upto and including the final "/"
+dirname = ${notdir ${.CURDIR}}
+installdir = ${pkgtestdir}/${dirname}
+
+.SUFFIXES :
+.SUFFIXES : .html .xhtml .js .css
+
+RESOURCES = normal.html normal.css decor.html decor.css
+TARGETS = 
+
+# Rules
+all : build
+
+build : ${TARGETS}
+
+install: ${TARGETS} ${RESOURCES}
+	[ -d ${pkglibexecdir} ] || ${INSTALL} -d ${installdir}
+	${INSTALL} ${.ALLSRC} ${installdir}/
+
+clean : 
+	-rm ${TARGETS}
+
