@@ -385,6 +385,12 @@ function removeBefore() {
 
 function insertDecor() {
 	var wBody = decorDocument.body;
+	for (var node=wBody.firstChild, next=node.nextSibling; next; node=next, next=node.nextSibling) {
+		if (node.nodeType != 3) continue;
+		if (/\s*/.test(node.nodeValue)) continue;
+		logger.warn("Removing text found as child of decor body.");
+		wBody.removeChild(node);
+	}
 	var decorMain = $("#"+mainID, decorDocument);
 	var decorID = "_decor_" + mainID;
 	decorMain.id = decorID;
