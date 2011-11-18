@@ -159,9 +159,6 @@ function findDecorLink() {
 	return decorLink;
 }
 	
-decorHREF = script.getAttribute("data-href");
-if (decorHREF) decorURL = resolveURL(decorHREF);
-
 fragment = document.createDocumentFragment();
 style = document.createElement("style");
 fragment.appendChild(style); // NOTE on IE this realizes style.styleSheet 
