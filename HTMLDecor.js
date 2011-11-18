@@ -40,16 +40,25 @@ var $$ = function(selector, context) {
 	return context.getElementsByTagName(m[1]);
 }
 
-var firstChild = function(parent, selector) {
-	selector = selector.toLowerCase();
+var matchesSelector = function(selector, node) {
+	var tagName = selector.toLowerCase();
+	var matches = function(el) {
+		return (el.nodeType == 1 && el.tagName.toLowerCase() == tagName);
+	}
+	return (node) ? matches(node) : matches;
+}
+var firstChild = function(parent, matcher) {
+	var fn = (typeof matcher == "function") ? 
+		matcher : 
+		matchesSelector(matcher);
 	var nodeList = parent.childNodes;
 	for (var n=nodeList.length, i=0; i<n; i++) {
-		var node = nodeList[i], tagName = node.tagName;
-		if (tagName && tagName.toLowerCase() == selector) return node;
+		var node = nodeList[i];
+		if (fn(node)) return node;
 	}
 }
 
-// TODO the best way to do IE detection is to insert conditional comments
+// FIXME what about IE versions that precede conditional comments??
 var IE_VER, isIE = /*@cc_on!@*/false;
 if (isIE) {
 	IE_VER = 9;
@@ -72,7 +81,7 @@ this[name.toLowerCase()] = function() { this._log({ level: num, message: argumen
 
 }, this);
 
-this.LOG_LEVEL = this.LOG_DEBUG;
+this.LOG_LEVEL = this.LOG_WARN;
 
 this._log = function(data) { 
 	if (data.level < this.LOG_LEVEL) return;
