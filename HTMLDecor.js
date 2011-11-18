@@ -40,17 +40,17 @@ var $$ = function(selector, context) {
 	return context.getElementsByTagName(m[1]);
 }
 
-var matchesSelector = function(selector, node) {
+var matchesElement = function(selector, node) {
 	var tagName = selector.toLowerCase();
-	var matches = function(el) {
+	var matcher = function(el) {
 		return (el.nodeType == 1 && el.tagName.toLowerCase() == tagName);
 	}
-	return (node) ? matches(node) : matches;
+	return (node) ? matchel(node) : matcher;
 }
 var firstChild = function(parent, matcher) {
 	var fn = (typeof matcher == "function") ? 
 		matcher : 
-		matchesSelector(matcher);
+		matchesElement(matcher);
 	var nodeList = parent.childNodes;
 	for (var n=nodeList.length, i=0; i<n; i++) {
 		var node = nodeList[i];
@@ -354,6 +354,12 @@ function fixHead() {
 			break;
 		}
 		head.insertBefore(node, cursor);
+	}
+	for (var node=head.firstChild, next=node.nextSibling; next; node=next, next=node.nextSibling) {
+		if (node.nodeType != 1) continue;
+		if (!node.tagName.match(/^(style|link)$/i)) continue;
+		if (!node.title.match(/^nodecor$/i)) continue;
+		head.removeChild(node);
 	}
 }
 
