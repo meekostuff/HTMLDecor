@@ -5,12 +5,17 @@
 <script src="../../HTMLDecor.js" data-href="decor.html" data-type="text/decor+html" data-main="main"></script>
 <style type="text/css">
 div { margin: 0.5em; border: 1px dashed black; }
-.error { background-color: red; color: white; }
+.remove { background-color: red; color: white; }
+</style>
+<style type="text/css" title="nodecor">
+.nodecor { background-color: red; color: white; }
 </style>
 </head>
 <body>
-<div class="error">
-You should not be able to see this content that precedes #main.
+<div class="remove">
+You should NOT be able to see this content that precedes #main. <br />
+It is styled with:<br />
+<code>.remove { background-color: red; color: white; }</code>
 </div>
 <div id="main">
 <p>Main content</p>
@@ -20,7 +25,11 @@ This content is styled by normal.css <br />
 .normal { border: 2px solid green; }
 </code>
 </div>
-
+<div class="nodecor">
+This content should NOT have the following style 
+unless the decor isn't loaded. <br />
+<code>.nodecor { background-color: red; color: white; }</code>
+</div>
 <div class="decor">
 This content is styled by decor.css <br />
 <code>
@@ -29,8 +38,8 @@ This content is styled by decor.css <br />
 </div>
 
 </div>
-<div class="error">
-You should not be able to see this content that follows #main.
+<div class="remove">
+You should NOT be able to see this content that follows #main.
 </div>
 </body>
 </html>
