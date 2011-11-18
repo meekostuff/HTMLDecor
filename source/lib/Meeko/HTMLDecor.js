@@ -81,6 +81,7 @@ this[name.toLowerCase()] = function() { this._log({ level: num, message: argumen
 
 }, this);
 
+this.LOG_NONE = this.LOG_ERROR + 1;
 this.LOG_LEVEL = this.LOG_WARN;
 
 this._log = function(data) { 
@@ -142,9 +143,24 @@ var readyStateLookup = {
 	"complete": true
 }
 
-var head, style, body, main, mainID, lastDecorNode, fragment, iframe, decorURL, decorDocument;
+var head, style, body, main, mainID, lastDecorNode, fragment, iframe, decorLink, decorHREF, decorURL, decorDocument;
 
 head = document.head || firstChild(document.documentElement, "head");
+function findDecorLink() {
+	if (decorLink) return;
+	decorLink = firstChild(head, function(el) {
+		return el.nodeType == 1 &&
+			el.tagName.toLowerCase() == "link" &&
+			el.rel.match(/\bMEEKO-DECOR\b/i);
+	});
+	if (!decorLink) return;
+	decorHREF = decorLink.href;
+	decorURL = resolveURL(decorHREF);
+	return decorLink;
+}
+	
+decorHREF = script.getAttribute("data-href");
+if (decorHREF) decorURL = resolveURL(decorHREF);
 
 fragment = document.createDocumentFragment();
 style = document.createElement("style");
@@ -161,8 +177,8 @@ function unhide() {
 	// NOTE on IE sometimes content stays hidden although 
 	// the stylesheet has been removed.
 	// The following forces the content to be revealed
-	body.style.visibility = "hidden";
-	body.style.visibility = "";
+	document.body.style.visibility = "hidden";
+	document.body.style.visibility = "";
 }
 
 function init() {
@@ -196,10 +212,10 @@ function _init() {
 function __init() {
 	switch (sys.readyState) { // NOTE all these branches can fall-thru when they result in a state transition
 	case "uninitialized":
-		var href = script.getAttribute("data-href");
-		decorURL = resolveURL(href);
-		if (decorURL == document.URL) {
-			if (!href) logger.info("No decor URL specified. Processing is complete.");
+		findDecorLink();
+		if (!decorURL && !document.body) break;
+		if (!decorURL || decorURL == document.URL) {
+			if (!decorLink) logger.info("No decor URL specified. Processing is complete.");
 			else logger.warn("Decor URL is same as current page. Abandoning processing.");
 			unhide();
 			setReadyState("complete");
