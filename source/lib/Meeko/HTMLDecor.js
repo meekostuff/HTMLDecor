@@ -1,5 +1,5 @@
 // TODO Move script and options detection outside of the decorSystem module
-// Eventually syslog and decorSystem could be in separate modules
+// Eventually logger and decorSystem could be in separate modules
 // and built into this script.
 
 (function() {
@@ -15,7 +15,7 @@ if (window.name == "_decor") {
 }
 
 var Meeko = window.Meeko || (window.Meeko = {});
-if (!Meeko.stuff) Meeko.stuff = {};
+var stuff = Meeko.stuff || (Meeko.stuff = {});
 
 var forEach = ([].forEach) ? 
 function(a, fn, context) { return [].forEach.call(a, fn, context); } :
@@ -61,7 +61,7 @@ if (isIE) {
 	IE_VER = 1 * div.innerHTML;
 }
 
-if (!Meeko.stuff.syslog) Meeko.stuff.syslog = new function() {
+var logger = Meeko.stuff.logger || (Meeko.stuff.logger = new function() {
 
 var levels = "DEBUG INFO WARN ERROR".split(" ");
 
@@ -90,13 +90,12 @@ this.write = (window.console) && function(data) {
 	console.log(offset+"ms " + levels[data.level]+": " + data.message); 
 }
 
-} // end syslog defn
+}); // end logger defn
 
 
-if (!Meeko.stuff.decorSystem) Meeko.stuff.decorSystem = new function() {
+var decorSystem = Meeko.stuff.decorSystem || (Meeko.stuff.decorSystem = new function() {
 
 var sys = this;
-var logger = Meeko.stuff.syslog;
 
 // NOTE resolveURL shouldn't be needed, or at least
 // el.setAttribute(attr, el[attr]) should suffice.
@@ -140,7 +139,7 @@ head = document.head || firstChild(document.documentElement, "head");
 
 fragment = document.createDocumentFragment();
 style = document.createElement("style");
-fragment.appendChild(style); // NOTE on IE this realizes style.styleSheet !!??
+fragment.appendChild(style); // NOTE on IE this realizes style.styleSheet 
 
 // NOTE hide the page until the decor is ready
 // FIXME this should have a configurable timeout so slow loading
@@ -393,7 +392,7 @@ init();
 
 sys.initialize = manualInit;
 
-} // end decorSystem defn
+}); // end decorSystem defn
 
 })();
 
