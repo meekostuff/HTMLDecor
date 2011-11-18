@@ -193,15 +193,6 @@ function _init() {
 	_initializing = false;	
 }
 
-function manualInit() {
-	if (sys.readyState != "uninitialized") {
-		logger.warn("Manual decorSystem initialization requested after automatic start");
-		return;		
-	}
-	__init();
-	onprogress();
-}
-
 function __init() {
 	switch (sys.readyState) { // NOTE all these branches can fall-thru when they result in a state transition
 	case "uninitialized":
@@ -398,8 +389,6 @@ function removeAfter() {
 }
 
 init();
-
-sys.initialize = manualInit;
 
 }); // end decorSystem defn
 
