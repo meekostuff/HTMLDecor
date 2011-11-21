@@ -31,7 +31,13 @@ var $ = function(selector, context) {
 	else if (context.nodeType != 9) context = context.ownerDocument;
 	var m = selector.match(/^#([-_a-zA-Z0-9]+)$/);
 	if (!m[0]) throw (selector + " can only be an ID selector in $()");
-	return context.getElementById(m[1]);
+	var id = m[1], node = context.getElementById(id);
+	if (node.id == id) return node;
+	var nodeList = context.getElementsByName(id);
+	for (var n=nodeList.length, i=0; i<n; i++) {
+		node = nodeList[i];
+		if (node.id == id) return node;
+	}
 }
 var $$ = function(selector, context) {
 	var context = context || document;
@@ -143,7 +149,7 @@ var readyStateLookup = {
 	"complete": true
 }
 
-var head, style, body, main, mainID, lastDecorNode, fragment, iframe, decorLink, decorHREF, decorURL, decorDocument;
+var head, style, body, lastDecorNode, fragment, iframe, decorLink, decorHREF, decorURL, decorDocument;
 
 head = document.head || firstChild(document.documentElement, "head");
 function findDecorLink() {
@@ -151,7 +157,7 @@ function findDecorLink() {
 	decorLink = firstChild(head, function(el) {
 		return el.nodeType == 1 &&
 			el.tagName.toLowerCase() == "link" &&
-			el.rel.match(/\bMEEKO-DECOR\b/i);
+			/\bMEEKO-DECOR\b/i.test(el.rel);
 	});
 	if (!decorLink) return;
 	decorHREF = decorLink.href;
@@ -206,7 +212,12 @@ function _init() {
 	_initializing = false;	
 }
 
+var unhiding = false;
 function __init() {
+	if (unhiding) {
+		unhide();
+		unhiding = false;
+	}
 	switch (sys.readyState) { // NOTE all these branches can fall-thru when they result in a state transition
 	case "uninitialized":
 		findDecorLink();
@@ -214,13 +225,6 @@ function __init() {
 		if (!decorURL || decorURL == document.URL) {
 			if (!decorLink) logger.info("No decor URL specified. Processing is complete.");
 			else logger.warn("Decor URL is same as current page. Abandoning processing.");
-			unhide();
-			setReadyState("complete");
-			break;
-		}
-		mainID = script.getAttribute("data-main");
-		if (!mainID) {
-			logger.warn("No main content identifier specified. Abandoning processing.");
 			unhide();
 			setReadyState("complete");
 			break;
@@ -234,32 +238,30 @@ function __init() {
 		body = document.body;
 		if (!body) break;
 		fixHead();
-		setReadyState("removeBefore");
-	case "removeBefore":
-		main = $("#"+mainID);
-		if (!main) break;
-		if (main.parentNode != body) {
-			logger.error("#" + mainID + " is not an immediate child of document.body. Abandoning processing. ");
-			setReadyState("complete");
-			break;
+		setReadyState("preprocess");
+	case "preprocess":
+		preprocess(function(node) {
+			if (node.nodeType != 1) return;
+			if (node.id) {
+				if (isIE && IE_VER <= 8) unhiding = true;
+				else setReadyState("insertDecor");
+			}
+		});
+		if (unhiding) break;
+		if (isIE && IE_VER <= 8 && readyStateLookup[document.readyState]) {
+				setReadyState("insertDecor");
 		}
-		removeBefore();
-		setReadyState("insertDecor");
-		if (isIE && IE_VER <= 8) break; // NOTE allow page reflow before un-hiding
+		if (sys.readyState != "insertDecor") break;
 	case "insertDecor":
-		if (isIE && IE_VER <= 8) {
-			unhide();
-			if (!readyStateLookup[document.readyState]) break;
-		}
 		insertDecor();
-		setReadyState("removeAfter");
-		if (!isIE || IE_VER > 8) break; // NOTE allow page reflow before un-hiding
-	case "removeAfter":
+		setReadyState("process");
 		if (!isIE || IE_VER > 8) {
-			unhide();
-			if (!readyStateLookup[document.readyState]) break;
+			unhiding = true;
+			break; // NOTE allow page reflow before un-hiding
 		}
-		removeAfter();
+	case "process":
+		preprocess();
+		process();
 		setReadyState("loaded");
 		decorDocument = null;
 		head.removeChild(iframe);
@@ -343,7 +345,14 @@ function writeDocument(html, callback) {
 }
 
 function fixHead() {
-	var cursor = head.firstChild;
+	for (var node=head.firstChild, next; next=node && node.nextSibling, node; node=next) {
+		if (node.nodeType != 1) continue;
+		if (!node.tagName.match(/^(style|link)$/i)) continue;
+		if (!node.title.match(/^nodecor$/i)) continue;
+		head.removeChild(node);
+	}
+
+	var firstChild = head.firstChild;
 	var wHead = decorDocument.head || firstChild(decorDocument.documentElement, "head");
 	var node;
 	for (var wNode; wNode=wHead.firstChild;) {
@@ -366,51 +375,56 @@ function fixHead() {
 		case "script": // TODO
 			break;
 		}
-		head.insertBefore(node, cursor);
-	}
-	for (var node=head.firstChild, next=node.nextSibling; next; node=next, next=node.nextSibling) {
-		if (node.nodeType != 1) continue;
-		if (!node.tagName.match(/^(style|link)$/i)) continue;
-		if (!node.title.match(/^nodecor$/i)) continue;
-		head.removeChild(node);
+		head.insertBefore(node, firstChild);
 	}
 }
 
-function removeBefore() {
-	for (var cursor; cursor=body.firstChild;) {
-		if (cursor == main) break;
-		body.removeChild(cursor);
+var cursor;
+function preprocess(notify) {
+	var node = cursor ? cursor.nextSibling :
+		lastDecorNode ? lastDecorNode.nextSibling :
+		body.firstChild;
+	if (!node) return;
+	var next;
+	for (next=node.nextSibling; node; (node=next) && (next=next.nextSibling)) {
+		if (notify) notify(node);
+		if (node.id && $("#"+node.id, decorDocument)) continue;
+		body.removeChild(node);
+	}
+	cursor = body.lastChild;
+}
+
+function process() { // NOTE must only be called straight after preprocess()
+	var node = lastDecorNode.nextSibling;
+	if (!node) return;
+	var next;
+	for (next=node.nextSibling; node; (node=next) && (next=next.nextSibling)) {
+		var target = $("#"+node.id); // NOTE validated in removeContent()
+		// TODO compat check between node and target
+		target.parentNode.replaceChild(node, target);
+		// TODO remove @role from node if an ancestor has same role
 	}
 }
+
 
 function insertDecor() {
 	var wBody = decorDocument.body;
-	for (var node=wBody.firstChild, next=node.nextSibling; next; node=next, next=node.nextSibling) {
+	// NOTE remove non-empty text-nodes - 
+	// they can't be hidden if that is appropriate
+	for (var node=wBody.firstChild, next=node.nextSibling; next; node=next, next=node.nextSibling) { 
 		if (node.nodeType != 3) continue;
 		if (/\s*/.test(node.nodeValue)) continue;
 		logger.warn("Removing text found as child of decor body.");
 		wBody.removeChild(node);
 	}
-	var decorMain = $("#"+mainID, decorDocument);
-	var decorID = "_decor_" + mainID;
-	decorMain.id = decorID;
 	var div = document.createElement("div");
 	div.innerHTML = wBody.innerHTML;
 	lastDecorNode = div.lastChild;
+	content = body.firstChild;
 	for (var node; node=div.firstChild; ) {
-		body.insertBefore(node, main);
+		body.insertBefore(node, content);
 	}
-	var _main = $("#"+decorID);
-	// TODO compat check between main and _main
-	_main.parentNode.replaceChild(main, _main);
-	if (!lastDecorNode.parentNode) lastDecorNode = main;
-}
-
-function removeAfter() {
-	var cursor;
-	while (cursor = lastDecorNode.nextSibling) {
-		body.removeChild(cursor);
-	}
+	if (!cursor) cursor = lastDecorNode;
 }
 
 init();
