@@ -51,7 +51,7 @@ var matchesElement = function(selector, node) {
 	var matcher = function(el) {
 		return (el.nodeType == 1 && el.tagName.toLowerCase() == tagName);
 	}
-	return (node) ? matchel(node) : matcher;
+	return (node) ? matcher(node) : matcher;
 }
 var firstChild = function(parent, matcher) {
 	var fn = (typeof matcher == "function") ? 
@@ -352,9 +352,8 @@ function fixHead() {
 		head.removeChild(node);
 	}
 
-	var firstChild = head.firstChild;
+	var marker = head.firstChild;
 	var wHead = decorDocument.head || firstChild(decorDocument.documentElement, "head");
-	var node;
 	for (var wNode; wNode=wHead.firstChild;) {
 		wHead.removeChild(wNode);
 		if (wNode.nodeType != 1) continue;
@@ -375,7 +374,7 @@ function fixHead() {
 		case "script": // TODO
 			break;
 		}
-		head.insertBefore(node, firstChild);
+		head.insertBefore(node, marker);
 	}
 }
 
@@ -400,6 +399,10 @@ function process() { // NOTE must only be called straight after preprocess()
 	var next;
 	for (next=node.nextSibling; node; (node=next) && (next=next.nextSibling)) {
 		var target = $("#"+node.id); // NOTE validated in removeContent()
+		if (target == node) {
+			logger.warn("#" + node.id + " was found in the decor document, but has been replaced by previous page content");
+			continue;
+		}
 		// TODO compat check between node and target
 		target.parentNode.replaceChild(node, target);
 		// TODO remove @role from node if an ancestor has same role
