@@ -4,8 +4,8 @@
 
 (function() {
 
-var script;
-for (script=document; script.lastChild; script=script.lastChild);
+var last = function(a) { return a[a.length - 1]; }
+var script = last(document.getElementsByTagName("script"));
 
 if (window.name == "_decor") { 
 	// NOTE if HTMLDecor is included in a decor document then abort and 
@@ -50,9 +50,10 @@ var $ = function(selector, context) {
 }
 var $$ = function(selector, context) {
 	var context = context || document;
-	var m = selector.match(/^([a-zA-Z]+)$/);
-	if (!m[0]) throw (selector + " can only be a tagName selector in $$()");
-	return context.getElementsByTagName(m[1]);
+	try { return context.getElementsByTagName(selector); }
+	catch (error) {
+		throw (selector + " can only be a tagName selector in $$()");
+	}
 }
 
 var matchesElement = function(selector, node) {
@@ -195,8 +196,9 @@ function unhide() {
 }
 
 /* 
-NOTE for more details on how checkStyleSheets() works cross-browser see 
+NOTE:  for more details on how checkStyleSheets() works cross-browser see 
 http://aaronheckmann.blogspot.com/2010/01/writing-jquery-plugin-manager-part-1.html
+TODO: does this still work when there are errors loading stylesheets??
 */
 var checkStyleSheets = sys.checkStyleSheets = function() {
 	// check that every <link rel="stylesheet" type="text/css" /> 
