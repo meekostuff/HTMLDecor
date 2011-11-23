@@ -159,7 +159,16 @@ var readyStateLookup = {
 	"complete": true
 }
 
-var head, style, body, lastDecorNode, fragment, iframe, decorLink, decorHREF, decorURL, decorDocument;
+var head, body, style, lastDecorNode, fragment, iframe, decorLink, decorHREF, decorURL, decorDocument;
+
+var loaded = false;
+if (!document.readyState) {
+	addEvent(document, "DOMContentLoaded", function() { loaded = true; });
+	addEvent(window, "load", function() { loaded = true; });
+}
+var domContentLoaded = this.domContentLoaded = function() { 
+	return loaded || readyStateLookup[document.readyState];
+}
 
 head = document.head || firstChild(document.documentElement, "head");
 function findDecorLink() {
@@ -285,7 +294,7 @@ function __init() {
 		break;
 	case "preprocess":
 		preprocess(function(node) { if (node.id) contentFound = true; });
-		if (readyStateLookup[document.readyState]) setReadyState("insertDecor");
+		if (domContentLoaded()) setReadyState("insertDecor");
 		if (sys.readyState != "insertDecor")  break;
 	case "insertDecor":
 		insertDecor();
@@ -293,7 +302,7 @@ function __init() {
 	case "process":
 		preprocess(function(node) { if (node.id) contentFound = true; });
 		process();
-		if (readyStateLookup[document.readyState]) setReadyState("loaded");
+		if (domContentLoaded()) setReadyState("loaded");
 		else break;
 		decorDocument = null;
 		head.removeChild(iframe);
