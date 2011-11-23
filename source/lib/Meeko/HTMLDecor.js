@@ -21,6 +21,15 @@ var forEach = ([].forEach) ?
 function(a, fn, context) { return [].forEach.call(a, fn, context); } :
 function(a, fn, context) { for (var n=a.length, i=0; i<n; i++) fn.call(context, a[i], i, a); }
 
+var every = ([].every) ? 
+function(a, fn, context) { return [].every.call(a, fn, context); } :
+function(a, fn, context) { 
+	for (var n=a.length, i=0; i<n; i++) {
+		if (!fn.call(context, a[i], i, a)) return false; 
+	}
+	return true;
+}
+
 var addEvent = 
 	document.addEventListener && function(node, event, fn) { return node.addEventListener(event, fn, false); } ||
 	document.attachEvent && function(node, event, fn) { return node.attachEvent("on" + event, fn); } ||
@@ -73,7 +82,7 @@ if (isIE) {
 		"<!--[if lte IE 6]>6<![endif]-->" + 
 		"<!--[if IE 7]>7<![endif]-->" + 
 		"<!--[if IE 8]>8<![endif]-->";
-	IE_VER = 1 * div.innerHTML;
+	if (div.innerHTML) IE_VER = 1 * div.innerHTML;
 }
 
 var logger = Meeko.stuff.logger || (Meeko.stuff.logger = new function() {
@@ -174,18 +183,41 @@ fragment.appendChild(style); // NOTE on IE this realizes style.styleSheet
 // doesn't leave the window blank
 if (style.styleSheet) style.styleSheet.cssText = "body { visibility: hidden; }";
 else style.textContent = "body { visibility: hidden; }";
+var hidden = false;
 function unhide() {
-	if (style.parentNode != head) return;
 	head.removeChild(style);
 	// NOTE on IE sometimes content stays hidden although 
 	// the stylesheet has been removed.
 	// The following forces the content to be revealed
 	document.body.style.visibility = "hidden";
 	document.body.style.visibility = "";
+	hidden = false;
+}
+
+/* 
+NOTE for more details on how checkStyleSheets() works cross-browser see 
+http://aaronheckmann.blogspot.com/2010/01/writing-jquery-plugin-manager-part-1.html
+*/
+var checkStyleSheets = sys.checkStyleSheets = function() {
+	// check that every <link rel="stylesheet" type="text/css" /> 
+	// has loaded
+	return every($$("link"), function(node) {
+		if (!node.rel || !/^stylesheet$/i.test(node.rel)) return true;
+		if (node.type && !/^text\/css$/i.test(node.type)) return true;
+		try {
+			var sheet = node.sheet || node.styleSheet;
+			var rules = sheet.rules || sheet.cssRules;
+			return (rules && rules.length > 0);
+		} 
+		catch (error) {
+			return (error.name == "NS_ERROR_DOM_SECURITY_ERR");
+		} 
+	});
 }
 
 function init() {
 	head.insertBefore(style, script);
+	hidden = true;
 	onprogress();
 }
 function onprogress() {
@@ -212,12 +244,9 @@ function _init() {
 	_initializing = false;	
 }
 
-var unhiding = false;
+var contentFound = false;
 function __init() {
-	if (unhiding) {
-		unhide();
-		unhiding = false;
-	}
+	if (contentFound && hidden && checkStyleSheets()) unhide();
 	switch (sys.readyState) { // NOTE all these branches can fall-thru when they result in a state transition
 	case "uninitialized":
 		findDecorLink();
@@ -238,35 +267,25 @@ function __init() {
 		body = document.body;
 		if (!body) break;
 		fixHead();
-		setReadyState("preprocess");
+		if (isIE && IE_VER <= 8) setReadyState("preprocess");
+		else setReadyState("insertDecor");
+		break;
 	case "preprocess":
-		preprocess(function(node) {
-			if (node.nodeType != 1) return;
-			if (node.id) {
-				if (isIE && IE_VER <= 8) unhiding = true;
-				else setReadyState("insertDecor");
-			}
-		});
-		if (unhiding) break;
-		if (isIE && IE_VER <= 8 && readyStateLookup[document.readyState]) {
-				setReadyState("insertDecor");
-		}
-		if (sys.readyState != "insertDecor") break;
+		preprocess(function(node) { if (node.id) contentFound = true; });
+		if (readyStateLookup[document.readyState]) setReadyState("insertDecor");
+		if (sys.readyState != "insertDecor")  break;
 	case "insertDecor":
 		insertDecor();
 		setReadyState("process");
-		if (!isIE || IE_VER > 8) {
-			unhiding = true;
-			break; // NOTE allow page reflow before un-hiding
-		}
 	case "process":
-		preprocess();
+		preprocess(function(node) { if (node.id) contentFound = true; });
 		process();
-		setReadyState("loaded");
+		if (readyStateLookup[document.readyState]) setReadyState("loaded");
+		else break;
 		decorDocument = null;
 		head.removeChild(iframe);
 	case "loaded":
-		if (document.readyState != "complete") break;
+		if (document.readyState != "complete" || hidden) break;
 		setReadyState("complete");
 	}
 
@@ -393,7 +412,7 @@ function preprocess(notify) {
 	cursor = body.lastChild;
 }
 
-function process() { // NOTE must only be called straight after preprocess()
+function process(notify) { // NOTE must only be called straight after preprocess()
 	var node = lastDecorNode.nextSibling;
 	if (!node) return;
 	var next;
@@ -406,6 +425,7 @@ function process() { // NOTE must only be called straight after preprocess()
 		// TODO compat check between node and target
 		target.parentNode.replaceChild(node, target);
 		// TODO remove @role from node if an ancestor has same role
+		if (notify) notify(node);
 	}
 }
 
