@@ -204,12 +204,23 @@ var checkStyleSheets = sys.checkStyleSheets = function() {
 	return every($$("link"), function(node) {
 		if (!node.rel || !/^stylesheet$/i.test(node.rel)) return true;
 		if (node.type && !/^text\/css$/i.test(node.type)) return true;
+		if (node.disabled) return true;
+		
+		// handle IE
+		if (node.readyState) return readyStateLookup[node.readyState];
+
+		var sheet = node.sheet || node.styleSheet;
+
+		// handle webkit
+		if (!sheet) return false;
+
 		try {
-			var sheet = node.sheet || node.styleSheet;
+			// Firefox should throw if not loaded or cross-domain
 			var rules = sheet.rules || sheet.cssRules;
-			return (rules && rules.length > 0);
+			return true;
 		} 
 		catch (error) {
+			// handle Firefox cross-domain
 			return (error.name == "NS_ERROR_DOM_SECURITY_ERR");
 		} 
 	});
