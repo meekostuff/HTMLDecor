@@ -32,6 +32,8 @@ The equivalent of HTMLDecor.js but runs on the server-side.
 
 ### HTMLDecor.js
 
+To see this in action visit http://meekostuff.net. Much of the site is dog-fooding this script. 
+
 Create a HTML document (page.html) with some page specific content:
 
 	<!DOCTYPE html>
