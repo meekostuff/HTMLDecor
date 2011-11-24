@@ -1,3 +1,7 @@
+/*
+ * Copyright 2009-2011 Sean Hogan (http://meekostuff.net/)
+ */
+
 // TODO Move script and options detection outside of the decorSystem module
 // Eventually logger and decorSystem could be in separate modules
 // and built into this script.

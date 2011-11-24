@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!-- Copyright 2009-2010 Sean Hogan (http://meekostuff.net/) -->
+
 <xsl:stylesheet version="1.0" exclude-result-prefixes="xsl html xbl"
 	xmlns:xbl="http://www.w3.org/ns/xbl"
 	xmlns:html="http://www.w3.org/1999/xhtml"

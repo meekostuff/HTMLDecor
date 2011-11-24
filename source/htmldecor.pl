@@ -1,4 +1,7 @@
 #!/usr/bin/perl
+
+# Copyright 2009-2010 Sean Hogan (http://meekostuff.net/)
+
 use Cwd;
 $PWD = getcwd();
 $XSLTPROC = "/usr/bin/xsltproc --novalid --nonet";
