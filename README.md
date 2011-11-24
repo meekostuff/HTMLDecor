@@ -135,3 +135,15 @@ When page.html is loaded into the browser HTMLDecor.js will merge decor.html int
 	</body>
 	</html>
 
+
+Installation
+------------
+
+For now it is easiest to copy from the installation available at http://devel.meekostuff.net/HTMLPP/0.9-devel/
+
+
+License
+-------
+
+The long-term license is still undecided - I'm tossing up between LGPL and MIT.
+For now it is available under Create-Commons Attribution, No-Derivitives.
