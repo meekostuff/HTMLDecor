@@ -389,8 +389,44 @@ function writeDocument(html, callback) {
 	// eg. charset, doc-mode, content-type, etc
 }
 
+var copyAttributes = function(node, srcNode) { // implements srcNode.cloneNode(false)
+	var attrs = srcNode.attributes;
+	forEach(attrs, function(attr) {
+		if (!attr.specified) return;
+		node.setAttribute(attr.name, attr.value);
+	});
+	return node;
+}
+
+var importToFragment = document.importNode ? 
+function(srcNode, frag) { 
+	frag.appendChild(document.importNode(srcNode, true)); 
+	return frag;
+} :
+function(srcNode, frag) { // document.importNode() NOT available on IE < 9
+	var tagName = srcNode.tagName.toLowerCase();
+	var node = document.createElement(tagName);
+	copyAttributes(node, srcNode);
+	frag.appendChild(node);
+	switch(tagName) {
+	case "title":
+		node.innerText = srcNode.innerHTML;
+		break;
+	case "style":
+		node.styleSheet.cssText = srcNode.styleSheet.cssText;
+		break;
+	case "script":
+		node.text = srcNode.text;
+		break;
+	default: 
+		break;
+	}
+	return node;
+}
+
 function fixHead() {
-	for (var node=head.firstChild, next; next=node && node.nextSibling, node; node=next) {
+	var node, next;
+	for (node=head.firstChild; next=node && node.nextSibling, node; node=next) {
 		if (node.nodeType != 1) continue;
 		if (!node.tagName.match(/^(style|link)$/i)) continue;
 		if (!node.title.match(/^nodecor$/i)) continue;
@@ -399,28 +435,28 @@ function fixHead() {
 
 	var marker = head.firstChild;
 	var wHead = decorDocument.head || firstChild(decorDocument.documentElement, "head");
-	for (var wNode; wNode=wHead.firstChild;) {
-		wHead.removeChild(wNode);
+	var frag = document.createDocumentFragment();
+	for (var wNode=wHead.firstChild; wNode=wNode.nextSibling;) {
 		if (wNode.nodeType != 1) continue;
-		if (document.importNode) node = document.importNode(wNode, true);
-		else node = document.createElement(wNode.outerHTML);
-		switch (wNode.tagName.toLowerCase()) {
+		var tagName = wNode.tagName.toLowerCase();
+		switch (tagName) {
 		case "title": // NOTE only import title if not already present
 			if (firstChild(head, "title")) continue;
+			if (!title.innerHTML) continue;
 			break;
-		case "link": // TODO
+		case "link": // FIXME no duplicates @rel, @href pairs
 			break;
-		case "meta": // TODO
-			// FIXME importing meta's in IE < 8 cause grief
+		case "meta": // FIXME no duplicates, warn on clash
 			if (wNode.httpEquiv) continue;
 			break;
-		case "style": // TODO
+		case "style": 
 			break;
-		case "script": // TODO
+		case "script":  // FIXME no duplicate @src
 			break;
 		}
-		head.insertBefore(node, marker);
+		importToFragment(wNode, frag);
 	}
+	head.insertBefore(frag, marker);
 }
 
 var cursor;
