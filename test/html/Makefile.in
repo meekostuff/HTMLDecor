@@ -10,7 +10,8 @@ installdir = ${pkgtestdir}/${dirname}
 .SUFFIXES :
 .SUFFIXES : .html .xhtml .js .css
 
-RESOURCES = normal.html normal.css decor.html decor.css
+RESOURCES = normal.html pre-processed.html normal.css \
+	decor/decor.html decor/decor.css decor/pre-processed.html
 TARGETS = 
 
 # Rules
@@ -18,9 +19,11 @@ all : build
 
 build : ${TARGETS}
 
-install: ${TARGETS} ${RESOURCES}
+install: ${RESOURCES}
 	[ -d ${pkglibexecdir} ] || ${INSTALL} -d ${installdir}
-	${INSTALL} ${.ALLSRC} ${installdir}/
+	for fname in ${RESOURCES}; do \
+		${INSTALL} ${srcdir}/$$fname ${installdir}/$$fname;\
+	done
 
 clean : 
 	-rm ${TARGETS}
