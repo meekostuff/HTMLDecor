@@ -285,8 +285,19 @@ function __init() {
 			break;
 		}
 		setReadyState("loadDecor");
-		//importDocument(function() { setReadyState("fixHead"); });
-		loadDocument(function() { setReadyState("fixHead"); });
+		switch (decorLink.type.toLowerCase()) {
+		case "text/decor+html":
+			loadDocument(function() { setReadyState("fixHead"); });
+			break;
+		case "text/html":
+			importDocument(function() { setReadyState("fixHead"); });
+			break;
+		default:
+			logger.warn("Decor type is not recognized. Abandoning processing.");
+			unhide();
+			setReadyState("complete");
+			break; // FIXME relying on fall-thru behavior to sort this out
+		}
 	case "loadDecor":
 		break;
 	case "fixHead":
@@ -365,7 +376,16 @@ function importDocument(callback) {
 
 function writeDocument(html, callback) {
 	html = html.replace(/(<head>|<head\s+[^>]*>)/i, '$1<base href="' + decorURL + '" /><!--[if lte IE 6]></base><![endif]-->');
-
+	html = html.replace(/\<script\b[^>]*\>/ig, function(tag) {
+		if (!/\s(async|defer)(=|\s|\>)/i.test(tag)) {
+			logger.info("Script will run immediately in decor document: " + tag);
+			return tag;
+		}
+		if (/\btype=['"]?text\/javascript['"]?\b/i.test(tag)) {
+			return tag.replace(/\btype=['"]?text\/javascript['"]?\b/i, 'type="text/javascript?async"');
+		}
+		return tag.replace(/\>$/, ' type="text/javascript?async">');
+	});
 	iframe = document.createElement("iframe");
 	iframe.name = "_decor";
 	addEvent(iframe, "load", callback);
@@ -424,6 +444,19 @@ function(srcNode, frag) { // document.importNode() NOT available on IE < 9
 	return node;
 }
 
+var enableScript = function(node) {
+	if (!/^text\/javascript\?async$/i.test(node.type)) return;
+	var script = document.createElement("script");
+	copyAttributes(node, script);
+	script.type = "text/javascript";
+	
+	// FIXME is this comprehensive?
+	try { script.innerHTML = node.innerHTML; }
+	catch (error) { script.text = node.text; }
+
+	node.parentNode.replaceChild(script, node);
+}
+
 function fixHead() {
 	var node, next;
 	for (node=head.firstChild; next=node && node.nextSibling, node; node=next) {
@@ -452,11 +485,15 @@ function fixHead() {
 		case "style": 
 			break;
 		case "script":  // FIXME no duplicate @src
+			if (!wNode.type || /^text\/javascript$/i.test(wNode.type)) continue;
 			break;
 		}
 		importToFragment(wNode, frag);
 	}
 	head.insertBefore(frag, marker);
+
+	// allow scripts to run
+	forEach(head.getElementsByTagName("script"), enableScript);
 }
 
 var cursor;
@@ -504,10 +541,16 @@ function insertDecor() {
 	}
 	var div = document.createElement("div");
 	div.innerHTML = wBody.innerHTML;
-	lastDecorNode = div.lastChild;
 	content = body.firstChild;
 	for (var node; node=div.firstChild; ) {
 		body.insertBefore(node, content);
+	}
+	lastDecorNode = document.createTextNode("");
+	body.insertBefore(lastDecorNode, content);
+	for (node=body.firstChild; next=node.nextSibling, node!=lastDecorNode; node=next) {
+		if (node.nodeType !== 1) continue;
+		if ("script" === node.tagName.toLowerCase()) enableScript(node);
+		else forEach(node.getElementsByTagName("script"), enableScript);
 	}
 	if (!cursor) cursor = lastDecorNode;
 }
