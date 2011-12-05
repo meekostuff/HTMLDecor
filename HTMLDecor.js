@@ -289,7 +289,7 @@ function __init() {
 		case "text/decor+html":
 			loadDocument(function() { setReadyState("fixHead"); });
 			break;
-		case "text/html":
+		case "text/html": case "":
 			importDocument(function() { setReadyState("fixHead"); });
 			break;
 		default:
