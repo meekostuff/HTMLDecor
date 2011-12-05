@@ -33,10 +33,11 @@ from the decor document aren't being imported.
 it is removed by a script.
 </div>
 <script type="text/javascript" async>
-(function() { 
+if (window == top) (function() { 
 	var el = document.getElementById("remove");
 	el.parentNode.removeChild(el);
 })();
+else alert("Error: script was executed in " + window.name + " document context");
 </script>
 </body>
 </html>
