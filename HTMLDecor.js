@@ -11,12 +11,8 @@
 var last = function(a) { return a[a.length - 1]; }
 var script = last(document.getElementsByTagName("script"));
 
-if (window.name == "_decor") { 
-	// NOTE if HTMLDecor is included in a decor document then abort and 
-	// remove script so it doesn't get copied into the page
-	script.parentNode.removeChild(script);
-	return; 
-}
+// NOTE if HTMLDecor is included in a decor document then abort 
+if (window.name == "_decor") return; 
 
 var Meeko = window.Meeko || (window.Meeko = {});
 var stuff = Meeko.stuff || (Meeko.stuff = {});
