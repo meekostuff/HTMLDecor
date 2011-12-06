@@ -331,6 +331,7 @@ function loadDocument(callback) {
 	iframe.setAttribute("style", "height: 0; position: absolute; top: -10000px;");
 	var onload = function() {
 		decorDocument = iframe.contentWindow.document;
+		removeExecutedScripts(decorDocument);
 		normalizeDocument(decorDocument);
 		callback();
 	}
@@ -374,8 +375,13 @@ function writeDocument(html, callback) {
 	html = html.replace(/(<head>|<head\s+[^>]*>)/i, '$1<base href="' + decorURL + '" /><!--[if lte IE 6]></base><![endif]-->');
 	html = html.replace(/\<script\b[^>]*\>/ig, function(tag) {
 		if (!/\s(async|defer)(=|\s|\>)/i.test(tag)) {
-			logger.info("Script will run immediately in decor document: " + tag);
-			return tag;
+			if (/\ssrc=/i.test(tag)) {
+				logger.warn("Script has @src but no @async. Treating as async anyway: \n\t" + tag);
+			}
+			else {
+				logger.info("Script will run immediately in decor document: \n\t" + tag);
+				return tag;
+			}
 		}
 		if (/\btype=['"]?text\/javascript['"]?\b/i.test(tag)) {
 			return tag.replace(/\btype=['"]?text\/javascript['"]?\b/i, 'type="text/javascript?async"');
@@ -384,21 +390,20 @@ function writeDocument(html, callback) {
 	});
 	iframe = document.createElement("iframe");
 	iframe.name = "_decor";
-	addEvent(iframe, "load", callback);
+	addEvent(iframe, "load", function() {
+		removeExecutedScripts(decorDocument);
+		normalizeDocument(decorDocument);
+
+		forEach($$("base", decorDocument), function(base) { 
+			base.parentNode.removeChild(base); 
+		});
+		return callback();
+	});
 	iframe.setAttribute("style", "height: 0; position: absolute; top: -10000px;");
 	head.insertBefore(iframe, head.firstChild);
 	decorDocument = iframe.contentDocument || iframe.contentWindow.document;
 	decorDocument.open();
 	decorDocument.write(html);
-
-	normalizeDocument(decorDocument);
-
-	forEach($$("base", decorDocument), function(base) { 
-		base.parentNode.removeChild(base); 
-	});
-
-	// NOTE IE doesn't always get to document.readyState == "complete
-	// if document.close() is called BEFORE normalizing URLs.
 	decorDocument.close();
 
 	// FIXME need warning for doc property mismatches between page and decor
@@ -440,12 +445,14 @@ function(srcNode, frag) { // document.importNode() NOT available on IE < 9
 	return node;
 }
 
-var enableScript = function(node) {
-	if (!node.type || /^text\/javascript$/i.test(node.type)) {
-		// NOTE remove scripts that ran in decor document
+var removeExecutedScripts = function(doc) {
+	forEach($$("script", doc), function(node) {
+		if (node.type && !/^text\/javascript$/i.test(node.type)) return;
 		node.parentNode.removeChild(node);
-		return;
-	}
+	});
+}
+
+var enableScript = function(node) {
 	if (!/^text\/javascript\?async$/i.test(node.type)) return;
 	var script = document.createElement("script");
 	copyAttributes(node, script);
@@ -486,8 +493,6 @@ function fixHead() {
 		case "style": 
 			break;
 		case "script":  // FIXME no duplicate @src
-			// NOTE don't copy scripts that ran in decor document
-			if (!wNode.type || /^text\/javascript$/i.test(wNode.type)) continue; 
 			break;
 		}
 		importToFragment(wNode, frag);
