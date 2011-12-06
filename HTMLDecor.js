@@ -441,6 +441,11 @@ function(srcNode, frag) { // document.importNode() NOT available on IE < 9
 }
 
 var enableScript = function(node) {
+	if (!node.type || /^text\/javascript$/i.test(node.type)) {
+		// NOTE remove scripts that ran in decor document
+		node.parentNode.removeChild(node);
+		return;
+	}
 	if (!/^text\/javascript\?async$/i.test(node.type)) return;
 	var script = document.createElement("script");
 	copyAttributes(node, script);
@@ -481,7 +486,8 @@ function fixHead() {
 		case "style": 
 			break;
 		case "script":  // FIXME no duplicate @src
-			if (!wNode.type || /^text\/javascript$/i.test(wNode.type)) continue;
+			// NOTE don't copy scripts that ran in decor document
+			if (!wNode.type || /^text\/javascript$/i.test(wNode.type)) continue; 
 			break;
 		}
 		importToFragment(wNode, frag);
