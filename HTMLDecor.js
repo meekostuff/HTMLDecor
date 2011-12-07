@@ -550,6 +550,11 @@ function insertDecor() {
 	}
 	var div = document.createElement("div");
 	div.innerHTML = wBody.innerHTML;
+	forEach($$("a", div), function(a) {
+		var val = a.href;
+		if (val.indexOf(decorURL+"#") != 0) return;
+		a.setAttribute("href", val.replace(decorURL, ""));
+	});
 	content = body.firstChild;
 	for (var node; node=div.firstChild; ) {
 		body.insertBefore(node, content);
