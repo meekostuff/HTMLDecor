@@ -352,7 +352,9 @@ function normalizeDocument(doc) {
 	normalize("a", "href");
 	normalize("script", "src");
 	normalize("img", "src");
+	normalize("iframe", "src");
 	normalize("form", "action");
+	// TODO object, embed, etc
 }
 
 function importDocument(callback) {
