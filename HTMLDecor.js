@@ -374,22 +374,23 @@ function importDocument(callback) {
 }
 
 function writeDocument(html, callback) {
+	// insert <base href=decorURL> at top of <head>
 	html = html.replace(/(<head>|<head\s+[^>]*>)/i, '$1<base href="' + decorURL + '" /><!--[if lte IE 6]></base><![endif]-->');
+
+	// disable <script async> and <script defer>
+	// TODO currently handles script @type=""|"text/javascript"
+	// What about "application/javascript", etc??
 	html = html.replace(/\<script\b[^>]*\>/ig, function(tag) {
 		if (!/\s(async|defer)(=|\s|\>)/i.test(tag)) {
-			if (/\ssrc=/i.test(tag)) {
-				logger.warn("Script has @src but no @async. Treating as async anyway: \n\t" + tag);
-			}
-			else {
-				logger.info("Script will run immediately in decor document: \n\t" + tag);
-				return tag;
-			}
+			logger.info("Script will run immediately in decor document: \n\t" + tag);
+			return tag;
 		}
-		if (/\btype=['"]?text\/javascript['"]?\b/i.test(tag)) {
-			return tag.replace(/\btype=['"]?text\/javascript['"]?\b/i, 'type="text/javascript?async"');
+		if (/\btype=['"]?text\/javascript['"]?(?=\s|\>)/i.test(tag)) {
+			return tag.replace(/\btype=['"]?text\/javascript['"]?(?=\s|\>)/i, 'type="text/javascript?async"');
 		}
 		return tag.replace(/\>$/, ' type="text/javascript?async">');
 	});
+
 	iframe = document.createElement("iframe");
 	iframe.name = "_decor";
 	addEvent(iframe, "load", function() {
