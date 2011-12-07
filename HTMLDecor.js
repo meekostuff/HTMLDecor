@@ -502,7 +502,7 @@ function fixHead() {
 	head.insertBefore(frag, marker);
 
 	// allow scripts to run
-	forEach(head.getElementsByTagName("script"), enableScript);
+	forEach($$("script", head), enableScript);
 }
 
 var cursor;
@@ -559,7 +559,7 @@ function insertDecor() {
 	for (node=body.firstChild; next=node.nextSibling, node!=lastDecorNode; node=next) {
 		if (node.nodeType !== 1) continue;
 		if ("script" === node.tagName.toLowerCase()) enableScript(node);
-		else forEach(node.getElementsByTagName("script"), enableScript);
+		else forEach($$("script", node), enableScript);
 	}
 	if (!cursor) cursor = lastDecorNode;
 }
