@@ -422,27 +422,29 @@ var copyAttributes = function(node, srcNode) { // implements srcNode.cloneNode(f
 	return node;
 }
 
-var importToFragment = document.importNode ? 
-function(srcNode, frag) { 
-	frag.appendChild(document.importNode(srcNode, true)); 
-	return frag;
+var importBefore = document.importNode ? 
+function(srcNode, marker) { 
+	marker.parentNode.insertBefore(document.importNode(srcNode, true), marker); 
 } :
-function(srcNode, frag) { // document.importNode() NOT available on IE < 9
+function(srcNode, marker) { // document.importNode() NOT available on IE < 9
 	var tagName = srcNode.tagName.toLowerCase();
 	var node = document.createElement(tagName);
 	copyAttributes(node, srcNode);
-	frag.appendChild(node);
 	switch(tagName) {
 	case "title":
 		node.innerText = srcNode.innerHTML;
+		marker.parentNode.insertBefore(node, marker);
 		break;
 	case "style":
+		marker.parentNode.insertBefore(node, marker);
 		node.styleSheet.cssText = srcNode.styleSheet.cssText;
 		break;
 	case "script":
 		node.text = srcNode.text;
+		marker.parentNode.insertBefore(node, marker);
 		break;
-	default: 
+	default: // meta, link have no content
+		marker.parentNode.insertBefore(node, marker);
 		break;
 	}
 	return node;
@@ -479,7 +481,12 @@ function fixHead() {
 
 	var marker = head.firstChild;
 	var wHead = decorDocument.head || firstChild(decorDocument.documentElement, "head");
-	var frag = document.createDocumentFragment();
+	if (isIE && IE_VER <= 7) {
+		var wBody = decorDocument.body;
+		forEach($$("style", wBody), function(wNode) {
+			wHead.appendChild(wNode);
+		});
+	}
 	for (var wNode=wHead.firstChild; wNode=wNode.nextSibling;) {
 		if (wNode.nodeType != 1) continue;
 		var tagName = wNode.tagName.toLowerCase();
@@ -498,9 +505,8 @@ function fixHead() {
 		case "script":  // FIXME no duplicate @src
 			break;
 		}
-		importToFragment(wNode, frag);
+		importBefore(wNode, marker);
 	}
-	head.insertBefore(frag, marker);
 
 	// allow scripts to run
 	forEach($$("script", head), enableScript);
