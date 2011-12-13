@@ -14,6 +14,9 @@ var script = last(document.getElementsByTagName("script"));
 // NOTE if HTMLDecor is included in a decor document then abort 
 if (window.name == "_decor") return; 
 
+// or if "nodecor" is one of the search options
+if (/(^\?|&)nodecor($|&)/.test(location.search)) return;
+
 var Meeko = window.Meeko || (window.Meeko = {});
 var stuff = Meeko.stuff || (Meeko.stuff = {});
 
