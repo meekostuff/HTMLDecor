@@ -396,7 +396,7 @@ function writeDocument(html, callback) {
 
 	iframe = document.createElement("iframe");
 	iframe.name = "_decor";
-	addEvent(iframe, "load", function() {
+	var onload = function() {
 		removeExecutedScripts(decorDocument);
 		normalizeDocument(decorDocument);
 
@@ -404,10 +404,12 @@ function writeDocument(html, callback) {
 			base.parentNode.removeChild(base); 
 		});
 		return callback();
-	});
+	}
 	iframe.setAttribute("style", "height: 0; position: absolute; top: -10000px;");
 	head.insertBefore(iframe, head.firstChild);
 	decorDocument = iframe.contentDocument || iframe.contentWindow.document;
+
+	addEvent(iframe, "load", onload); 
 	decorDocument.open();
 	decorDocument.write(html);
 	decorDocument.close();
