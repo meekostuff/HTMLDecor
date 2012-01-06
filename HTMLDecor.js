@@ -498,7 +498,7 @@ function fixHead() {
 		switch (tagName) {
 		case "title": // NOTE only import title if not already present
 			if (firstChild(head, "title")) continue;
-			if (!title.innerHTML) continue;
+			if (!wNode.innerHTML) continue;
 			break;
 		case "link": // FIXME no duplicates @rel, @href pairs
 			break;
