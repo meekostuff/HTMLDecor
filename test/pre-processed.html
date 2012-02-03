@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+<link rel="stylesheet" href="normal.css" />
+<link rel="meeko-decor" type="text/decor+html" href="decor/pre-processed.html" />
+<script src="../../HTMLDecor.js"></script>
+<style type="text/css">
+div { margin: 0.5em; border: 1px dashed black; }
+.remove { background-color: red; color: white; }
+</style>
+<style type="text/css" title="nodecor">
+.nodecor { background-color: red; color: white; }
+</style>
+</head>
+<body>
+<div class="remove">
+before #page-banner: You should NOT be able to see this content. 
+</div>
+<div id="page-header">
+#page-header
+</div>
+<div class="remove">
+before #page-main: You should NOT be able to see this content. 
+</div>
+<div id="page-main">
+#page-main
+<div class="normal">
+This content is styled by normal.css <br />
+<code>
+.normal { border: 2px solid green; }
+</code>
+</div>
+<div class="nodecor">
+This content should NOT have the following style 
+unless the decor isn't loaded. <br />
+<code>.nodecor { background-color: red; color: white; }</code>
+</div>
+<div class="decor">
+This content is styled by decor.css <br />
+<code>
+.decor { border: 2px solid blue; }
+</code>
+</div>
+
+</div>
+<div class="remove">
+after #main: You should NOT be able to see this content. 
+</div>
+<div id="page-footer">
+#page-footer
+</div>
+</body>
+</html>
+
