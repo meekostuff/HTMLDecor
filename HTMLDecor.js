@@ -1,5 +1,5 @@
 /*
- * Copyright 2009-2011 Sean Hogan (http://meekostuff.net/)
+ * Copyright 2009-2012 Sean Hogan (http://meekostuff.net/)
  */
 
 // TODO Move script and options detection outside of the decorSystem module
@@ -38,7 +38,7 @@ var addEvent =
 	document.attachEvent && function(node, event, fn) { return node.attachEvent("on" + event, fn); } ||
 	function(node, event, fn) { node["on" + event] = fn; }
 
-var $ = function(selector, context) {
+var $ = function(selector, context) { // WARN only selects by #id
 	if (!context) context = document;
 	else if (context.nodeType != 9) context = context.ownerDocument;
 	var m = selector.match(/^#([-_a-zA-Z0-9]+)$/);
@@ -51,7 +51,7 @@ var $ = function(selector, context) {
 		if (node.id == id) return node;
 	}
 }
-var $$ = function(selector, context) {
+var $$ = function(selector, context) { // WARN only selects by tagName
 	var context = context || document;
 	try { return context.getElementsByTagName(selector); }
 	catch (error) {
@@ -59,7 +59,7 @@ var $$ = function(selector, context) {
 	}
 }
 
-var matchesElement = function(selector, node) {
+var matchesElement = function(selector, node) { // WARN only matches by tagName
 	var tagName = selector.toLowerCase();
 	var matcher = function(el) {
 		return (el.nodeType == 1 && el.tagName.toLowerCase() == tagName);
