@@ -33,6 +33,12 @@ function(a, fn, context) {
 	return true;
 }
 
+var extend = function(dest, src) {
+	for (slot in src) {
+		if (src.hasOwnProperty && src.hasOwnProperty(slot)) dest[slot] = src[slot];
+	}
+}
+
 var addEvent = 
 	document.addEventListener && function(node, event, fn) { return node.addEventListener(event, fn, false); } ||
 	document.attachEvent && function(node, event, fn) { return node.attachEvent("on" + event, fn); } ||
@@ -162,7 +168,7 @@ var readyStateLookup = {
 	"complete": true
 }
 
-var head, body, style, lastDecorNode, fragment, iframe, decorLink, decorHREF, decorURL, decorDocument;
+var head, body, style, lastDecorNode, fragment, iframe, decorLink, decorHREF, decorURL, decorLoader;
 
 var loaded = false;
 if (!document.readyState) {
@@ -273,7 +279,7 @@ var contentFound = false;
 function __init() {
 	if (contentFound && hidden && checkStyleSheets()) unhide();
 	switch (sys.readyState) { // NOTE all these branches can fall-thru when they result in a state transition
-	case "uninitialized":
+	case "uninitialized":	
 		findDecorLink();
 		if (!decorURL && !document.body) break;
 		if (!decorURL || decorURL == document.URL) {
@@ -284,21 +290,10 @@ function __init() {
 			break;
 		}
 		setReadyState("loadDecor");
-		switch (decorLink.type.toLowerCase()) {
-		case "text/decor+html":
-			loadDocument(function() { setReadyState("fixHead"); });
-			break;
-		case "text/html": case "":
-			importDocument(function() { setReadyState("fixHead"); });
-			break;
-		default:
-			logger.warn("Decor type is not recognized. Abandoning processing.");
-			unhide();
-			setReadyState("complete");
-			break; // FIXME relying on fall-thru behavior to sort this out
-		}
 	case "loadDecor":
-		break;
+		if (!decorLoader) decorLoader = new Decor(decorURL, decorLink.type); // FIXME handle unknown decor type
+		if (!decorLoader.complete) break; // FIXME handle decor load failure
+		setReadyState("fixHead");
 	case "fixHead":
 		body = document.body;
 		if (!body) break;
@@ -318,8 +313,7 @@ function __init() {
 		process();
 		if (domContentLoaded()) setReadyState("loaded");
 		else break;
-		decorDocument = null;
-		head.removeChild(iframe);
+		decorLoader = decorLoader.DESTROY();
 	case "loaded":
 		if (document.readyState != "complete" || hidden) break;
 		setReadyState("complete");
@@ -328,21 +322,117 @@ function __init() {
 	// NOTE it is an error if we don't get to this point
 }
 
-function loadDocument(callback) {
-	iframe = document.createElement("iframe");
+function Decor(url, type) {
+	this.complete = false;
+	this.url = url;
+	this.type = type;
+	switch (type.toLowerCase()) {
+	case "text/decor+html":
+		this.loadDecor(url);
+		break;
+	case "text/html": case "":
+		this.loadHTML(url);
+		break;
+	default:
+		logger.error("Invalid decor document type: " + type);
+		break;
+	}
+	return this;
+}
+
+extend(Decor.prototype, {
+	
+DESTROY: function() {
+	delete this.document;
+	delete this.complete;
+	var iframe = this.iframe;
+	iframe.parentNode.removeChild(iframe);	
+	delete this.iframe;
+	return null;
+},
+
+loadDecor: function(url, callback) {
+	var decor = this;
+	var iframe = decor.iframe = document.createElement("iframe");
 	iframe.name = "_decor";
 	iframe.setAttribute("style", "height: 0; position: absolute; top: -10000px;");
 	var onload = function() {
-		decorDocument = iframe.contentWindow.document;
+		var decorDocument = decor.document = iframe.contentWindow.document;
 		removeExecutedScripts(decorDocument);
 		normalizeDocument(decorDocument);
-		callback();
+		decor.complete = true;
+		callback && callback(decorDocument);
 	}
 	addEvent(iframe, "load", onload);
 
-	iframe.src = decorURL;
+	iframe.src = url;
 	head.insertBefore(iframe, head.firstChild);
+},
+
+loadHTML: function(url, callback) {
+	var decor = this;
+	var xhr = window.XMLHttpRequest ?
+		new XMLHttpRequest() :
+		new ActiveXObject("Microsoft.XMLHTTP"); 
+	xhr.onreadystatechange = function() {
+		if (xhr.readyState != 4) return;
+		if (xhr.status != 200) { // FIXME
+			setReadyState("complete");
+			return;
+		}
+		decor.write(xhr.responseText, callback);
+	}
+	xhr.open("GET", url, true);
+	xhr.send("");
+},
+
+write: function(html, callback) {
+	var decor = this;
+	
+	// insert <base href=decorURL> at top of <head>
+	var html = html.replace(/(<head>|<head\s+[^>]*>)/i, '$1<base href="' + decor.url + '" /><!--[if lte IE 6]></base><![endif]-->');
+
+	// disable <script async> and <script defer>
+	// TODO currently handles script @type=""|"text/javascript"
+	// What about "application/javascript", etc??
+	html = html.replace(/\<script\b[^>]*\>/ig, function(tag) {
+		if (!/\s(async|defer)(=|\s|\>)/i.test(tag)) {
+			logger.info("Script will run immediately in decor document: \n\t" + tag);
+			return tag;
+		}
+		if (/\btype=['"]?text\/javascript['"]?(?=\s|\>)/i.test(tag)) {
+			return tag.replace(/\btype=['"]?text\/javascript['"]?(?=\s|\>)/i, 'type="text/javascript?async"');
+		}
+		return tag.replace(/\>$/, ' type="text/javascript?async">');
+	});
+
+	var iframe = decor.iframe = document.createElement("iframe");
+	iframe.name = "_decor";
+	var onload = function() {
+		var decorDocument = decor.document;
+		removeExecutedScripts(decorDocument);
+		normalizeDocument(decorDocument);
+
+		forEach($$("base", decorDocument), function(base) { 
+			base.parentNode.removeChild(base); 
+		});
+		decor.complete = true;
+		callback && callback(decorDocument);
+	}
+	iframe.setAttribute("style", "height: 0; position: absolute; top: -10000px;");
+	head.insertBefore(iframe, head.firstChild);
+	var decorDocument = decor.document = iframe.contentDocument || iframe.contentWindow.document;
+
+	addEvent(iframe, "load", onload); 
+	decorDocument.open();
+	decorDocument.write(html);
+	decorDocument.close();
+
+	// FIXME need warning for doc property mismatches between page and decor
+	// eg. charset, doc-mode, content-type, etc
 }
+
+});
 
 function normalizeDocument(doc) {
 	function normalize(tagName, attrName) { 
@@ -360,63 +450,6 @@ function normalizeDocument(doc) {
 	// TODO object, embed, etc
 }
 
-function importDocument(callback) {
-	var xhr = window.XMLHttpRequest ?
-		new XMLHttpRequest() :
-		new ActiveXObject("Microsoft.XMLHTTP"); 
-	xhr.onreadystatechange = function() {
-		if (xhr.readyState != 4) return;
-		if (xhr.status != 200) { // FIXME
-			setReadyState("complete");
-			return;
-		}
-		writeDocument(xhr.responseText, callback);
-	}
-	xhr.open("GET", decorURL, true); // FIXME sync or async??
-	xhr.send("");
-}
-
-function writeDocument(html, callback) {
-	// insert <base href=decorURL> at top of <head>
-	html = html.replace(/(<head>|<head\s+[^>]*>)/i, '$1<base href="' + decorURL + '" /><!--[if lte IE 6]></base><![endif]-->');
-
-	// disable <script async> and <script defer>
-	// TODO currently handles script @type=""|"text/javascript"
-	// What about "application/javascript", etc??
-	html = html.replace(/\<script\b[^>]*\>/ig, function(tag) {
-		if (!/\s(async|defer)(=|\s|\>)/i.test(tag)) {
-			logger.info("Script will run immediately in decor document: \n\t" + tag);
-			return tag;
-		}
-		if (/\btype=['"]?text\/javascript['"]?(?=\s|\>)/i.test(tag)) {
-			return tag.replace(/\btype=['"]?text\/javascript['"]?(?=\s|\>)/i, 'type="text/javascript?async"');
-		}
-		return tag.replace(/\>$/, ' type="text/javascript?async">');
-	});
-
-	iframe = document.createElement("iframe");
-	iframe.name = "_decor";
-	var onload = function() {
-		removeExecutedScripts(decorDocument);
-		normalizeDocument(decorDocument);
-
-		forEach($$("base", decorDocument), function(base) { 
-			base.parentNode.removeChild(base); 
-		});
-		return callback();
-	}
-	iframe.setAttribute("style", "height: 0; position: absolute; top: -10000px;");
-	head.insertBefore(iframe, head.firstChild);
-	decorDocument = iframe.contentDocument || iframe.contentWindow.document;
-
-	addEvent(iframe, "load", onload); 
-	decorDocument.open();
-	decorDocument.write(html);
-	decorDocument.close();
-
-	// FIXME need warning for doc property mismatches between page and decor
-	// eg. charset, doc-mode, content-type, etc
-}
 
 var copyAttributes = function(node, srcNode) { // implements srcNode.cloneNode(false)
 	var attrs = srcNode.attributes;
@@ -476,6 +509,7 @@ var enableScript = function(node) {
 }
 
 function fixHead() {
+	var decorDocument = decorLoader.document;
 	var node, next;
 	for (node=head.firstChild; next=node && node.nextSibling, node; node=next) {
 		if (node.nodeType != 1) continue;
@@ -519,6 +553,7 @@ function fixHead() {
 
 var cursor;
 function preprocess(notify) {
+	var decorDocument = decorLoader.document;
 	var node = cursor ? cursor.nextSibling :
 		lastDecorNode ? lastDecorNode.nextSibling :
 		body.firstChild;
@@ -551,6 +586,7 @@ function process(notify) { // NOTE must only be called straight after preprocess
 
 
 function insertDecor() {
+	var decorDocument = decorLoader.document;
 	var wBody = decorDocument.body;
 	// NOTE remove non-empty text-nodes - 
 	// they can't be hidden if that is appropriate
