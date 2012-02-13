@@ -280,49 +280,59 @@ function _init() {
 
 var contentFound = false;
 function __init() {
-	if (contentFound && hidden && checkStyleSheets()) unhide();
-	switch (sys.readyState) { // NOTE all these branches can fall-thru when they result in a state transition
-	case "uninitialized":	
+	for (;;) {
+		var next = handlers[sys.readyState]();
+		if (!next || next == sys.readyState) break;
+		setReadyState(next);
+		if (next == "complete") break;
+	}
+	if (hidden &&
+		(contentFound && checkStyleSheets() ||
+		 sys.readyState == "complete")) unhide();
+}
+
+var handlers = {
+	"uninitialized": function() {
 		findDecorLink();
-		if (!decorURL && !document.body) break;
+		if (!decorURL && !document.body) return;
 		if (!decorURL || decorURL == document.URL) {
 			if (!decorLink) logger.info("No decor URL specified. Processing is complete.");
 			else logger.warn("Decor URL is same as current page. Abandoning processing.");
-			unhide();
-			setReadyState("complete");
-			break;
+			return "complete";
 		}
-		setReadyState("loadDecor");
-	case "loadDecor":
+		return "loadDecor";
+	},
+	"loadDecor": function() {
 		if (!decorLoader) decorLoader = new Decor(decorURL, decorLink.type); // FIXME handle unknown decor type
-		if (!decorLoader.complete) break; // FIXME handle decor load failure
-		setReadyState("fixHead");
-	case "fixHead":
+		if (!decorLoader.complete) return; // FIXME handle decor load failure
+		return "fixHead";
+	},
+	"fixHead": function() {
 		body = document.body;
-		if (!body) break;
+		if (!body) return;
 		fixHead();
-		if (isIE && IE_VER <= 8) setReadyState("preprocess");
-		else setReadyState("insertDecor");
-		break;
-	case "preprocess":
+		return (isIE && IE_VER <= 8) ? "preprocess" : "insertDecor";
+	},
+	"preprocess": function() {
 		preprocess(function(node) { if (node.id) contentFound = true; });
-		if (domContentLoaded()) setReadyState("insertDecor");
-		if (sys.readyState != "insertDecor")  break;
-	case "insertDecor":
+		if (domContentLoaded()) return "insertDecor";
+		return;
+	},
+	"insertDecor": function() {
 		insertDecor();
-		setReadyState("process");
-	case "process":
+		return "process";
+	},
+	"process": function() {
 		preprocess(function(node) { if (node.id) contentFound = true; });
 		process();
-		if (domContentLoaded()) setReadyState("loaded");
-		else break;
-		decorLoader = decorLoader.DESTROY();
-	case "loaded":
-		if (document.readyState != "complete" || hidden) break;
-		setReadyState("complete");
+		if (domContentLoaded()) return "loaded";
+		return;
+	},
+	"loaded": function() {
+		if (decorLoader) decorLoader = decorLoader.DESTROY();
+		if (document.readyState == "complete") return "complete";
+		return;
 	}
-
-	// NOTE it is an error if we don't get to this point
 }
 
 function Decor(url, type) {
