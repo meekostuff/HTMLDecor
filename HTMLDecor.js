@@ -203,6 +203,10 @@ fragment.appendChild(style); // NOTE on IE this realizes style.styleSheet
 if (style.styleSheet) style.styleSheet.cssText = "body { visibility: hidden; }";
 else style.textContent = "body { visibility: hidden; }";
 var hidden = false;
+function hide() {
+	head.insertBefore(style, script);
+	hidden = true;	
+}
 function unhide() {
 	head.removeChild(style);
 	// NOTE on IE sometimes content stays hidden although 
@@ -247,8 +251,7 @@ var checkStyleSheets = sys.checkStyleSheets = function() {
 }
 
 function init() {
-	head.insertBefore(style, script);
-	hidden = true;
+	hide();
 	onprogress();
 }
 function onprogress() {
