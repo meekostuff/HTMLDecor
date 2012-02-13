@@ -154,6 +154,7 @@ function(relURL, context) {
 	return href;
 }
 
+sys.complete = false;
 var setReadyState = function(state) {
 	sys.readyState = state;
 	logger.debug("readyState: ", state);
@@ -256,7 +257,7 @@ function init() {
 }
 function onprogress() {
 	_init();
-	if (sys.readyState != "complete") timerId = window.setTimeout(onprogress, 25); // FIXME make interval config option
+	if (!sys.complete) timerId = window.setTimeout(onprogress, 25); // FIXME make interval config option
 }
 
 var _initializing = false; // guard against re-entrancy
@@ -265,7 +266,7 @@ function _init() {
 		logger.warn("Reentrancy in decorSystem initialization.");
 		return;
 	}
-	if (sys.readyState == "complete") {
+	if (sys.complete) {
 		logger.warn("decorSystem initialization requested after complete");
 		return;
 	}
@@ -280,15 +281,15 @@ function _init() {
 
 var contentFound = false;
 function __init() {
+	// NOTE if this test is done after the for_loop it results in a FOUC on Firefox
+	if (hidden && contentFound && checkStyleSheets()) unhide(); 
 	for (;;) {
+		if (sys.readyState == "complete") break;
 		var next = handlers[sys.readyState]();
 		if (!next || next == sys.readyState) break;
 		setReadyState(next);
-		if (next == "complete") break;
 	}
-	if (hidden &&
-		(contentFound && checkStyleSheets() ||
-		 sys.readyState == "complete")) unhide();
+	if (sys.readyState == "complete" && !hidden) sys.complete = true;
 }
 
 var handlers = {
