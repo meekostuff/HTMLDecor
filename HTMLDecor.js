@@ -83,16 +83,15 @@ var firstChild = function(parent, matcher) {
 	}
 }
 
-// FIXME what about IE versions that precede conditional comments??
-var IE_VER, isIE = /*@cc_on!@*/false;
+var IE_VER, isIE = /*@cc_on!@*/false; // NOTE IE10 won't be classified as IE
 if (isIE) {
-	IE_VER = 9;
 	var div = document.createElement("div");
 	div.innerHTML = 
 		"<!--[if lte IE 6]>6<![endif]-->" + 
 		"<!--[if IE 7]>7<![endif]-->" + 
-		"<!--[if IE 8]>8<![endif]-->";
-	if (div.innerHTML) IE_VER = 1 * div.innerHTML;
+		"<!--[if IE 8]>8<![endif]-->" +
+		"<!--[if IE 9]>9<![endif]-->";
+	IE_VER = (div.innerHTML) ? 1 * div.innerHTML : 5;
 }
 
 var logger = Meeko.stuff.logger || (Meeko.stuff.logger = new function() {
