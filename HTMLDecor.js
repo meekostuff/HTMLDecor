@@ -8,8 +8,18 @@
 
 (function() {
 
+/*
+ ### Start-up checks:
+ - is there a reason to abort execution?
+   * the script is running in a decor document
+   * a nodecor debugging option is enabled
+ - what config options can be detected
+   * hidden timeout (TODO)
+   * LOG_LEVEL (TODO)
+*/
+
 var last = function(a) { return a[a.length - 1]; }
-var script = last(document.getElementsByTagName("script"));
+var script = last(document.getElementsByTagName("script")); // WARN this wouldn't be valid if script is dynamically inserted
 
 // NOTE if HTMLDecor is included in a decor document then abort 
 if (window.name == "_decor") return; 
@@ -17,9 +27,9 @@ if (window.name == "_decor") return;
 // or if "nodecor" is one of the search options
 if (/(^\?|&)nodecor($|&)/.test(location.search)) return;
 
-var Meeko = window.Meeko || (window.Meeko = {});
-var stuff = Meeko.stuff || (Meeko.stuff = {});
-
+/*
+ ### Utility functions
+ */
 var forEach = ([].forEach) ? 
 function(a, fn, context) { return [].forEach.call(a, fn, context); } :
 function(a, fn, context) { for (var n=a.length, i=0; i<n; i++) fn.call(context, a[i], i, a); }
@@ -96,13 +106,16 @@ if (isIE) {
 	IE_VER = (div.innerHTML) ? 1 * div.innerHTML : 5;
 }
 
+var Meeko = window.Meeko || (window.Meeko = {});
+var stuff = Meeko.stuff || (Meeko.stuff = {});
+
 var logger = Meeko.stuff.logger || (Meeko.stuff.logger = new function() {
 
 var levels = "DEBUG INFO WARN ERROR".split(" ");
 
 forEach(levels, function(name, num) {
 	
-this["LOG_"+name] = num;	
+this["LOG_"+name] = num;
 this[name.toLowerCase()] = function() { this._log({ level: num, message: arguments }); }
 
 }, this);
