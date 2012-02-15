@@ -111,7 +111,7 @@ var stuff = Meeko.stuff || (Meeko.stuff = {});
 
 var logger = Meeko.stuff.logger || (Meeko.stuff.logger = new function() {
 
-var levels = "DEBUG INFO WARN ERROR".split(" ");
+var levels = "NONE ERROR WARN INFO DEBUG".split(" ");
 
 forEach(levels, function(name, num) {
 	
@@ -120,11 +120,8 @@ this[name.toLowerCase()] = function() { this._log({ level: num, message: argumen
 
 }, this);
 
-this.LOG_NONE = this.LOG_ERROR + 1;
-this.LOG_LEVEL = this.LOG_WARN;
-
 this._log = function(data) { 
-	if (data.level < this.LOG_LEVEL) return;
+	if (data.level > this.LOG_LEVEL) return;
 	data.timeStamp = +(new Date);
         data.message = [].join.call(data.message, " ");
         if (this.write) this.write(data);
@@ -138,6 +135,8 @@ this.write = (window.console) && function(data) {
 		offset = offset.substring(first);
 	console.log(offset+"ms " + levels[data.level]+": " + data.message); 
 }
+
+this.LOG_LEVEL = this.LOG_WARN; // NOTE default value
 
 }); // end logger defn
 
