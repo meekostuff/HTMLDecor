@@ -21,11 +21,22 @@
 var last = function(a) { return a[a.length - 1]; }
 var script = last(document.getElementsByTagName("script")); // WARN this wouldn't be valid if script is dynamically inserted
 
+var getOptions = function() {
+	var search = location.search,
+		options = {};
+	if (search) search.substr(1).replace(/(?:^|&)([^&=]+)=?([^&]*)/g, function(m, key, val) { if (m) options[key] = val; });
+	return options;
+}
+var urlQuery = getOptions();
+
 // NOTE if HTMLDecor is included in a decor document then abort 
 if (window.name == "_decor") return; 
 
 // or if "nodecor" is one of the search options
-if (/(^\?|&)nodecor($|&)/.test(location.search)) return;
+if (urlQuery.hasOwnProperty("nodecor")) return; // WARN deprecated
+if (urlQuery.hasOwnProperty("meeko-decor-off")) return;
+
+var log_level = urlQuery["meeko-log-level"] || script.getAttribute("data-log-level") || "WARN"; // NOTE used after logger module defn
 
 /*
  ### Utility functions
@@ -140,6 +151,11 @@ this.LOG_LEVEL = this.LOG_WARN; // NOTE default value
 
 }); // end logger defn
 
+if (log_level) {
+	log_level = log_level.toUpperCase();
+	var log_index = logger["LOG_" + log_level];
+	if (log_index != null) logger.LOG_LEVEL = log_index;
+}
 
 var decorSystem = Meeko.stuff.decorSystem || (Meeko.stuff.decorSystem = new function() {
 
