@@ -15,7 +15,7 @@
    * a nodecor debugging option is enabled
  - what config options can be detected
    * hidden timeout (TODO)
-   * LOG_LEVEL (TODO)
+   * LOG_LEVEL
 */
 
 var last = function(a) { return a[a.length - 1]; }
@@ -37,6 +37,8 @@ if (urlQuery.hasOwnProperty("nodecor")) return; // WARN deprecated
 if (urlQuery.hasOwnProperty("meeko-decor-off")) return;
 
 var log_level = urlQuery["meeko-log-level"] || script.getAttribute("data-log-level") || "WARN"; // NOTE used after logger module defn
+var timeout = script.getAttribute("data-timeout");
+timeout = (timeout == null || timeout == "" || isNaN(timeout)) ? 3000 : 1 * timeout;
 
 /*
  ### Utility functions
@@ -138,16 +140,16 @@ this._log = function(data) {
         if (this.write) this.write(data);
 }
 
-var startTime = +(new Date), padding = "      ";
+this.startTime = +(new Date), padding = "      ";
 
 this.write = (window.console) && function(data) { 
-	var offset = padding + (data.timeStamp - startTime), 
+	var offset = padding + (data.timeStamp - this.startTime), 
 		first = offset.length-padding.length-1,
 		offset = offset.substring(first);
 	console.log(offset+"ms " + levels[data.level]+": " + data.message); 
 }
 
-this.LOG_LEVEL = this.LOG_WARN; // NOTE default value
+this.LOG_LEVEL = this.LOG_WARN; // DEFAULT
 
 }); // end logger defn
 
@@ -242,8 +244,10 @@ function unhide() {
 	// NOTE on IE sometimes content stays hidden although 
 	// the stylesheet has been removed.
 	// The following forces the content to be revealed
-	document.body.style.visibility = "hidden";
-	document.body.style.visibility = "";
+	if (document.body) {
+		document.body.style.visibility = "hidden";
+		document.body.style.visibility = "";
+	}
 	hidden = false;
 }
 
@@ -310,8 +314,9 @@ function _init() {
 
 var contentFound = false;
 function __init() {
+	var now = +(new Date);
 	// NOTE if this test is done after the for_loop it results in a FOUC on Firefox
-	if (hidden && contentFound && checkStyleSheets()) unhide(); 
+	if (hidden && (now - logger.startTime > timeout || contentFound && checkStyleSheets())) unhide();
 	for (;;) {
 		if (sys.readyState == "complete") break;
 		var next = handlers[sys.readyState]();
