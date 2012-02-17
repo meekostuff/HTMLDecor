@@ -12,7 +12,7 @@
 var defaults = { // NOTE defaults also define the type of the associated config option
 	"log-level": "warn",
 	"decor-autostart": false,
-	"decor-timeout": 3000
+	"decor-hidden-timeout": 0
 }
 var vendorPrefix = "meeko"; // NOTE added as prefix for url-options, and *Storage
 var modulePrefix = "decor"; // NOTE removed as prefix for data-* attributes
@@ -159,7 +159,6 @@ if (urlQuery.hasOwnProperty("nodecor")) return; // WARN deprecated
 if (config["decor-off"]) return;
 
 var log_level = config["log-level"]; // NOTE used after logger module defn
-var timeout = config["timeout"];
 
 var Meeko = window.Meeko || (window.Meeko = {});
 var stuff = Meeko.stuff || (Meeko.stuff = {});
@@ -204,6 +203,7 @@ if (log_level) {
 var decorSystem = Meeko.stuff.decorSystem || (Meeko.stuff.decorSystem = new function() {
 
 var sys = this;
+sys["hidden-timeout"] = 0;
 
 // NOTE resolveURL shouldn't be needed, or at least
 // el.setAttribute(attr, el[attr]) should suffice.
@@ -358,7 +358,7 @@ var contentFound = false;
 function __init() {
 	var now = +(new Date);
 	// NOTE if this test is done after the for_loop it results in a FOUC on Firefox
-	if (hidden && (now - logger.startTime > timeout || contentFound && checkStyleSheets())) unhide();
+	if (hidden && (now - logger.startTime > sys["hidden-timeout"] || contentFound && checkStyleSheets())) unhide();
 	for (;;) {
 		if (sys.readyState == "complete") break;
 		var next = handlers[sys.readyState]();
@@ -709,6 +709,7 @@ function insertDecor() {
 
 }); // end decorSystem defn
 
+decorSystem["hidden-timeout"] = config["decor-hidden-timeout"];
 if (config["decor-autostart"]) decorSystem.start();
 
 })();
