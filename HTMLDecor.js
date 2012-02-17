@@ -156,10 +156,6 @@ if (window.name == "_decor") return;
 
 // or if "nodecor" is one of the search options
 if (urlQuery.hasOwnProperty("nodecor")) return; // WARN deprecated
-if (config["decor-off"]) return;
-
-var log_level = config["log-level"]; // NOTE used after logger module defn
-
 var Meeko = window.Meeko || (window.Meeko = {});
 var stuff = Meeko.stuff || (Meeko.stuff = {});
 
@@ -194,11 +190,8 @@ this.LOG_LEVEL = this.LOG_WARN; // DEFAULT
 
 }); // end logger defn
 
-if (log_level) {
-	log_level = log_level.toUpperCase();
-	var log_index = logger["LOG_" + log_level];
-	if (log_index != null) logger.LOG_LEVEL = log_index;
-}
+var log_index = logger["LOG_" + config["log-level"].toUpperCase()];
+if (log_index != null) logger.LOG_LEVEL = log_index;
 
 var decorSystem = Meeko.stuff.decorSystem || (Meeko.stuff.decorSystem = new function() {
 
