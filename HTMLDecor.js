@@ -11,7 +11,7 @@
 
 var defaults = { // NOTE defaults also define the type of the associated config option
 	"log-level": "warn",
-	"decor-off": false,
+	"decor-autostart": false,
 	"decor-timeout": 3000
 }
 var vendorPrefix = "meeko"; // NOTE added as prefix for url-options, and *Storage
@@ -326,7 +326,7 @@ var checkStyleSheets = sys.checkStyleSheets = function() {
 	});
 }
 
-function init() {
+sys.start = function start() {
 	hide();
 	onprogress();
 }
@@ -707,9 +707,9 @@ function insertDecor() {
 	if (!cursor) cursor = lastDecorNode;
 }
 
-init();
-
 }); // end decorSystem defn
+
+if (config["decor-autostart"]) decorSystem.start();
 
 })();
 
