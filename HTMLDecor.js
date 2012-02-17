@@ -9,6 +9,14 @@
 
 (function() {
 
+var defaults = { // NOTE defaults also define the type of the associated config option
+	"log-level": "warn",
+	"decor-off": false,
+	"decor-timeout": 3000
+}
+var vendorPrefix = "meeko"; // NOTE added as prefix for url-options, and *Storage
+var modulePrefix = "decor"; // NOTE removed as prefix for data-* attributes
+
 /*
  ### Start-up checks:
  - is there a reason to abort execution?
@@ -19,31 +27,64 @@
    * LOG_LEVEL
 */
 
-var last = function(a) { return a[a.length - 1]; }
 var script = last(document.getElementsByTagName("script")); // WARN this wouldn't be valid if script is dynamically inserted
 
 var getOptions = function() {
 	var search = location.search,
-		options = {};
+		options = {}; 
 	if (search) search.substr(1).replace(/(?:^|&)([^&=]+)=?([^&]*)/g, function(m, key, val) { if (m) options[key] = val; });
 	return options;
 }
 var urlQuery = getOptions();
+
+var dataSources = [];
+dataSources.push( function(name) { return urlQuery[vendorPrefix+"-"+name]; } );
+if (window.sessionStorage) dataSources.push( function(name) { return sessionStorage.getItem(vendorPrefix+"-"+name); });
+if (window.localStorage) dataSources.push( function(name) { return localStorage.getItem(vendorPrefix+"-"+name); });
+dataSources.push(function(name) { return script.getAttribute("data-" + name.replace(modulePrefix+"-", "")); });
+
+var getData = function(name) {
+	var data = null;
+	every(dataSources, function(fn) { data = fn(name); return (data == null); });
+	return data;
+}
+
+var getConfig = function() {
+	var config = {};
+	for (var name in defaults) {
+		var def = config[name] = defaults[name];
+		var val = getData(name);
+		if (val != null) switch (typeof def) {
+		case "string": config[name] = val; break;
+		case "number": if (val != "" || !isNaN(val)) config[name] = 1 * val; break;
+		case "boolean":
+			if (/^(yes|on|true|1)$/i.test(val)) config[name] = true;
+			else if (/^(no|off|false|0)$/i.test(val)) config[name] = false;
+			else config[name] = !def; // boolean attributes
+			break;
+		}
+	}
+	return config;
+}
+
+var config = getConfig();
 
 // NOTE if HTMLDecor is included in a decor document then abort 
 if (window.name == "_decor") return; 
 
 // or if "nodecor" is one of the search options
 if (urlQuery.hasOwnProperty("nodecor")) return; // WARN deprecated
-if (urlQuery.hasOwnProperty("meeko-decor-off")) return;
+if (config["decor-off"]) return;
 
-var log_level = urlQuery["meeko-log-level"] || script.getAttribute("data-log-level") || "WARN"; // NOTE used after logger module defn
-var timeout = script.getAttribute("data-timeout");
-timeout = (timeout == null || timeout == "" || isNaN(timeout)) ? 3000 : 1 * timeout;
+var log_level = config["log-level"]; // NOTE used after logger module defn
+var timeout = config["timeout"];
 
 /*
  ### Utility functions
  */
+
+var last = function(a) { return a[a.length - 1]; }
+
 var forEach = ([].forEach) ? 
 function(a, fn, context) { return [].forEach.call(a, fn, context); } :
 function(a, fn, context) { for (var n=a.length, i=0; i<n; i++) fn.call(context, a[i], i, a); }
