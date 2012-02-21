@@ -21,7 +21,10 @@ Create a HTML document (page.html) with some page specific content:
 		<!-- create a link to the decor page. All attributes are needed -->
 		<link rel="meeko-decor" type="text/html" href="decor.html" />
 		<!-- and source the HTMLDecor script -->
-		<script src="/path/to/HTMLDecor.js" data-autostart="yes" data-hidden-timeout="3000"></script>
+		<script src="/path/to/HTMLDecor.js" 
+			data-autostart="yes" 
+			data-hidden-timeout="3000">
+		</script>
 		<style>
 		.page { border: 2px solid green; }
 		</style>
