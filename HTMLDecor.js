@@ -12,7 +12,8 @@
 var defaults = { // NOTE defaults also define the type of the associated config option
 	"log-level": "warn",
 	"decor-autostart": false,
-	"decor-hidden-timeout": 0
+	"decor-hidden-timeout": 0,
+	"decor-polling-interval": 50
 }
 var vendorPrefix = "meeko"; // NOTE added as prefix for url-options, and *Storage
 var modulePrefix = "decor"; // NOTE removed as prefix for data-* attributes
@@ -197,6 +198,7 @@ var decorSystem = Meeko.stuff.decorSystem || (Meeko.stuff.decorSystem = new func
 
 var sys = this;
 sys["hidden-timeout"] = 0;
+sys["polling-interval"] = 50;
 
 // NOTE resolveURL shouldn't be needed, or at least
 // el.setAttribute(attr, el[attr]) should suffice.
@@ -325,7 +327,7 @@ sys.start = function start() {
 }
 function onprogress() {
 	_init();
-	if (!sys.complete) timerId = window.setTimeout(onprogress, 25); // FIXME make interval config option
+	if (!sys.complete) timerId = window.setTimeout(onprogress, sys["polling-interval"]); // FIXME make interval config option
 }
 
 var _initializing = false; // guard against re-entrancy
@@ -702,6 +704,7 @@ function insertDecor() {
 
 }); // end decorSystem defn
 
+decorSystem["polling-interval"] = config["decor-polling-interval"];
 decorSystem["hidden-timeout"] = config["decor-hidden-timeout"];
 if (config["decor-autostart"]) decorSystem.start();
 
