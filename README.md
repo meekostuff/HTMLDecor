@@ -142,15 +142,81 @@ Notes and Warnings
 ------------------
 - If the type of the decor URL is "text/decor+html" then the decor page is loaded directly into an iframe using the `src` attribute. If the type is undeclared or "text/html"  then the page will be loaded via XMLHttpRequest(), parsed to disable scripts, then written into the iframe using `document.write()`. 
 - it is generally undesirable for scripts in the decor page to run until after they are inserted into the content page. 
-+ For "text/html" decor pages, all scripts are disabled within the decor iframe, except those that have *none* of the attributes: `src`, `async`, `defer`. These scripts are enabled when the decor is merged with the page. 
-+ For "text/decor+html" decor pages, scripts can be targeted to the content page by declaring their type as "text/javascript?async". These scripts won't be run, but when they are merged into the content page the type is changed to "text/javascript" and they run then. Scripts with no declared type, or type of "text/javascript" will run in the decor iframe. These could be used to modify the decor in preparation for the specific content page. 
+  + For "text/html" decor pages, all scripts are disabled within the decor iframe, except those that have *none* of the attributes: `src`, `async`, `defer`. These scripts are enabled when the decor is merged with the page. 
+  + For "text/decor+html" decor pages, scripts can be targeted to the content page by declaring their type as "text/javascript?async". These scripts won't be run, but when they are merged into the content page the type is changed to "text/javascript" and they run then. Scripts with no declared type, or type of "text/javascript" will run in the decor iframe. These could be used to modify the decor in preparation for the specific content page. 
 - unlike CSS, decor pages should be in the same domain as the content page otherwise the browsers cross-site restrictions will apply. Detection for this hasn't been implemented yet. 
 - any stylesheets - `<style>` or `<link rel="stylesheet">` - in the content document and with a title of "nodecor" will be deleted at the start of merging of the decor page. This allows for a fallback styling option of decor-less pages. 
 - if HTMLDecor.js detects that it is included in a decor page then it will abort. This allows you to use a decor page as a normal page in your site if that is desirable. 
 - in most current browsers, elements from the content can be moved into the decor *while the element is still loading*. On IE6,7,8 this will throw an error, so for those browsers the decor is inserted and elements moved only after the DOM has fully loaded. This makes the decor the last thing to appear on the page. It would be desirable to provide a different option for these browsers. 
 
+
+Debugging
+---------
+By default, HTMLDecor logs error and warning messages to the browser console.
+The logger can be configured to provide info and debug messages (see Configuration).
+
+The configuration options may also be useful for debugging.
+
+Configuration
+-------------
+HTMLDecor has the following config options (default values in <b>bold</b>).
+
+- log-level: "none", "error", <b>"warn"</b>, "info", "debug"
+- decor-autostart: <b>false</b>, true
+- decor-hidden-timeout: <b>0</b> (milliseconds)
+- decor-polling-interval: <b>50</b> (milliseconds)
+
+HTMLDecor reads config options immediately after the script loads.
+Sources for configuration options are detailed below. 
+
+### From data-* attributes
+Options can be preset using data-attributes of the script which loads HTMLDecor, like this
+
+    <script src="/path/to/HTMLDecor.js" data-log-level="debug"></script>
+	
+Any options which are prefixed with `decor-` need the prefix removed when written as a data-attribute, for example 
+
+    <script src="/path/to/HTMLDecor.js" data-hidden-timeout="3000"></script>
+	
+Boolean options, such as `decor-autostart`, can have any of these boolean-like values: yes/no, on/off, 1,0
+
+    <script src="/path/to/HTMLDecor.js" data-autostart="yes"></script>
+
+Usually the only important options are `decor-autostart` and `decor-hidden-timeout`, hence the options in the Quick Start example.
+
+    <script src="/path/to/HTMLDecor.js" data-autostart="yes" data-hidden-timeout="3000"></script>
+
+This tells HTMLDecor to start automatically, and hide the page until all decor-resources are loaded *or*
+3000 milliseconds (3 seconds) have elapsed, whichever comes *first*.
+
+If not configured to autostart, HTMLDecor can be manually started by calling `Meeko.stuff.decorSystem.start()`.
+
+### From localStorage and sessionStorage
+When debugging a page you probably don't want to modify the page source to change HTMLDecor options,
+especially as you may have to change them back after you've found the problem.
+For this reason HTMLDecor reads `sessionStorage` and `localStorage` at startup, looking for config options.
+`sessionStorage` options override those found in `localStorage`, which in turn override those in data-attributes.
+
+Config options must be prefixed with `meeko-`. Thus the following would prevent `autostart` and turn on `debug` logging.
+
+	sessionStorage.setItem('meeko-decor-autostart', 'no');
+	sessionStorage.setItem('meeko-log-level', 'debug');
+
+_Note_ that the page would require a refresh after these settings were made.
+
+### From the page URL query options
+`localStorage` and `sessionStorage` are not available on all browsers (particularly IE6 and IE7).
+HTMLDecor looks in the query part of the page URL for config options.
+Config options must be prefixed with `meeko-`. Thus the following would prevent `autostart` and turn on `debug` logging.
+
+	http://example.org/index.html?meeko-decor-autostart=no&meeko-log-level=debug
+	
+URL query options override all other settings
+
+
 TODO
 ----
+- better docs, including logger and decorSystem APIs
 - don't duplicate `<script>` with the same @src, or `<link>` with the same @href.
 - compatibility checks and warnings between the content and decor pages (charset, etc)
 - compatibility checks and warnings between the content element and the decor element it replaces (tagName, attrs, etc). 
