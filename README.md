@@ -182,7 +182,7 @@ Boolean options, such as `decor-autostart`, can have any of these boolean-like v
 
 Typically the only important options are `decor-autostart` and `decor-hidden-timeout`, for example 
 
-    <script src="/path/to/HTMLDecor.js" data-autostart="no" data-hidden-timeout="0"></script>
+    <script src="/path/to/HTMLDecor.js" data-autostart="no" data-hidden-timeout="1000"></script>
 
 This tells HTMLDecor not to start automatically, and when a manual start is requested to
 hide the page until all decor-resources are loaded *or*
