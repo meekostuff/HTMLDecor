@@ -143,10 +143,13 @@ Notes and Warnings
   + For "text/html" decor pages, all scripts are disabled within the decor iframe, except those that have *none* of the attributes: `src`, `async`, `defer`. These scripts are enabled when the decor is merged with the page. 
   + For "text/decor+html" decor pages, scripts can be targeted to the content page by declaring their type as "text/javascript?async". These scripts won't be run, but when they are merged into the content page the type is changed to "text/javascript" and they run then. Scripts with no declared type, or type of "text/javascript" will run in the decor iframe. These could be used to modify the decor in preparation for the specific content page. 
 - unlike CSS, decor pages should be in the same domain as the content page otherwise the browsers cross-site restrictions will apply. Detection for this hasn't been implemented yet. 
-- any stylesheets - `<style>` or `<link rel="stylesheet">` - in the content document and with a title of "nodecor" will be deleted at the start of merging of the decor page. This allows for a fallback styling option of decor-less pages. 
+- any stylesheets in the content document and with a title of "nodecor" will be deleted at the start of merging of the decor page.
+This allows for a fallback styling option of decor-less pages. For example, the following stylesheets would be removed
+     <style title="nodecor">...</style>
+	 <link rel="stylesheet" href="style.css" title="nodecor" />
 - if HTMLDecor.js detects that it is included in a decor page then it will abort. This allows you to use a decor page as a normal page in your site if that is desirable. 
 - in most current browsers, elements from the content can be moved into the decor *while the element is still loading*. On IE6,7,8 this will throw an error, so for those browsers the decor is inserted and elements moved only after the DOM has fully loaded. This makes the decor the last thing to appear on the page. It would be desirable to provide a different option for these browsers. 
-
+- the configuration options and mechanism may change in future releases
 
 Debugging
 ---------
@@ -219,7 +222,6 @@ TODO
 - don't duplicate `<script>` with the same @src, or `<link>` with the same @href.
 - compatibility checks and warnings between the content and decor pages (charset, etc)
 - compatibility checks and warnings between the content element and the decor element it replaces (tagName, attrs, etc). 
-- configuration options, like maximum hidden time, polling interval, log-level. 
 - provide an API for scripts in the decor document to intercept different stages of processing
 - a stylesheet switcher
 - redirection options in the decor page, so that it could detect the browser, device, media size and capabilities, and load a more appropriate decor page. 
