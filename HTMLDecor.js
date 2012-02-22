@@ -9,10 +9,16 @@
 
 (function() {
 
+// NOTE if HTMLDecor is included in a decor document then abort 
+if (window.name == "_decor") return; 
+
+// or if "nodecor" is one of the search options
+if (/(^\?|&)nodecor($|&)/.test(location.search)) return; // WARN deprecated
+
 var defaults = { // NOTE defaults also define the type of the associated config option
 	"log-level": "warn",
-	"decor-autostart": false,
-	"decor-hidden-timeout": 0,
+	"decor-autostart": true,
+	"decor-hidden-timeout": 3000,
 	"decor-polling-interval": 50
 }
 var vendorPrefix = "meeko"; // NOTE added as prefix for url-options, and *Storage
@@ -101,13 +107,7 @@ if (isIE) {
 }
 
 /*
- ### Start-up checks:
- - is there a reason to abort execution?
-   * the script is running in a decor document
-   * a nodecor debugging option is enabled
- - what config options can be detected
-   * hidden timeout (TODO)
-   * LOG_LEVEL
+ ### Get config options
 */
 
 var script = last(document.getElementsByTagName("script")); // WARN this wouldn't be valid if script is dynamically inserted
@@ -126,9 +126,26 @@ if (window.sessionStorage) dataSources.push( function(name) { return sessionStor
 if (window.localStorage) dataSources.push( function(name) { return localStorage.getItem(vendorPrefix+"-"+name); });
 dataSources.push(function(name) { return script.getAttribute("data-" + name.replace(modulePrefix+"-", "")); });
 
-var getData = function(name) {
+var getData = function(name, type) {
 	var data = null;
-	every(dataSources, function(fn) { data = fn(name); return (data == null); });
+	every(dataSources, function(fn) {
+		var val = fn(name);
+		if (val == null) return true;
+		if (val == "") return true; // TODO log warning "Empty config option"
+		switch (type) {
+		case "string": data = val; break;
+		case "number":
+			if (!isNaN(val)) data = 1 * val;
+			// TODO else logger.warn("incorrect config option " + val + " for " + name); 
+			break;
+		case "boolean":
+			if (/^(yes|on|true|1)$/i.test(val)) data = true;
+			else if (/^(no|off|false|0)$/i.test(val)) data = false;
+			// TODO else logger.warn("incorrect config option " + val + " for " + name); 
+			break;
+		}
+		return (data == null); 
+	});
 	return data;
 }
 
@@ -136,27 +153,14 @@ var getConfig = function() {
 	var config = {};
 	for (var name in defaults) {
 		var def = config[name] = defaults[name];
-		var val = getData(name);
-		if (val != null) switch (typeof def) {
-		case "string": config[name] = val; break;
-		case "number": if (val != "" || !isNaN(val)) config[name] = 1 * val; break;
-		case "boolean":
-			if (/^(yes|on|true|1)$/i.test(val)) config[name] = true;
-			else if (/^(no|off|false|0)$/i.test(val)) config[name] = false;
-			else config[name] = !def; // boolean attributes
-			break;
-		}
+		var val = getData(name, typeof def);
+		if (val != null) config[name] = val;
 	}
 	return config;
 }
 
 var config = getConfig();
 
-// NOTE if HTMLDecor is included in a decor document then abort 
-if (window.name == "_decor") return; 
-
-// or if "nodecor" is one of the search options
-if (urlQuery.hasOwnProperty("nodecor")) return; // WARN deprecated
 var Meeko = window.Meeko || (window.Meeko = {});
 var stuff = Meeko.stuff || (Meeko.stuff = {});
 

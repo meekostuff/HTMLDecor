@@ -21,10 +21,7 @@ Create a HTML document (page.html) with some page specific content:
 		<!-- create a link to the decor page. All attributes are needed -->
 		<link rel="meeko-decor" type="text/html" href="decor.html" />
 		<!-- and source the HTMLDecor script -->
-		<script src="/path/to/HTMLDecor.js" 
-			data-autostart="yes" 
-			data-hidden-timeout="3000">
-		</script>
+		<script src="/path/to/HTMLDecor.js"></script>
 		<style>
 		.page { border: 2px solid green; }
 		</style>
@@ -140,6 +137,7 @@ for your obligations if you intend to modify or distribute HTMLDecor or part the
 
 Notes and Warnings
 ------------------
+- *Enable browser caching for your decor pages and resources*, otherwise each one will incur *two* round-trips to the server. This would be a **BAD THING**. 
 - If the type of the decor URL is "text/decor+html" then the decor page is loaded directly into an iframe using the `src` attribute. If the type is undeclared or "text/html"  then the page will be loaded via XMLHttpRequest(), parsed to disable scripts, then written into the iframe using `document.write()`. 
 - it is generally undesirable for scripts in the decor page to run until after they are inserted into the content page. 
   + For "text/html" decor pages, all scripts are disabled within the decor iframe, except those that have *none* of the attributes: `src`, `async`, `defer`. These scripts are enabled when the decor is merged with the page. 
@@ -162,8 +160,8 @@ Configuration
 HTMLDecor has the following config options (default values in <b>bold</b>).
 
 - log-level: "none", "error", <b>"warn"</b>, "info", "debug"
-- decor-autostart: <b>false</b>, true
-- decor-hidden-timeout: <b>0</b> (milliseconds)
+- decor-autostart: <b>true</b>, false
+- decor-hidden-timeout: <b>3000</b> (milliseconds)
 - decor-polling-interval: <b>50</b> (milliseconds)
 
 HTMLDecor reads config options immediately after the script loads.
@@ -176,20 +174,21 @@ Options can be preset using data-attributes of the script which loads HTMLDecor,
 	
 Any options which are prefixed with `decor-` need the prefix removed when written as a data-attribute, for example 
 
-    <script src="/path/to/HTMLDecor.js" data-hidden-timeout="3000"></script>
+    <script src="/path/to/HTMLDecor.js" data-hidden-timeout="1000"></script>
 	
-Boolean options, such as `decor-autostart`, can have any of these boolean-like values: yes/no, on/off, 1,0
+Boolean options, such as `decor-autostart`, can have any of these boolean-like values: true/false, yes/no, on/off, 1/0
 
-    <script src="/path/to/HTMLDecor.js" data-autostart="yes"></script>
+    <script src="/path/to/HTMLDecor.js" data-autostart="no"></script>
 
-Usually the only important options are `decor-autostart` and `decor-hidden-timeout`, hence the options in the Quick Start example.
+Typically the only important options are `decor-autostart` and `decor-hidden-timeout`, for example 
 
-    <script src="/path/to/HTMLDecor.js" data-autostart="yes" data-hidden-timeout="3000"></script>
+    <script src="/path/to/HTMLDecor.js" data-autostart="no" data-hidden-timeout="0"></script>
 
-This tells HTMLDecor to start automatically, and hide the page until all decor-resources are loaded *or*
-3000 milliseconds (3 seconds) have elapsed, whichever comes *first*.
+This tells HTMLDecor not to start automatically, and when a manual start is requested to
+hide the page until all decor-resources are loaded *or*
+1000 milliseconds (1 second) have elapsed, whichever comes *first*.
 
-If not configured to autostart, HTMLDecor can be manually started by calling `Meeko.stuff.decorSystem.start()`.
+If autostart is turned off, HTMLDecor can be manually started by calling `Meeko.stuff.decorSystem.start()`.
 
 ### From localStorage and sessionStorage
 When debugging a page you probably don't want to modify the page source to change HTMLDecor options,
@@ -211,7 +210,7 @@ Config options must be prefixed with `meeko-`. Thus the following would prevent 
 
 	http://example.org/index.html?meeko-decor-autostart=no&meeko-log-level=debug
 	
-URL query options override all other settings
+URL query options override all other settings. 
 
 
 TODO
