@@ -145,8 +145,10 @@ Notes and Warnings
 - unlike CSS, decor pages should be in the same domain as the content page otherwise the browsers cross-site restrictions will apply. Detection for this hasn't been implemented yet. 
 - any stylesheets in the content document and with a title of "nodecor" will be deleted at the start of merging of the decor page.
 This allows for a fallback styling option of decor-less pages. For example, the following stylesheets would be removed
+
      <style title="nodecor">...</style>
 	 <link rel="stylesheet" href="style.css" title="nodecor" />
+
 - if HTMLDecor.js detects that it is included in a decor page then it will abort. This allows you to use a decor page as a normal page in your site if that is desirable. 
 - in most current browsers, elements from the content can be moved into the decor *while the element is still loading*. On IE6,7,8 this will throw an error, so for those browsers the decor is inserted and elements moved only after the DOM has fully loaded. This makes the decor the last thing to appear on the page. It would be desirable to provide a different option for these browsers. 
 - the configuration options and mechanism may change in future releases
