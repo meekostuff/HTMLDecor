@@ -377,12 +377,7 @@ var handlers = {
 		body = document.body;
 		if (!body) return;
 		fixHead();
-		return (isIE && IE_VER <= 8) ? "preprocess" : "insertDecor";
-	},
-	"preprocess": function() {
-		preprocess(function(node) { contentFound = true; });
-		if (domContentLoaded()) return "insertDecor";
-		return;
+		return "insertDecor";
 	},
 	"insertDecor": function() {
 		insertDecor();
@@ -657,7 +652,8 @@ function process(notify) { // NOTE must only be called straight after preprocess
 			continue;
 		}
 		// TODO compat check between node and target
-		target.parentNode.replaceChild(node, target);
+		try { target.parentNode.replaceChild(node, target); } // NOTE fails in IE <= 8 if node is still loading
+		catch (error) { break; }
 		// TODO remove @role from node if an ancestor has same role
 		if (notify) notify(node);
 	}
