@@ -536,7 +536,10 @@ var copyAttributes = function(node, srcNode) { // implements srcNode.cloneNode(f
 
 var importBefore = document.importNode ? 
 function(srcNode, marker) { 
-	marker.parentNode.insertBefore(document.importNode(srcNode, true), marker); 
+	var node = document.importNode(srcNode, true);
+	marker.parentNode.insertBefore(node, marker);
+	// WARN sometimes IE9 doesn't read the content of inserted <style>
+	if (node.styleSheet && node.styleSheet.cssText == "") node.styleSheet.cssText = node.innerHTML; 
 } :
 function(srcNode, marker) { // document.importNode() NOT available on IE < 9
 	var tagName = srcNode.tagName.toLowerCase();
