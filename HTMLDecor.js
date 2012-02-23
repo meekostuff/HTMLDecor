@@ -93,19 +93,6 @@ var firstChild = function(parent, matcher) {
 	}
 }
 
-// FIXME this IE_VER detection fails when using compatibility modes.
-// i.e. IE9 in IE7 compat mode is still detected as IE9
-var IE_VER, isIE = /*@cc_on!@*/false; // NOTE IE10 won't be classified as IE
-if (isIE) {
-	var div = document.createElement("div");
-	div.innerHTML = 
-		"<!--[if lte IE 6]>6<![endif]-->" + 
-		"<!--[if IE 7]>7<![endif]-->" + 
-		"<!--[if IE 8]>8<![endif]-->" +
-		"<!--[if IE 9]>9<![endif]-->";
-	IE_VER = (div.innerHTML) ? 1 * div.innerHTML : 5;
-}
-
 /*
  ### Get config options
 */
