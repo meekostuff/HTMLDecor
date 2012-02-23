@@ -208,21 +208,13 @@ sys["polling-interval"] = 50;
 // el.setAttribute(attr, el[attr]) should suffice.
 // But IE doesn't return relative URLs for <link>, and
 // does funny things on anchors
-// FIXME might be able to refactor to only resolve for <link>
-var resolveURL = (!isIE || IE_VER >= 8) ? 
-function(relURL, context) { 
+var resolveURL = function(relURL, context) { 
 	if (!context) context = document;
-	var a = context.createElement("a");
-	a.setAttribute("href", relURL);
-	return a.href;
-} :
-function(relURL, context) { 
-	if (!context) context = document;
-	var a = context.createElement('<a href="'+ relURL + '" />');
-	if (context == document) return a.href;
-	context.body.appendChild(a);
-	var href = a.href;
-	context.body.removeChild(a);
+	var div = document.createElement("div");
+	if (context != document) context.body.appendChild(div); // WARN assumes context.body exists
+	div.innerHTML = '<a href="'+ relURL + '"></a>';	
+	var href = div.firstChild.href;
+	if (div.parentNode) div.parentNode.removeChild(div);
 	return href;
 }
 
@@ -271,8 +263,6 @@ style = document.createElement("style");
 fragment.appendChild(style); // NOTE on IE this realizes style.styleSheet 
 
 // NOTE hide the page until the decor is ready
-// FIXME this should have a configurable timeout so slow loading
-// doesn't leave the window blank
 if (style.styleSheet) style.styleSheet.cssText = "body { visibility: hidden; }";
 else style.textContent = "body { visibility: hidden; }";
 var hidden = false;
@@ -331,7 +321,7 @@ sys.start = function start() {
 }
 function onprogress() {
 	_init();
-	if (!sys.complete) timerId = window.setTimeout(onprogress, sys["polling-interval"]); // FIXME make interval config option
+	if (!sys.complete) timerId = window.setTimeout(onprogress, sys["polling-interval"]);
 }
 
 var _initializing = false; // guard against re-entrancy
