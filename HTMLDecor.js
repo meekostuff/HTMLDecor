@@ -599,12 +599,10 @@ function fixHead() {
 
 	var marker = head.firstChild;
 	var wHead = decorDocument.head || firstChild(decorDocument.documentElement, "head");
-	if (isIE && IE_VER <= 7) {
-		var wBody = decorDocument.body;
-		forEach($$("style", wBody), function(wNode) {
-			wHead.appendChild(wNode);
-		});
-	}
+	var wBody = decorDocument.body;
+	forEach($$("style", wBody), function(wNode) {
+		wHead.appendChild(wNode);
+	});
 	for (var wNode=wHead.firstChild; wNode=wNode.nextSibling;) {
 		if (wNode.nodeType != 1) continue;
 		var tagName = wNode.tagName.toLowerCase();
