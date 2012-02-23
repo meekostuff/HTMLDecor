@@ -380,7 +380,7 @@ var handlers = {
 		return (isIE && IE_VER <= 8) ? "preprocess" : "insertDecor";
 	},
 	"preprocess": function() {
-		preprocess(function(node) { if (node.id) contentFound = true; });
+		preprocess(function(node) { contentFound = true; });
 		if (domContentLoaded()) return "insertDecor";
 		return;
 	},
@@ -389,7 +389,7 @@ var handlers = {
 		return "process";
 	},
 	"process": function() {
-		preprocess(function(node) { if (node.id) contentFound = true; });
+		preprocess(function(node) { contentFound = true; });
 		process();
 		if (domContentLoaded()) return "loaded";
 		return;
@@ -637,8 +637,10 @@ function preprocess(notify) {
 	if (!node) return;
 	var next;
 	for (next=node.nextSibling; node; (node=next) && (next=next.nextSibling)) {
-		if (notify) notify(node);
-		if (node.id && $("#"+node.id, decorDocument)) continue;
+		if (node.id && $("#"+node.id, decorDocument)) {
+			if (notify) notify(node);
+			continue;
+		}
 		body.removeChild(node);
 	}
 	cursor = body.lastChild;
