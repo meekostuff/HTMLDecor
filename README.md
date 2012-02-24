@@ -8,7 +8,7 @@ There is still, however, significant duplication in web-pages - banners, navigat
 What if there was a way to specify this page decor in an external file? Unadorned web-pages could be sent to the browser which could then add the decor from a common file. **HTMLDecor.js** is designed for this purpose. 
 
 To see this in action visit http://meekostuff.net/blog/ where I am dog-fooding this script. 
-There is also a trivial test page at http://devel.meekostuff.net/HTMLDecor/0.9-devel/test/normal.html
+There is also a trivial test page at http://devel.meekostuff.net/HTMLDecor/1.0-devel/test/normal.html
 
 Quick Start
 -----------
