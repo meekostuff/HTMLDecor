@@ -124,7 +124,8 @@ How it works
 from the `<head>` of the decor page into the `<head>` of the content page.
 6. In a browser dependent order:
  - insert the innerHTML of the `<body>` in the decor page at the start of the `<body>` in the content page
- - for each child node of the `<body>` in the content page, determine whether it should be deleted or moved into the decor. If a child node is an element with an ID, and the ID matches an element in the decor, then the element in the decor is replaced with the element from the content. All other child nodes of the body in the content page are deleted. 
+ - for each child node of the `<body>` in the content page, determine whether it should be deleted or moved into the decor.
+ If a child node is an element with an ID, and the ID matches an element in the decor, then the element in the decor is replaced with the element from the content. All other child nodes of the body in the content page are deleted. 
  - when all linked stylesheets for the document have loaded, set the visibility of the page to "visible".
 
 License
@@ -137,19 +138,30 @@ for your obligations if you intend to modify or distribute HTMLDecor or part the
 
 Notes and Warnings
 ------------------
-- *Enable browser caching for your decor pages and resources*, otherwise each one will incur *two* round-trips to the server. This would be a **BAD THING**. 
-- If the type of the decor URL is "text/decor+html" then the decor page is loaded directly into an iframe using the `src` attribute. If the type is undeclared or "text/html"  then the page will be loaded via XMLHttpRequest(), parsed to disable scripts, then written into the iframe using `document.write()`. 
+- *Enable browser caching for your decor resources (external stylesheets, images, etc)*,
+otherwise each one will incur *two* round-trips to the server. This would be a **BAD THING**. 
+- If the type of the decor URL is "text/decor+html" then the decor page is loaded directly into an iframe using the `src` attribute.
+If the type is undeclared or "text/html"  then the page will be loaded via XMLHttpRequest(), parsed to disable scripts,
+then written into the iframe using `document.write()`. 
 - it is generally undesirable for scripts in the decor page to run until after they are inserted into the content page. 
-  + For "text/html" decor pages, all scripts are disabled within the decor iframe, except those that have *none* of the attributes: `src`, `async`, `defer`. These scripts are enabled when the decor is merged with the page. 
-  + For "text/decor+html" decor pages, scripts can be targeted to the content page by declaring their type as "text/javascript?async". These scripts won't be run, but when they are merged into the content page the type is changed to "text/javascript" and they run then. Scripts with no declared type, or type of "text/javascript" will run in the decor iframe. These could be used to modify the decor in preparation for the specific content page. 
-- unlike CSS, decor pages should be in the same domain as the content page otherwise the browsers cross-site restrictions will apply. Detection for this hasn't been implemented yet. 
+  + For "text/html" decor pages, all scripts are disabled within the decor iframe, except those that have *none* of the attributes: `async`, `defer`.
+  These scripts are enabled when the decor is merged with the page. 
+  + For "text/decor+html" decor pages, scripts can be targeted to the content page by declaring their type as "text/javascript?async".
+  These scripts won't be run, but when they are merged into the content page the type is changed to "text/javascript" and they run then.
+  Scripts with no declared type, or type of "text/javascript" will run in the decor iframe. These could be used to
+  modify the decor in preparation for the specific content page. 
+- unlike CSS, decor pages should be in the same domain as the content page otherwise the browsers cross-site restrictions will apply.
+Detection for this hasn't been implemented yet. 
 - any stylesheets in the content document and with a title of "nodecor" will be deleted at the start of merging of the decor page. 
 This allows for a fallback styling option of decor-less pages. For example, the following stylesheets would be removed  
 `<style title="nodecor">...</style>`  
 or  
 `<link rel="stylesheet" href="style.css" title="nodecor" />`  
-- if HTMLDecor.js detects that it is included in a decor page then it will abort. This allows you to use a decor page as a normal page in your site if that is desirable. 
-- in most current browsers, elements from the content can be moved into the decor *while the element is still loading*. On IE6,7,8 this will throw an error, so for those browsers the decor is inserted and elements moved only after the DOM has fully loaded. This makes the decor the last thing to appear on the page. It would be desirable to provide a different option for these browsers. 
+- if HTMLDecor.js detects that it is included in a decor page then it will abort. This allows you to use a decor page as a normal page 
+in your site if that is desirable. 
+- in most current browsers, elements from the content can be moved into the decor *while the element is still loading*. 
+On IE6,7,8 this will throw an error, so for those browsers the decor is inserted and elements moved only after the DOM has fully loaded.
+This makes the decor the last thing to appear on the page. It would be desirable to provide a different option for these browsers. 
 - the configuration options and mechanism may change in future releases
 
 Debugging
@@ -225,8 +237,13 @@ TODO
 - compatibility checks and warnings between the content element and the decor element it replaces (tagName, attrs, etc). 
 - provide an API for scripts in the decor document to intercept different stages of processing
 - a stylesheet switcher
-- redirection options in the decor page, so that it could detect the browser, device, media size and capabilities, and load a more appropriate decor page. 
-- URLs in `<style>` sections of the decor are not resolved. This means that relative URLs (which are meant to be relative to the decor URL) will probably be wrong when imported into the page. 
+- redirection options in the decor page, so that it could detect the browser, device, media size and capabilities, 
+and load a more appropriate decor page. 
+- URLs in `<style>` sections of the decor are not resolved. This means that relative URLs (which are meant to be relative to the decor URL)
+will probably be wrong when imported into the page. 
 - incorporate history.pushState() to fast-load content pages that share the same decor document. 
+- prevent `<link>`, `<iframe>`, `<object>`, `<img>` and other media from loading when decor is in iframe. 
+This might make the decor page load quicker, plus guarantees that resources aren't loaded twice even if browser caching hasn't been enabled. 
+- investigate the use of [HTML in XMLHttpRequest](https://developer.mozilla.org/en/HTML_in_XMLHttpRequest) in place of an iframe. 
 
 
