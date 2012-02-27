@@ -195,9 +195,9 @@ sys["polling-interval"] = 50;
 // el.setAttribute(attr, el[attr]) should suffice.
 // But IE doesn't return relative URLs for <link>, and
 // does funny things on anchors
-var resolveURL = function(relURL, context) { 
+var resolveURL = function(relURL, context) {
 	if (!context) context = document;
-	var div = document.createElement("div");
+	var div = context.createElement("div");
 	if (context != document) context.body.appendChild(div); // WARN assumes context.body exists
 	div.innerHTML = '<a href="'+ relURL + '"></a>';	
 	var href = div.firstChild.href;
@@ -356,7 +356,7 @@ var handlers = {
 		return "loadDecor";
 	},
 	"loadDecor": function() {
-		if (!decorLoader) decorLoader = new Decor(decorURL, decorLink.type); // FIXME handle unknown decor type
+		if (!decorLoader) decorLoader = new HTMLRequest(decorURL, decorLink.type); // FIXME handle unknown decor type
 		if (!decorLoader.complete) return; // FIXME handle decor load failure
 		return "fixHead";
 	},
@@ -383,14 +383,11 @@ var handlers = {
 	}
 }
 
-function Decor(url, type) {
+function HTMLRequest(url, type) {
 	this.complete = false;
 	this.url = url;
 	this.type = type;
 	switch (type.toLowerCase()) {
-	case "text/decor+html":
-		this.loadDecor(url);
-		break;
 	case "text/html": case "":
 		this.loadHTML(url);
 		break;
@@ -401,7 +398,7 @@ function Decor(url, type) {
 	return this;
 }
 
-extend(Decor.prototype, {
+extend(HTMLRequest.prototype, {
 	
 DESTROY: function() {
 	delete this.document;
@@ -412,26 +409,8 @@ DESTROY: function() {
 	return null;
 },
 
-loadDecor: function(url, callback) {
-	var decor = this;
-	var iframe = decor.iframe = document.createElement("iframe");
-	iframe.name = "_decor";
-	iframe.setAttribute("style", "height: 0; position: absolute; top: -10000px;");
-	var onload = function() {
-		var decorDocument = decor.document = iframe.contentWindow.document;
-		removeExecutedScripts(decorDocument);
-		normalizeDocument(decorDocument);
-		decor.complete = true;
-		callback && callback(decorDocument);
-	}
-	addEvent(iframe, "load", onload);
-
-	iframe.src = url;
-	head.insertBefore(iframe, head.firstChild);
-},
-
 loadHTML: function(url, callback) {
-	var decor = this;
+	var htmlRequest = this;
 	var xhr = window.XMLHttpRequest ?
 		new XMLHttpRequest() :
 		new ActiveXObject("Microsoft.XMLHTTP"); 
@@ -441,17 +420,17 @@ loadHTML: function(url, callback) {
 			setReadyState("complete");
 			return;
 		}
-		decor.write(xhr.responseText, callback);
+		htmlRequest.write(xhr.responseText, callback);
 	}
 	xhr.open("GET", url, true);
 	xhr.send("");
 },
 
 write: function(html, callback) {
-	var decor = this;
+	var htmlRequest = this;
 	
 	// insert <base href=decorURL> at top of <head>
-	var html = html.replace(/(<head>|<head\s+[^>]*>)/i, '$1<base href="' + decor.url + '" /><!--[if lte IE 6]></base><![endif]-->');
+	var html = html.replace(/(<head>|<head\s+[^>]*>)/i, '$1<base href="' + htmlRequest.url + '" /><!--[if lte IE 6]></base><![endif]-->');
 
 	// disable <script async> and <script defer>
 	// TODO currently handles script @type=""|"text/javascript"
@@ -467,27 +446,27 @@ write: function(html, callback) {
 		return tag.replace(/\>$/, ' type="text/javascript?async">');
 	});
 
-	var iframe = decor.iframe = document.createElement("iframe");
+	var iframe = htmlRequest.iframe = document.createElement("iframe");
 	iframe.name = "_decor";
 	var onload = function() {
-		var decorDocument = decor.document;
-		removeExecutedScripts(decorDocument);
-		normalizeDocument(decorDocument);
+		var htmlDocument = htmlRequest.document;
+		removeExecutedScripts(htmlDocument);
+		normalizeDocument(htmlDocument);
 
-		forEach($$("base", decorDocument), function(base) { 
+		forEach($$("base", htmlDocument), function(base) { 
 			base.parentNode.removeChild(base); 
 		});
-		decor.complete = true;
-		callback && callback(decorDocument);
+		htmlRequest.complete = true;
+		callback && callback(htmlDocument);
 	}
 	iframe.setAttribute("style", "height: 0; position: absolute; top: -10000px;");
 	head.insertBefore(iframe, head.firstChild);
-	var decorDocument = decor.document = iframe.contentDocument || iframe.contentWindow.document;
+	var htmlDocument = htmlRequest.document = iframe.contentDocument || iframe.contentWindow.document;
 
 	addEvent(iframe, "load", onload); 
-	decorDocument.open();
-	decorDocument.write(html);
-	decorDocument.close();
+	htmlDocument.open();
+	htmlDocument.write(html);
+	htmlDocument.close();
 
 	// FIXME need warning for doc property mismatches between page and decor
 	// eg. charset, doc-mode, content-type, etc

@@ -140,8 +140,7 @@ Notes and Warnings
 ------------------
 - *Enable browser caching for your decor resources (external stylesheets, images, etc)*,
 otherwise each one will incur *two* round-trips to the server. This would be a **BAD THING**. 
-- If the type of the decor URL is "text/decor+html" then the decor page is loaded directly into an iframe using the `src` attribute.
-If the type is undeclared or "text/html"  then the page will be loaded via XMLHttpRequest(), parsed to disable scripts,
+- If the type of the decor URL is undeclared or "text/html" then the decor page is loaded via XMLHttpRequest(), parsed to disable scripts,
 then written into the iframe using `document.write()`. 
 - it is generally undesirable for scripts in the decor page to run until after they are inserted into the content page. 
   + For "text/html" decor pages, all scripts are disabled within the decor iframe, except those that have *none* of the attributes: `async`, `defer`.
