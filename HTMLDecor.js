@@ -436,10 +436,6 @@ write: function(html, callback) {
 	// TODO currently handles script @type=""|"text/javascript"
 	// What about "application/javascript", etc??
 	html = html.replace(/\<script\b[^>]*\>/ig, function(tag) {
-		if (!/\s(async|defer)(=|\s|\>)/i.test(tag)) {
-			logger.info("Script will run immediately in decor document: \n\t" + tag);
-			return tag;
-		}
 		if (/\btype=['"]?text\/javascript['"]?(?=\s|\>)/i.test(tag)) {
 			return tag.replace(/\btype=['"]?text\/javascript['"]?(?=\s|\>)/i, 'type="text/javascript?async"');
 		}
