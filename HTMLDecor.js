@@ -430,12 +430,12 @@ write: function(html, callback) {
 	var htmlRequest = this;
 	
 	// insert <base href=decorURL> at top of <head>
-	var html = html.replace(/(<head>|<head\s+[^>]*>)/i, '$1<base href="' + htmlRequest.url + '" /><!--[if lte IE 6]></base><![endif]-->');
+	var html = html.replace(/(<head\b[^>]*>)/i, '$1<base href="' + htmlRequest.url + '" /><!--[if lte IE 6]></base><![endif]-->');
 
 	// disable <script async> and <script defer>
 	// TODO currently handles script @type=""|"text/javascript"
 	// What about "application/javascript", etc??
-	html = html.replace(/\<script\b[^>]*\>/ig, function(tag) {
+	html = html.replace(/<script\b[^>]*>/ig, function(tag) {
 		if (/\btype=['"]?text\/javascript['"]?(?=\s|\>)/i.test(tag)) {
 			return tag.replace(/\btype=['"]?text\/javascript['"]?(?=\s|\>)/i, 'type="text/javascript?async"');
 		}
