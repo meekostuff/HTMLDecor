@@ -73,7 +73,7 @@ var $ = function(selector, context) { // WARN only selects by #id
 	}
 }
 var $$ = function(selector, context) { // WARN only selects by tagName
-	var context = context || document;
+	context = context || document;
 	try { return context.getElementsByTagName(selector); }
 	catch (error) {
 		throw (selector + " can only be a tagName selector in $$()");
@@ -102,7 +102,7 @@ var firstChild = function(parent, matcher) {
  ### Get config options
 */
 
-var script = last(document.getElementsByTagName("script")); // WARN this wouldn't be valid if script is dynamically inserted
+var script = last($$("script")); // WARN this wouldn't be valid if script is dynamically inserted
 
 var getOptions = function() {
 	var search = location.search,
@@ -382,7 +382,7 @@ var handlers = {
 		return;
 	},
 	"loaded": function() {
-		if (decorLoader) decorLoader = decorLoader.DESTROY();
+		decorLoader = null; // FIXME ideally this isn't a global variable and gets cleaned up when it leaves scope
 		if (document.readyState == "complete") return "complete";
 		return;
 	}
@@ -396,12 +396,21 @@ forEach(words("link@href a@href script@src img@src iframe@src video@src audio@sr
 
 
 function HTMLRequest(url, type) {
+	var htmlRequest = this;
 	this.complete = false;
 	this.url = url;
 	this.type = type;
+	function success(doc) {
+		htmlRequest.document = doc;
+		htmlRequest.complete = true;
+	}
+	function fail(status) {
+		logger.error("HTMLRequest fail for " + url);
+		throw "HTMLRequest fail";
+	}
 	switch (type.toLowerCase()) {
 	case "text/html": case "":
-		this.loadHTML(url);
+		loadURL(url, success, fail);
 		break;
 	default:
 		logger.error("Invalid decor document type: " + type);
@@ -410,41 +419,25 @@ function HTMLRequest(url, type) {
 	return this;
 }
 
-extend(HTMLRequest.prototype, {
-	
-DESTROY: function() {
-	delete this.document;
-	delete this.complete;
-	var iframe = this.iframe;
-	iframe.parentNode.removeChild(iframe);	
-	delete this.iframe;
-	return null;
-},
-
-loadHTML: function(url, callback) {
-	var htmlRequest = this;
+var loadURL = function(url, success, fail) {
 	var xhr = window.XMLHttpRequest ?
 		new XMLHttpRequest() :
 		new ActiveXObject("Microsoft.XMLHTTP"); 
 	xhr.onreadystatechange = function() {
 		if (xhr.readyState != 4) return;
-		if (xhr.status != 200) { // FIXME
-			setReadyState("complete");
-			return;
-		}
-		htmlRequest.write(xhr.responseText, callback);
+		if (xhr.status != 200) fail(xhr.status); // FIXME what should status be??
+		else parseHTML(xhr.responseText, url, success, fail);
 	}
 	xhr.open("GET", url, true);
 	xhr.send("");
-},
+}
 
-write: function(html, callback) {
-	var htmlRequest = this;
-
+var parseHTML = function(html, url, success, fail) {
 	// prevent resources (<img>, <link>, etc) from loading in parsing context
 	each(uriAttrs, function(tagName, attrName) {
 		html = html.replace(RegExp("<" + tagName + "\\b[^>]*>", "ig"), function(tagString) {
-			return tagString.replace(RegExp("\\b" + attrName + "=", "i"), vendorPrefix + "-" + attrName + "=");
+			var vendorAttrName = vendorPrefix + "-" + attrName;
+			return tagString.replace(RegExp("\\b" + attrName + "=", "i"), vendorAttrName + "=");
 		});		
 	});
 	
@@ -458,30 +451,46 @@ write: function(html, callback) {
 		return tag.replace(/\>$/, ' type="text/javascript?async">');
 	});
 
-	var iframe = htmlRequest.iframe = document.createElement("iframe");
+	var iframe = document.createElement("iframe");
 	iframe.name = "_decor";
-	var onload = function() {
-		var htmlDocument = htmlRequest.document;
-		removeExecutedScripts(htmlDocument);
-		normalizeDocument(htmlDocument, decorURL);
-
-		htmlRequest.complete = true;
-		callback && callback(htmlDocument);
-	}
-	iframe.setAttribute("style", "height: 0; position: absolute; top: -10000px;");
 	head.insertBefore(iframe, head.firstChild);
-	var htmlDocument = htmlRequest.document = iframe.contentDocument || iframe.contentWindow.document;
+	var iframeDoc = iframe.contentWindow.document;
 
-	addEvent(iframe, "load", onload); 
-	htmlDocument.open();
-	htmlDocument.write(html);
-	htmlDocument.close();
+	iframeDoc.open();
+	iframeDoc.write(html);
+	iframeDoc.close();
+
+	// DISABLED removeExecutedScripts(htmlDocument); 
+	normalizeDocument(iframeDoc, decorURL);
+
+	// NOTE surprisingly this keeps a reference to the iframe documentElement
+	// even after the iframe has been removed from the document.
+	// Tested on FF11, O11, latest Chrome and Webkit, IE6-9
+	var htmlEl = iframeDoc.documentElement;
+
+	each(uriAttrs, function(tagName, attrName) {
+		var vendorAttrName = vendorPrefix + "-" + attrName;
+		forEach($$(tagName, htmlEl), function(el) {
+			var val = el.getAttribute(vendorAttrName);
+			if (!val) return;
+			el.setAttribute(attrName, val);
+			el.removeAttribute(vendorAttrName);
+		});	
+	})
+
+	head.removeChild(iframe);
+	
+	var pseudoDoc = {
+		documentElement: htmlEl,
+		head: firstChild(htmlEl, "head"),
+		body: firstChild(htmlEl, "body")
+	}
+
+	success && success(pseudoDoc);
 
 	// FIXME need warning for doc property mismatches between page and decor
 	// eg. charset, doc-mode, content-type, etc
 }
-
-});
 
 function normalizeDocument(doc, baseURL) {
 	// insert <base href=decorURL> at top of <head>
@@ -491,10 +500,10 @@ function normalizeDocument(doc, baseURL) {
 	head.insertBefore(base, head.firstChild);
 	
 	function normalize(tagName, attrName) { 
+		var vendorAttrName = vendorPrefix + "-" + attrName;
 		forEach($$(tagName, doc), function(el) {
-			var vendorAttrName = vendorPrefix + "-" + attrName;
 			var val = el.getAttribute(vendorAttrName);
-			if (val) el.setAttribute(vendorAttrName, resolveURL(val, doc)); 
+			if (val && val.indexOf("#") != 0) el.setAttribute(vendorAttrName, resolveURL(val, doc)); // NOTE anchor hrefs aren't normalized
 		});
 	}
 	each(uriAttrs, normalize);
@@ -502,6 +511,15 @@ function normalizeDocument(doc, baseURL) {
 	head.removeChild(base);
 }
 
+var prependHTML = (document.createElement("div").insertAdjacentHTML) ?
+function(parent, html) {
+	parent.insertAdjacentHTML("afterBegin", html);
+} :
+function(parent, html) {
+	var div = document.createElement("div"), refNode = parent.firstChild;
+	div.innerHTML = html;
+	for (var node; node=div.firstChild;) parent.insertBefore(node, refNode);
+}
 
 var copyAttributes = function(node, srcNode) { // implements srcNode.cloneNode(false)
 	var attrs = srcNode.attributes;
@@ -605,7 +623,7 @@ function fixHead() {
 }
 
 var cursor;
-function preprocess(notify) {
+function preprocess(notify) { // NOTE now relies on insertDecor going first
 	var decorDocument = decorLoader.document;
 	var node = cursor ? cursor.nextSibling :
 		lastDecorNode ? lastDecorNode.nextSibling :
@@ -613,7 +631,7 @@ function preprocess(notify) {
 	if (!node) return;
 	var next;
 	for (next=node.nextSibling; node; (node=next) && (next=next.nextSibling)) {
-		if (node.id && $("#"+node.id, decorDocument)) {
+		if (node.id && $("#"+node.id) != node) {
 			if (notify) notify(node);
 			continue;
 		}
@@ -652,17 +670,8 @@ function insertDecor() {
 		logger.warn("Removing text found as child of decor body.");
 		wBody.removeChild(node);
 	}
-	var div = document.createElement("div");
-	div.innerHTML = wBody.innerHTML;
-	forEach($$("a", div), function(a) {
-		var val = a.href;
-		if (val.indexOf(decorURL+"#") != 0) return;
-		a.setAttribute("href", val.replace(decorURL, ""));
-	});
-	content = body.firstChild;
-	for (var node; node=div.firstChild; ) {
-		body.insertBefore(node, content);
-	}
+	var content = body.firstChild;
+	prependHTML(body, wBody.innerHTML);
 	lastDecorNode = document.createTextNode("");
 	body.insertBefore(lastDecorNode, content);
 	for (node=body.firstChild; next=node.nextSibling, node!=lastDecorNode; node=next) {
