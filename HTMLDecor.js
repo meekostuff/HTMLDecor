@@ -27,7 +27,6 @@ var modulePrefix = "decor"; // NOTE removed as prefix for data-* attributes
 /*
  ### Utility functions
  */
-
 var last = function(a) { return a[a.length - 1]; }
 
 var forEach = ([].forEach) ? 
@@ -43,10 +42,16 @@ function(a, fn, context) {
 	return true;
 }
 
-var extend = function(dest, src) {
-	for (slot in src) {
-		if (src.hasOwnProperty && src.hasOwnProperty(slot)) dest[slot] = src[slot];
+var words = function(text) { return text.split(/\s+/); }
+
+var each = function(object, fn) {
+	for (slot in object) {
+		if (object.hasOwnProperty && object.hasOwnProperty(slot)) fn(slot, object[slot]);
 	}
+}
+
+var extend = function(dest, src) {
+	each(src, function(key, val) { dest[key] = val; });
 }
 
 var addEvent = 
@@ -153,7 +158,7 @@ var stuff = Meeko.stuff || (Meeko.stuff = {});
 
 var logger = Meeko.stuff.logger || (Meeko.stuff.logger = new function() {
 
-var levels = "NONE ERROR WARN INFO DEBUG".split(" ");
+var levels = words("NONE ERROR WARN INFO DEBUG");
 
 forEach(levels, function(name, num) {
 	
@@ -383,6 +388,13 @@ var handlers = {
 	}
 }
 
+var uriAttrs = {};
+forEach(words("link@href a@href script@src img@src iframe@src video@src audio@src source@src form@action input@formaction button@formaction"), function(text) {
+	var m = text.split("@"), tagName = m[0], attrName = m[1];
+	uriAttrs[tagName] = attrName;
+});
+
+
 function HTMLRequest(url, type) {
 	this.complete = false;
 	this.url = url;
@@ -428,11 +440,15 @@ loadHTML: function(url, callback) {
 
 write: function(html, callback) {
 	var htmlRequest = this;
-	
-	// insert <base href=decorURL> at top of <head>
-	var html = html.replace(/(<head\b[^>]*>)/i, '$1<base href="' + htmlRequest.url + '" /><!--[if lte IE 6]></base><![endif]-->');
 
-	// disable <script async> and <script defer>
+	// prevent resources (<img>, <link>, etc) from loading in parsing context
+	each(uriAttrs, function(tagName, attrName) {
+		html = html.replace(RegExp("<" + tagName + "\\b[^>]*>", "ig"), function(tagString) {
+			return tagString.replace(RegExp("\\b" + attrName + "=", "i"), vendorPrefix + "-" + attrName + "=");
+		});		
+	});
+	
+	// disable <script>
 	// TODO currently handles script @type=""|"text/javascript"
 	// What about "application/javascript", etc??
 	html = html.replace(/<script\b[^>]*>/ig, function(tag) {
@@ -447,11 +463,8 @@ write: function(html, callback) {
 	var onload = function() {
 		var htmlDocument = htmlRequest.document;
 		removeExecutedScripts(htmlDocument);
-		normalizeDocument(htmlDocument);
+		normalizeDocument(htmlDocument, decorURL);
 
-		forEach($$("base", htmlDocument), function(base) { 
-			base.parentNode.removeChild(base); 
-		});
 		htmlRequest.complete = true;
 		callback && callback(htmlDocument);
 	}
@@ -470,20 +483,23 @@ write: function(html, callback) {
 
 });
 
-function normalizeDocument(doc) {
+function normalizeDocument(doc, baseURL) {
+	// insert <base href=decorURL> at top of <head>
+	var base = doc.createElement("base");
+	base.setAttribute("href", baseURL);
+	var head = doc.head || firstChild(doc.documentElement, "head");
+	head.insertBefore(base, head.firstChild);
+	
 	function normalize(tagName, attrName) { 
-		forEach($$(tagName, doc), function(el) { 
-			var val = el[attrName];
-			if (val) el.setAttribute(attrName, resolveURL(val, doc)); 
+		forEach($$(tagName, doc), function(el) {
+			var vendorAttrName = vendorPrefix + "-" + attrName;
+			var val = el.getAttribute(vendorAttrName);
+			if (val) el.setAttribute(vendorAttrName, resolveURL(val, doc)); 
 		});
 	}
-	normalize("link", "href");
-	normalize("a", "href");
-	normalize("script", "src");
-	normalize("img", "src");
-	normalize("iframe", "src");
-	normalize("form", "action");
-	// TODO object, embed, etc
+	each(uriAttrs, normalize);
+
+	head.removeChild(base);
 }
 
 
