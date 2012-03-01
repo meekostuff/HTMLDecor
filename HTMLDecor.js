@@ -7,6 +7,11 @@
 // Eventually logger and decorSystem could be in separate modules
 // and built into this script.
 
+// FIXME for IE7, IE8 sometimes XMLHttpRequest is in a detectable but not callable state
+// This is usually fixed by refreshing, or by the following work-around.
+// OTOH, maybe my IE installation is bad
+var XMLHttpRequest = window.XMLHttpRequest; 
+
 (function() {
 
 // NOTE if HTMLDecor is included in a decor document then abort 
@@ -328,10 +333,13 @@ function _init() {
 	}
 	
 	_initializing = true;
+	__init();
+/*
 	try { __init(); }
 	catch (error) {
 		logger.error(error.message);
 	}
+*/
 	_initializing = false;	
 }
 
@@ -422,7 +430,7 @@ function HTMLRequest(url, type) {
 var loadURL = function(url, success, fail) {
 	var xhr = window.XMLHttpRequest ?
 		new XMLHttpRequest() :
-		new ActiveXObject("Microsoft.XMLHTTP"); 
+		new ActiveXObject("Microsoft.XMLHTTP");
 	xhr.onreadystatechange = function() {
 		if (xhr.readyState != 4) return;
 		if (xhr.status != 200) fail(xhr.status); // FIXME what should status be??
@@ -463,28 +471,26 @@ var parseHTML = function(html, url, success, fail) {
 	// DISABLED removeExecutedScripts(htmlDocument); 
 	normalizeDocument(iframeDoc, decorURL);
 
+	if (!iframeDoc.head) iframeDoc.head = firstChild(iframeDoc.documentElement, "head");
+	forEach($$("style", iframeDoc.body), function(node) { // TODO support <style scoped>
+		iframeDoc.head.appendChild(node);
+	});
+	
 	// NOTE surprisingly this keeps a reference to the iframe documentElement
 	// even after the iframe has been removed from the document.
 	// Tested on FF11, O11, latest Chrome and Webkit, IE6-9
-	var htmlEl = iframeDoc.documentElement;
-
+	var pseudoDoc = importDocument(iframeDoc);
+	head.removeChild(iframe);
+	
 	each(uriAttrs, function(tagName, attrName) {
 		var vendorAttrName = vendorPrefix + "-" + attrName;
-		forEach($$(tagName, htmlEl), function(el) {
+		forEach($$(tagName, pseudoDoc.documentElement), function(el) {
 			var val = el.getAttribute(vendorAttrName);
 			if (!val) return;
 			el.setAttribute(attrName, val);
 			el.removeAttribute(vendorAttrName);
 		});	
 	})
-
-	head.removeChild(iframe);
-	
-	var pseudoDoc = {
-		documentElement: htmlEl,
-		head: firstChild(htmlEl, "head"),
-		body: firstChild(htmlEl, "body")
-	}
 
 	success && success(pseudoDoc);
 
@@ -511,16 +517,6 @@ function normalizeDocument(doc, baseURL) {
 	head.removeChild(base);
 }
 
-var prependHTML = (document.createElement("div").insertAdjacentHTML) ?
-function(parent, html) {
-	parent.insertAdjacentHTML("afterBegin", html);
-} :
-function(parent, html) {
-	var div = document.createElement("div"), refNode = parent.firstChild;
-	div.innerHTML = html;
-	for (var node; node=div.firstChild;) parent.insertBefore(node, refNode);
-}
-
 var copyAttributes = function(node, srcNode) { // implements srcNode.cloneNode(false)
 	var attrs = srcNode.attributes;
 	forEach(attrs, function(attr) {
@@ -530,32 +526,69 @@ var copyAttributes = function(node, srcNode) { // implements srcNode.cloneNode(f
 	return node;
 }
 
-var importBefore = document.importNode ? 
-function(srcNode, marker) { 
-	var node = document.importNode(srcNode, true);
-	marker.parentNode.insertBefore(node, marker);
+var importDocument = document.importNode ? // NOTE returns a pseudoDoc
+function(srcDoc) {
+	var docEl = document.importNode(srcDoc.documentElement, true);
+	var pseudoDoc = {
+		documentElement: docEl,
+		head: firstChild(docEl, "head"),
+		body: firstChild(docEl, "body")
+	}
 	// WARN sometimes IE9 doesn't read the content of inserted <style>
-	if (node.styleSheet && node.styleSheet.cssText == "") node.styleSheet.cssText = node.innerHTML; 
+	forEach($$("style", docEl), function(node) {
+		if (node.styleSheet && node.styleSheet.cssText == "") node.styleSheet.cssText = node.innerHTML;		
+	});
+	
+	return pseudoDoc;
 } :
-function(srcNode, marker) { // document.importNode() NOT available on IE < 9
+function(srcDoc) {
+	if (!srcDoc.head) srcDoc.head = firstChild(srcDoc.documentElement, "head");
+	var docEl = importNode(srcDoc.documentElement),
+	    head = importNode(srcDoc.head),
+		body = importNode(srcDoc.body);
+
+	docEl.appendChild(head);
+	for (var srcNode=srcDoc.head.firstChild; srcNode; srcNode=srcNode.nextSibling) {
+		if (srcNode.nodeType != 1) continue;
+		var node = importNode(srcNode);
+		if (node) head.appendChild(node);
+	}
+
+	docEl.appendChild(body);
+	body.innerHTML = srcDoc.body.innerHTML;
+	var pseudoDoc = {
+		documentElement: docEl,
+		head: head,
+		body: body
+	}
+	return pseudoDoc;
+}
+
+var importNode = document.importNode ? // NOTE only for single nodes, especially elements in <head>
+function(srcNode) { 
+	return document.importNode(srcNode, true);
+} :
+function(srcNode) { // document.importNode() NOT available on IE < 9
 	var tagName = srcNode.tagName.toLowerCase();
 	var node = document.createElement(tagName);
 	copyAttributes(node, srcNode);
 	switch(tagName) {
 	case "title":
-		node.innerText = srcNode.innerHTML;
-		marker.parentNode.insertBefore(node, marker);
+		if (node.tagName.toLowerCase() == "title" && node.innerHTML == "") node = null;
+		else node.innerText = srcNode.innerHTML;
 		break;
 	case "style":
-		marker.parentNode.insertBefore(node, marker);
+		var frag = document.createDocumentFragment();
+		frag.appendChild(node);
 		node.styleSheet.cssText = srcNode.styleSheet.cssText;
+		frag.removeChild(node);
 		break;
 	case "script":
 		node.text = srcNode.text;
-		marker.parentNode.insertBefore(node, marker);
+		break;
+	case "meta":
 		break;
 	default: // meta, link have no content
-		marker.parentNode.insertBefore(node, marker);
 		break;
 	}
 	return node;
@@ -592,12 +625,10 @@ function fixHead() {
 	}
 
 	var marker = head.firstChild;
-	var wHead = decorDocument.head || firstChild(decorDocument.documentElement, "head");
+	var wHead = decorDocument.head;
 	var wBody = decorDocument.body;
-	forEach($$("style", wBody), function(wNode) {
-		wHead.appendChild(wNode);
-	});
-	for (var wNode=wHead.firstChild; wNode=wNode.nextSibling;) {
+	for (var wNode; wNode=wHead.firstChild;) {
+		wHead.removeChild(wNode);
 		if (wNode.nodeType != 1) continue;
 		var tagName = wNode.tagName.toLowerCase();
 		switch (tagName) {
@@ -615,9 +646,8 @@ function fixHead() {
 		case "script":  // FIXME no duplicate @src
 			break;
 		}
-		importBefore(wNode, marker);
+		head.insertBefore(wNode, marker);
 	}
-
 	// allow scripts to run
 	forEach($$("script", head), enableScript);
 }
@@ -671,7 +701,10 @@ function insertDecor() {
 		wBody.removeChild(node);
 	}
 	var content = body.firstChild;
-	prependHTML(body, wBody.innerHTML);
+	for (var wNode; wNode=wBody.firstChild;) {
+		body.insertBefore(wNode, content);
+	}
+
 	lastDecorNode = document.createTextNode("");
 	body.insertBefore(lastDecorNode, content);
 	for (node=body.firstChild; next=node.nextSibling, node!=lastDecorNode; node=next) {
