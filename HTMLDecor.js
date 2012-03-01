@@ -32,6 +32,9 @@ var modulePrefix = "decor"; // NOTE removed as prefix for data-* attributes
 /*
  ### Utility functions
  */
+
+var document = window.document;
+
 var last = function(a) { return a[a.length - 1]; }
 
 var forEach = ([].forEach) ? 
@@ -102,6 +105,8 @@ var firstChild = function(parent, matcher) {
 		if (fn(node)) return node;
 	}
 }
+
+if (!document.head) document.head = firstChild(document, "head");
 
 /*
  ### Get config options
@@ -230,7 +235,7 @@ var readyStateLookup = {
 	"complete": true
 }
 
-var head, body, style, lastDecorNode, fragment, iframe, decorLink, decorHREF, decorURL, decorLoader;
+var style, lastDecorNode, fragment, iframe, decorLink, decorHREF, decorURL, decorLoader;
 
 var loaded = false;
 if (!document.readyState) {
@@ -241,10 +246,9 @@ var domContentLoaded = this.domContentLoaded = function() {
 	return loaded || readyStateLookup[document.readyState];
 }
 
-head = document.head || firstChild(document.documentElement, "head");
 function findDecorLink() {
 	if (decorLink) return;
-	decorLink = firstChild(head, function(el) {
+	decorLink = firstChild(document.head, function(el) {
 		return el.nodeType == 1 &&
 			el.tagName.toLowerCase() == "link" &&
 			/\bMEEKO-DECOR\b/i.test(el.rel);
@@ -264,11 +268,11 @@ if (style.styleSheet) style.styleSheet.cssText = "body { visibility: hidden; }";
 else style.textContent = "body { visibility: hidden; }";
 var hidden = false;
 function hide() {
-	head.insertBefore(style, script);
+	document.head.insertBefore(style, script);
 	hidden = true;	
 }
 function unhide() {
-	head.removeChild(style);
+	document.head.removeChild(style);
 	// NOTE on IE sometimes content stays hidden although 
 	// the stylesheet has been removed.
 	// The following forces the content to be revealed
@@ -374,8 +378,7 @@ var handlers = {
 		return "fixHead";
 	},
 	"fixHead": function() {
-		body = document.body;
-		if (!body) return;
+		if (!document.body) return;
 		fixHead();
 		return "insertDecor";
 	},
@@ -459,19 +462,21 @@ var parseHTML = function(html, url, success, fail) {
 		return tag.replace(/\>$/, ' type="text/javascript?async">');
 	});
 
-	var iframe = document.createElement("iframe");
+	var iframe = document.createElement("iframe"),
+	    head = document.head;
 	iframe.name = "_decor";
-	head.insertBefore(iframe, head.firstChild);
+	document.head.insertBefore(iframe, head.firstChild);
 	var iframeDoc = iframe.contentWindow.document;
 
 	iframeDoc.open();
 	iframeDoc.write(html);
 	iframeDoc.close();
 
+	if (!iframeDoc.head) iframeDoc.head = firstChild(iframeDoc.documentElement, "head");
+
 	// DISABLED removeExecutedScripts(htmlDocument); 
 	normalizeDocument(iframeDoc, decorURL);
 
-	if (!iframeDoc.head) iframeDoc.head = firstChild(iframeDoc.documentElement, "head");
 	forEach($$("style", iframeDoc.body), function(node) { // TODO support <style scoped>
 		iframeDoc.head.appendChild(node);
 	});
@@ -502,7 +507,7 @@ function normalizeDocument(doc, baseURL) {
 	// insert <base href=decorURL> at top of <head>
 	var base = doc.createElement("base");
 	base.setAttribute("href", baseURL);
-	var head = doc.head || firstChild(doc.documentElement, "head");
+	var head = doc.head;
 	head.insertBefore(base, head.firstChild);
 	
 	function normalize(tagName, attrName) { 
@@ -542,7 +547,6 @@ function(srcDoc) {
 	return pseudoDoc;
 } :
 function(srcDoc) {
-	if (!srcDoc.head) srcDoc.head = firstChild(srcDoc.documentElement, "head");
 	var docEl = importNode(srcDoc.documentElement),
 	    head = importNode(srcDoc.head),
 		body = importNode(srcDoc.body);
@@ -566,7 +570,7 @@ function(srcDoc) {
 
 var importNode = document.importNode ? // NOTE only for single nodes, especially elements in <head>
 function(srcNode) { 
-	return document.importNode(srcNode, true);
+	return document.importNode(srcNode, false);
 } :
 function(srcNode) { // document.importNode() NOT available on IE < 9
 	var tagName = srcNode.tagName.toLowerCase();
@@ -585,8 +589,6 @@ function(srcNode) { // document.importNode() NOT available on IE < 9
 		break;
 	case "script":
 		node.text = srcNode.text;
-		break;
-	case "meta":
 		break;
 	default: // meta, link have no content
 		break;
@@ -615,7 +617,8 @@ var enableScript = function(node) {
 }
 
 function fixHead() {
-	var decorDocument = decorLoader.document;
+	var decorDocument = decorLoader.document,
+	    head = document.head;
 	var node, next;
 	for (node=head.firstChild; next=node && node.nextSibling, node; node=next) {
 		if (node.nodeType != 1) continue;
@@ -655,6 +658,7 @@ function fixHead() {
 var cursor;
 function preprocess(notify) { // NOTE now relies on insertDecor going first
 	var decorDocument = decorLoader.document;
+	var body = document.body;
 	var node = cursor ? cursor.nextSibling :
 		lastDecorNode ? lastDecorNode.nextSibling :
 		body.firstChild;
@@ -690,8 +694,9 @@ function process(notify) { // NOTE must only be called straight after preprocess
 
 
 function insertDecor() {
-	var decorDocument = decorLoader.document;
-	var wBody = decorDocument.body;
+	var decorDocument = decorLoader.document,
+	    body = document.body,
+	    wBody = decorDocument.body;
 	// NOTE remove non-empty text-nodes - 
 	// they can't be hidden if that is appropriate
 	for (var node=wBody.firstChild, next=node.nextSibling; next; node=next, next=node.nextSibling) { 
