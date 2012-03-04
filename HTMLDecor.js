@@ -235,7 +235,7 @@ var readyStateLookup = {
 	"complete": true
 }
 
-var style, lastDecorNode, fragment, iframe, decorLink, decorHREF, decorURL, decorLoader;
+var style, lastDecorNode, fragment, iframe, decorLink, decorURL, decorLoader;
 
 var loaded = false;
 if (!document.readyState) {
@@ -254,11 +254,11 @@ function findDecorLink() {
 			/\bMEEKO-DECOR\b/i.test(el.rel);
 	});
 	if (!decorLink) return;
-	decorHREF = decorLink.href;
+	var decorHREF = decorLink.href;
 	decorURL = resolveURL(decorHREF);
 	return decorLink;
 }
-	
+
 fragment = document.createDocumentFragment();
 style = document.createElement("style");
 fragment.appendChild(style); // NOTE on IE this realizes style.styleSheet 
@@ -268,17 +268,24 @@ if (style.styleSheet) style.styleSheet.cssText = "body { visibility: hidden; }";
 else style.textContent = "body { visibility: hidden; }";
 var hidden = false;
 function hide() {
+	var timeout = sys["hidden-timeout"];
+	if (timeout <= 0) return;
 	document.head.insertBefore(style, script);
-	hidden = true;	
+	hidden = true;
+	window.setTimeout(function() {
+		if (hidden) unhide();
+	}, timeout);
 }
 function unhide() {
-	document.head.removeChild(style);
+	var head = document.head,
+	    body = document.body;
+	head.removeChild(style);
 	// NOTE on IE sometimes content stays hidden although 
 	// the stylesheet has been removed.
 	// The following forces the content to be revealed
-	if (document.body) {
-		document.body.style.visibility = "hidden";
-		document.body.style.visibility = "";
+	if (body) {
+		body.style.visibility = "hidden";
+		body.style.visibility = "";
 	}
 	hidden = false;
 }
@@ -351,7 +358,7 @@ var contentFound = false;
 function __init() {
 	var now = +(new Date);
 	// NOTE if this test is done after the for_loop it results in a FOUC on Firefox
-	if (hidden && (now - logger.startTime > sys["hidden-timeout"] || contentFound && checkStyleSheets())) unhide();
+	if (hidden && (contentFound && checkStyleSheets())) unhide();
 	for (;;) {
 		if (sys.readyState == "complete") break;
 		var next = handlers[sys.readyState]();
@@ -387,8 +394,7 @@ var handlers = {
 		return "process";
 	},
 	"process": function() {
-		preprocess(function(node) { contentFound = true; });
-		process();
+		process(function(node) { contentFound = true; });
 		if (domContentLoaded()) return "loaded";
 		return;
 	},
@@ -655,40 +661,19 @@ function fixHead() {
 	forEach($$("script", head), enableScript);
 }
 
-var cursor;
-function preprocess(notify) { // NOTE now relies on insertDecor going first
-	var decorDocument = decorLoader.document;
-	var body = document.body;
-	var node = cursor ? cursor.nextSibling :
-		lastDecorNode ? lastDecorNode.nextSibling :
-		body.firstChild;
+function process(notify) {
+	var node = lastDecorNode.nextSibling, next, body = document.body;
 	if (!node) return;
-	var next;
 	for (next=node.nextSibling; node; (node=next) && (next=next.nextSibling)) {
-		if (node.id && $("#"+node.id) != node) {
+		var target;
+		if (node.id && (target = $("#"+node.id)) != node) {
+			// TODO compat check between node and target
+			try { target.parentNode.replaceChild(node, target); } // NOTE fails in IE <= 8 if node is still loading
+			catch (error) { break; }
+			// TODO remove @role from node if an ancestor has same role
 			if (notify) notify(node);
-			continue;
 		}
-		body.removeChild(node);
-	}
-	cursor = body.lastChild;
-}
-
-function process(notify) { // NOTE must only be called straight after preprocess()
-	var node = lastDecorNode.nextSibling;
-	if (!node) return;
-	var next;
-	for (next=node.nextSibling; node; (node=next) && (next=next.nextSibling)) {
-		var target = $("#"+node.id); // NOTE validated in removeContent()
-		if (target == node) {
-			logger.warn("#" + node.id + " was found in the decor document, but has been replaced by previous page content");
-			continue;
-		}
-		// TODO compat check between node and target
-		try { target.parentNode.replaceChild(node, target); } // NOTE fails in IE <= 8 if node is still loading
-		catch (error) { break; }
-		// TODO remove @role from node if an ancestor has same role
-		if (notify) notify(node);
+		else body.removeChild(node);
 	}
 }
 
@@ -717,7 +702,6 @@ function insertDecor() {
 		if ("script" === node.tagName.toLowerCase()) enableScript(node);
 		else forEach($$("script", node), enableScript);
 	}
-	if (!cursor) cursor = lastDecorNode;
 }
 
 }); // end decorSystem defn
