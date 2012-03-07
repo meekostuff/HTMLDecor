@@ -113,9 +113,8 @@ if (!document.head) document.head = firstChild(document, "head");
    defer(fn) makes one call to fn() at the next polling-interval
    queue(fn1, fn2, ...) will call (potentially async) functions sequentially
  */
-var Callback = function(fn) {
+var Callback = function() {
 	var cb = {
-		hook: fn,
 		async: true,
 		complete: false,
 		onComplete: function() { this.complete = true; }
@@ -140,7 +139,8 @@ function deferback() {
 
 function defer(fn) {
 	if (!callbacks) callbacks = [];
-	var callback = Callback(fn);
+	var callback = Callback();
+	callback.hook = fn;
 	callbacks.push(callback);
 	if (!timerId) timerId = window.setTimeout(deferback, config["polling-interval"]); // NOTE polling-interval is configured below
 	return callback;
