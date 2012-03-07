@@ -175,9 +175,9 @@ Configuration
 HTMLDecor has the following config options (default values in <b>bold</b>).
 
 - log-level: "none", "error", <b>"warn"</b>, "info", "debug"
+- polling-interval: <b>50</b> (milliseconds)
 - decor-autostart: <b>true</b>, false
 - decor-hidden-timeout: <b>3000</b> (milliseconds)
-- decor-polling-interval: <b>50</b> (milliseconds)
 
 HTMLDecor reads config options immediately after the script loads.
 Sources for configuration options are detailed below. 

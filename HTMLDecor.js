@@ -24,7 +24,7 @@ var defaults = { // NOTE defaults also define the type of the associated config 
 	"log-level": "warn",
 	"decor-autostart": true,
 	"decor-hidden-timeout": 3000,
-	"decor-polling-interval": 50
+	"polling-interval": 50
 }
 var vendorPrefix = "meeko"; // NOTE added as prefix for url-options, and *Storage
 var modulePrefix = "decor"; // NOTE removed as prefix for data-* attributes
@@ -107,6 +107,85 @@ var firstChild = function(parent, matcher) {
 }
 
 if (!document.head) document.head = firstChild(document, "head");
+
+/* Async functions
+   delay(fn, timeout) makes one call to fn() after timeout ms (currently wraps window.setTimeout())
+   defer(fn) makes one call to fn() at the next polling-interval
+   queue(fn1, fn2, ...) will call (potentially async) functions sequentially
+ */
+var Callback = function(fn) {
+	var cb = {
+		hook: fn,
+		async: true,
+		complete: false,
+		onComplete: function() { this.complete = true; }
+	}
+	return cb;
+}
+
+var defer = (function() {
+	
+var timerId, callbacks;
+
+function deferback() {
+	var callback, list = callbacks;
+	callbacks = null;
+	timerId = null;
+	while ((callback = list.shift())) {
+		var cb = callback.hook();
+		if (typeof cb == "object" && cb.aysnc && !cb.complete) cb.onComplete = function() { this.complete = true; callback.onComplete(); }
+		else callback.onComplete();
+	}
+}
+
+function defer(fn) {
+	if (!callbacks) callbacks = [];
+	var callback = Callback(fn);
+	callbacks.push(callback);
+	if (!timerId) timerId = window.setTimeout(deferback, config["polling-interval"]); // NOTE polling-interval is configured below
+	return callback;
+}
+
+return defer;
+
+})();
+
+var delay = function(fn, timeout) {
+	var callback = Callback();
+	window.setTimeout(function() {
+		var cb = fn();
+		if (typeof cb == "object" && cb.async && !cb.complete) cb.onComplete = function() { this.complete = true; callback.onComplete(); }
+		else callback.onComplete();
+	}, timeout);
+	return callback;
+}
+
+var queue = (function() {
+	
+function queue() {
+	var list = [], callback = Callback();
+	forEach(arguments, function(fn) {
+		if (typeof fn != "function") throw "Non-function passed to queue()";
+		list.push(fn);
+	});
+	var queueback = function() {
+		var fn;
+		while ((fn = list.shift())) {
+			var cb = fn();
+			if (typeof cb == "object" && cb.async && !cb.complete) {
+				cb.onComplete = function() { this.complete = true; queueback(); }
+				return;
+			}
+		}
+		callback.onComplete();
+	}
+	queueback();
+	return callback;
+}
+
+return queue;
+
+})();
 
 /*
  ### Get config options
@@ -204,7 +283,6 @@ var decorSystem = Meeko.stuff.decorSystem || (Meeko.stuff.decorSystem = new func
 
 var sys = this;
 sys["hidden-timeout"] = 0;
-sys["polling-interval"] = 50;
 
 // NOTE resolveURL shouldn't be needed, or at least
 // el.setAttribute(attr, el[attr]) should suffice.
@@ -221,11 +299,6 @@ var resolveURL = function(relURL, context) {
 }
 
 sys.complete = false;
-var setReadyState = function(state) {
-	sys.readyState = state;
-	logger.debug("readyState: ", state);
-}
-setReadyState("uninitialized");
 
 var readyStateLookup = {
 	"uninitialized": false,
@@ -235,48 +308,59 @@ var readyStateLookup = {
 	"complete": true
 }
 
-var style, lastDecorNode, fragment, iframe, decorLink, decorURL, decorLoader;
+var domContentLoaded = (function() {
 
 var loaded = false;
 if (!document.readyState) {
 	addEvent(document, "DOMContentLoaded", function() { loaded = true; });
 	addEvent(window, "load", function() { loaded = true; });
 }
-var domContentLoaded = this.domContentLoaded = function() { 
+function domContentLoaded() { 
 	return loaded || readyStateLookup[document.readyState];
 }
+return domContentLoaded;
 
-function findDecorLink() {
-	if (decorLink) return;
-	decorLink = firstChild(document.head, function(el) {
+})();
+
+function getDecorLink() {
+	var decorLink = firstChild(document.head, function(el) {
 		return el.nodeType == 1 &&
 			el.tagName.toLowerCase() == "link" &&
 			/\bMEEKO-DECOR\b/i.test(el.rel);
 	});
-	if (!decorLink) return;
-	var decorHREF = decorLink.href;
-	decorURL = resolveURL(decorHREF);
 	return decorLink;
 }
 
-fragment = document.createDocumentFragment();
-style = document.createElement("style");
+var Anim = (function() {
+	
+var fragment = document.createDocumentFragment();
+var style = document.createElement("style");
 fragment.appendChild(style); // NOTE on IE this realizes style.styleSheet 
 
 // NOTE hide the page until the decor is ready
 if (style.styleSheet) style.styleSheet.cssText = "body { visibility: hidden; }";
 else style.textContent = "body { visibility: hidden; }";
 var hidden = false;
+var unhiding = true;
 function hide() {
 	var timeout = sys["hidden-timeout"];
 	if (timeout <= 0) return;
 	document.head.insertBefore(style, script);
 	hidden = true;
-	window.setTimeout(function() {
-		if (hidden) unhide();
-	}, timeout);
+	unhiding = false;
+	delay(_unhide, timeout);
 }
 function unhide() {
+	if (unhiding) return;
+	unhiding = true;
+	(function detect() {
+		if (checkStyleSheets()) defer(_unhide);
+		else defer(detect);
+	})();
+}
+function _unhide() {
+	if (!hidden) return;
+	hidden = false;
 	var head = document.head,
 	    body = document.body;
 	head.removeChild(style);
@@ -287,7 +371,6 @@ function unhide() {
 		body.style.visibility = "hidden";
 		body.style.visibility = "";
 	}
-	hidden = false;
 }
 
 /* 
@@ -323,86 +406,96 @@ var checkStyleSheets = sys.checkStyleSheets = function() {
 	});
 }
 
-sys.start = function start() {
-	hide();
-	onprogress();
-}
-function onprogress() {
-	_init();
-	if (!sys.complete) timerId = window.setTimeout(onprogress, sys["polling-interval"]);
+return {
+	hide: hide,
+	unhide: unhide
 }
 
-var _initializing = false; // guard against re-entrancy
-function _init() {
-	if (_initializing) {
-		logger.warn("Reentrancy in decorSystem initialization.");
-		return;
-	}
-	if (sys.complete) {
-		logger.warn("decorSystem initialization requested after complete");
-		return;
+})();
+
+
+
+var start = sys.start = function() {
+	var contentPlaced = false, link;
+	Anim.hide();
+
+	return queue(
+
+	function searchDecorLink() {
+		link = getDecorLink();
+		if (!link && !document.body) return defer(searchDecorLink);
+		return link;
+	},
+	function() {
+		if (!link) return true;
+		var decorURL = resolveURL(link.getAttribute("href"));
+		var type = link.type.toLowerCase();
+		switch(type) { // FIXME this is just an assert currently
+		case "text/html": case "":
+			break;
+		default:
+			logger.error("Invalid decor document type: " + type);
+			throw "Invalid document type";
+			break;
+		}
+		return decorate(decorURL, {
+			onContentPlaced: function() { Anim.unhide(); }
+		});
+	},
+	function() {
+		sys.complete = true;
 	}
 	
-	_initializing = true;
-	__init();
-/*
-	try { __init(); }
-	catch (error) {
-		logger.error(error.message);
-	}
-*/
-	_initializing = false;	
+	);
 }
 
-var contentFound = false;
-function __init() {
-	var now = +(new Date);
-	// NOTE if this test is done after the for_loop it results in a FOUC on Firefox
-	if (hidden && (contentFound && checkStyleSheets())) unhide();
-	for (;;) {
-		if (sys.readyState == "complete") break;
-		var next = handlers[sys.readyState]();
-		if (!next || next == sys.readyState) break;
-		setReadyState(next);
+var decorate = function(decorURL, opts) {
+	var doc; 
+	return queue(
+
+	function() {
+		var cb = Callback();
+		loadURL(decorURL, {
+			onSuccess: function(result) {
+				doc = result;
+				cb.onComplete();
+			},
+			onError: function(error) {
+				logger.error("loadURL fail for " + url);
+				throw "loadURL fail";				
+			}
+		});
+		return cb;
+	},
+	function() {
+		return decor_merge(doc, opts);
 	}
-	if (sys.readyState == "complete" && !hidden) sys.complete = true;
+	
+	);
 }
 
-var handlers = {
-	"uninitialized": function() {
-		findDecorLink();
-		if (!decorURL && !document.body) return;
-		if (!decorURL || decorURL == document.URL) {
-			if (!decorLink) logger.info("No decor URL specified. Processing is complete.");
-			else logger.warn("Decor URL is same as current page. Abandoning processing.");
-			return "complete";
-		}
-		return "loadDecor";
+var decor_merge = function(doc, opts) {
+	if (typeof opts != "object") opts = {};
+	var contentStart, decorEnd;
+	return queue(
+
+	function() {
+		decor_mergeHead(doc);
 	},
-	"loadDecor": function() {
-		if (!decorLoader) decorLoader = new HTMLRequest(decorURL, decorLink.type); // FIXME handle unknown decor type
-		if (!decorLoader.complete) return; // FIXME handle decor load failure
-		return "fixHead";
+	function() {
+		contentStart = document.body.firstChild;
+		decor_insertBody(doc);
+		decorEnd = document.createTextNode("");
+		document.body.insertBefore(decorEnd, contentStart);
 	},
-	"fixHead": function() {
-		if (!document.body) return;
-		fixHead();
-		return "insertDecor";
-	},
-	"insertDecor": function() {
-		insertDecor();
-		return "process";
-	},
-	"process": function() {
-		process(function(node) { contentFound = true; });
-		if (domContentLoaded()) return "loaded";
-		return;
-	},
-	"loaded": function() {
-		decorLoader = null; // FIXME ideally this isn't a global variable and gets cleaned up when it leaves scope
-		if (document.readyState == "complete") return "complete";
-		return;
+	function process_content() {
+		contentStart = decorEnd.nextSibling;
+		if (contentStart) placeContent(contentStart, opts);
+		if (!domContentLoaded()) return defer(process_content);
+		return true;
 	}
+
+	);
 }
 
 var uriAttrs = {};
@@ -411,45 +504,20 @@ forEach(words("link@href a@href script@src img@src iframe@src video@src audio@sr
 	uriAttrs[tagName] = attrName;
 });
 
-
-function HTMLRequest(url, type) {
-	var htmlRequest = this;
-	this.complete = false;
-	this.url = url;
-	this.type = type;
-	function success(doc) {
-		htmlRequest.document = doc;
-		htmlRequest.complete = true;
-	}
-	function fail(status) {
-		logger.error("HTMLRequest fail for " + url);
-		throw "HTMLRequest fail";
-	}
-	switch (type.toLowerCase()) {
-	case "text/html": case "":
-		loadURL(url, success, fail);
-		break;
-	default:
-		logger.error("Invalid decor document type: " + type);
-		break;
-	}
-	return this;
-}
-
-var loadURL = function(url, success, fail) {
+var loadURL = function(url, opts) {
 	var xhr = window.XMLHttpRequest ?
 		new XMLHttpRequest() :
 		new ActiveXObject("Microsoft.XMLHTTP");
 	xhr.onreadystatechange = function() {
 		if (xhr.readyState != 4) return;
-		if (xhr.status != 200) fail(xhr.status); // FIXME what should status be??
-		else parseHTML(xhr.responseText, url, success, fail);
+		if (xhr.status != 200) opts.onError(xhr.status); // FIXME what should status be??
+		else parseHTML(xhr.responseText, url, opts);
 	}
 	xhr.open("GET", url, true);
 	xhr.send("");
 }
 
-var parseHTML = function(html, url, success, fail) {
+var parseHTML = function(html, url, opts) {
 	// prevent resources (<img>, <link>, etc) from loading in parsing context
 	each(uriAttrs, function(tagName, attrName) {
 		html = html.replace(RegExp("<" + tagName + "\\b[^>]*>", "ig"), function(tagString) {
@@ -481,7 +549,7 @@ var parseHTML = function(html, url, success, fail) {
 	if (!iframeDoc.head) iframeDoc.head = firstChild(iframeDoc.documentElement, "head");
 
 	// DISABLED removeExecutedScripts(htmlDocument); 
-	normalizeDocument(iframeDoc, decorURL);
+	normalizeDocument(iframeDoc, url);
 
 	forEach($$("style", iframeDoc.body), function(node) { // TODO support <style scoped>
 		iframeDoc.head.appendChild(node);
@@ -503,14 +571,14 @@ var parseHTML = function(html, url, success, fail) {
 		});	
 	})
 
-	success && success(pseudoDoc);
+	opts.onSuccess && opts.onSuccess(pseudoDoc);
 
 	// FIXME need warning for doc property mismatches between page and decor
 	// eg. charset, doc-mode, content-type, etc
 }
 
 function normalizeDocument(doc, baseURL) {
-	// insert <base href=decorURL> at top of <head>
+	// insert <base href=baseURL> at top of <head>
 	var base = doc.createElement("base");
 	base.setAttribute("href", baseURL);
 	var head = doc.head;
@@ -622,9 +690,8 @@ var enableScript = function(node) {
 	node.parentNode.replaceChild(script, node);
 }
 
-function fixHead() {
-	var decorDocument = decorLoader.document,
-	    head = document.head;
+function decor_mergeHead(doc) {
+	var head = document.head;
 	var node, next;
 	for (node=head.firstChild; next=node && node.nextSibling, node; node=next) {
 		if (node.nodeType != 1) continue;
@@ -634,8 +701,8 @@ function fixHead() {
 	}
 
 	var marker = head.firstChild;
-	var wHead = decorDocument.head;
-	var wBody = decorDocument.body;
+	var wHead = doc.head;
+	var wBody = doc.body;
 	for (var wNode; wNode=wHead.firstChild;) {
 		wHead.removeChild(wNode);
 		if (wNode.nodeType != 1) continue;
@@ -661,9 +728,8 @@ function fixHead() {
 	forEach($$("script", head), enableScript);
 }
 
-function process(notify) {
-	var node = lastDecorNode.nextSibling, next, body = document.body;
-	if (!node) return;
+function placeContent(content, opts) { // this should work for content from both internal and external documents
+	var node = content, next, body = content.parentNode;
 	for (next=node.nextSibling; node; (node=next) && (next=next.nextSibling)) {
 		var target;
 		if (node.id && (target = $("#"+node.id)) != node) {
@@ -671,17 +737,16 @@ function process(notify) {
 			try { target.parentNode.replaceChild(node, target); } // NOTE fails in IE <= 8 if node is still loading
 			catch (error) { break; }
 			// TODO remove @role from node if an ancestor has same role
-			if (notify) notify(node);
+			if (opts.onContentPlaced) opts.onContentPlaced(node);
 		}
 		else body.removeChild(node);
 	}
 }
 
 
-function insertDecor() {
-	var decorDocument = decorLoader.document,
-	    body = document.body,
-	    wBody = decorDocument.body;
+function decor_insertBody(doc) {
+	var body = document.body,
+	    wBody = doc.body;
 	// NOTE remove non-empty text-nodes - 
 	// they can't be hidden if that is appropriate
 	for (var node=wBody.firstChild, next=node.nextSibling; next; node=next, next=node.nextSibling) { 
@@ -695,9 +760,7 @@ function insertDecor() {
 		body.insertBefore(wNode, content);
 	}
 
-	lastDecorNode = document.createTextNode("");
-	body.insertBefore(lastDecorNode, content);
-	for (node=body.firstChild; next=node.nextSibling, node!=lastDecorNode; node=next) {
+	for (node=body.firstChild; next=node.nextSibling, node!=content; node=next) {
 		if (node.nodeType !== 1) continue;
 		if ("script" === node.tagName.toLowerCase()) enableScript(node);
 		else forEach($$("script", node), enableScript);
@@ -706,7 +769,6 @@ function insertDecor() {
 
 }); // end decorSystem defn
 
-decorSystem["polling-interval"] = config["decor-polling-interval"];
 decorSystem["hidden-timeout"] = config["decor-hidden-timeout"];
 if (config["decor-autostart"]) decorSystem.start();
 
