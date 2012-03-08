@@ -88,6 +88,18 @@ var $$ = function(selector, context) { // WARN only selects by tagName
 	}
 }
 
+var forSiblings = function(conf, refNode, fn) {
+	var node, lastNode, first = refNode.parentNode.firstChild;
+	switch (conf.toLowerCase()) {
+	case "starting": node = refNode; break;
+	case "ending": node = first; lastNode = refNode; break;
+	case "after": node = refNode.nextSibling; break;
+	case "before": node = first; lastNode = refNode.previousSibling; break;
+	default: throw conf + " is not a valid configuration in forSiblings";
+	}
+	if (!node) return;
+	for (var next; next=node && node.nextSibling, node && node!=lastNode; node=next) fn(node);
+}
 var matchesElement = function(selector, node) { // WARN only matches by tagName
 	var tagName = selector.toLowerCase();
 	var matcher = function(el) {
@@ -335,12 +347,21 @@ return domContentLoaded;
 })();
 
 function getDecorLink() {
-	var decorLink = firstChild(document.head, function(el) {
+	var link = firstChild(document.head, function(el) {
 		return el.nodeType == 1 &&
 			el.tagName.toLowerCase() == "link" &&
 			/\bMEEKO-DECOR\b/i.test(el.rel);
 	});
-	return decorLink;
+	return link;
+}
+
+function getDecorMeta() {
+	var meta = firstChild(document.head, function(el) {
+		return el.nodeType == 1 &&
+			el.tagName.toLowerCase() == "meta" &&
+			/\bMEEKO-DECOR\b/i.test(el.name);
+	});
+	return meta;
 }
 
 var Anim = (function() {
@@ -425,8 +446,6 @@ return {
 
 })();
 
-
-
 var start = sys.start = function() {
 	var contentPlaced = false, link;
 	Anim.hide();
@@ -489,6 +508,32 @@ var decorate = function(decorURL, opts) {
 	);
 }
 
+var page = sys.page = function(pageURL, opts) {
+	var doc; 
+	return queue(
+
+	function() {
+		var cb = new Callback();
+		loadURL(pageURL, {
+			onSuccess: function(result) {
+				doc = result;
+				cb();
+			},
+			onError: function(error) {
+				logger.error("loadURL fail for " + url);
+				throw "loadURL fail";				
+			}
+		});
+		return cb.external;
+	},
+	function() {
+		console.log(doc.documentElement.outerHTML);
+		return page_merge(doc, opts);
+	}
+	
+	);	
+}
+
 var decor_merge = function(doc, opts) {
 	if (typeof opts != "object") opts = {};
 	var contentStart, decorEnd;
@@ -511,6 +556,145 @@ var decor_merge = function(doc, opts) {
 	}
 
 	);
+}
+
+var page_merge = function(doc, opts) {
+	if (typeof opts != "object") opts = {};
+	return queue(
+
+	function() {
+		page_mergeHead(doc);
+	},
+	function() {
+		var contentStart = doc.body.firstChild;
+		if (contentStart) placeContent(contentStart, opts);
+		return true;
+	}
+
+	);
+}
+
+function decor_mergeHead(doc) {
+	var head = document.head;
+	var marker = getDecorMeta();
+	if (!marker) {
+		marker = document.createElement("meta");
+		marker.name = "meeko-decor";
+		head.insertBefore(marker, head.firstChild);
+	}
+	else forSiblings ("before", marker, function(node) {
+		head.removeChild(node);
+	});
+
+	forSiblings ("after", marker, function(node) {
+		if (node.nodeType != 1) return;
+		if (!node.tagName.match(/^(style|link)$/i)) return;
+		if (!node.title.match(/^nodecor$/i)) return;
+		head.removeChild(node);
+	});
+
+	var wHead = doc.head;
+	forSiblings ("starting", wHead.firstChild, function(wNode) {
+		wHead.removeChild(wNode);
+		if (wNode.nodeType != 1) return;
+		var tagName = wNode.tagName.toLowerCase();
+		switch (tagName) {
+		case "title": // NOTE only import title if not already present
+			if (firstChild(head, "title")) return;
+			if (!wNode.innerHTML) return;
+			break;
+		case "link": // FIXME no duplicates @rel, @href pairs
+			break;
+		case "meta": // FIXME no duplicates, warn on clash
+			if (wNode.httpEquiv) return;
+			break;
+		case "style": 
+			break;
+		case "script":  // FIXME no duplicate @src
+			break;
+		}
+		head.insertBefore(wNode, marker);
+	});
+	// allow scripts to run
+	forEach($$("script", head), enableScript);
+}
+
+function page_mergeHead(doc) {
+	var head = document.head;
+	var marker = getDecorMeta();
+	if (!marker) throw "No meeko-decor marker found. The document has no decor.";
+	else forSiblings ("after", marker, function(node) {
+		head.removeChild(node);
+	});
+
+	var wHead = doc.head;
+	forSiblings ("starting", wHead.firstChild, function(node) {
+		if (node.nodeType != 1) return;
+		if (!node.tagName.match(/^(style|link)$/i)) return;
+		if (!node.title.match(/^nodecor$/i)) return;
+		wHead.removeChild(node);
+	});
+
+	forSiblings ("starting", wHead.firstChild, function(wNode) {
+		wHead.removeChild(wNode);
+		if (wNode.nodeType != 1) return;
+		var tagName = wNode.tagName.toLowerCase();
+		switch (tagName) {
+		case "title":
+			if (!wNode.innerHTML) return; // IE will add a title even if non-existant
+			break;
+		case "link": // FIXME no duplicates @rel, @href pairs
+			break;
+		case "meta": // FIXME no duplicates, warn on clash
+			if (wNode.httpEquiv) return;
+			break;
+		case "style": 
+			break;
+		case "script":  // FIXME no duplicate @src
+			break;
+		}
+		head.insertBefore(wNode, marker);
+	});
+	// allow scripts to run
+	forEach($$("script", head), enableScript);
+}
+
+function placeContent(content, opts) { // this should work for content from both internal and external documents
+	var body = content.parentNode;
+	forSiblings ("starting", content, function(node) { 
+		var target;
+		if (node.id && (target = $("#"+node.id)) != node) {
+			// TODO compat check between node and target
+			try { target.parentNode.replaceChild(node, target); } // NOTE fails in IE <= 8 if node is still loading
+			catch (error) { return; }
+			// TODO remove @role from node if an ancestor has same role
+			if (opts.onContentPlaced) opts.onContentPlaced(node);
+		}
+		else try { body.removeChild(node); } catch (error) {}
+	});
+}
+
+function decor_insertBody(doc) {
+	var body = document.body,
+	    wBody = doc.body;
+	// NOTE remove non-empty text-nodes - 
+	// they can't be hidden if that is appropriate
+	forSiblings ("starting", wBody.firstChild, function(node) {
+		if (node.nodeType != 3) return;
+		if (/\s*/.test(node.nodeValue)) return;
+		logger.warn("Removing text found as child of decor body.");
+		wBody.removeChild(node);
+	});
+	var content = body.firstChild;
+	forSiblings ("starting", wBody.firstChild, function(wNode) {
+		body.insertBefore(wNode, content);
+	});
+
+	forSiblings ("before", content, function(node) {
+		if (node.nodeType !== 1) return;
+		if ("script" === node.tagName.toLowerCase()) enableScript(node);
+		else forEach($$("script", node), enableScript);
+	});
 }
 
 var uriAttrs = {};
@@ -703,83 +887,6 @@ var enableScript = function(node) {
 	catch (error) { script.text = node.text; }
 
 	node.parentNode.replaceChild(script, node);
-}
-
-function decor_mergeHead(doc) {
-	var head = document.head;
-	var node, next;
-	for (node=head.firstChild; next=node && node.nextSibling, node; node=next) {
-		if (node.nodeType != 1) continue;
-		if (!node.tagName.match(/^(style|link)$/i)) continue;
-		if (!node.title.match(/^nodecor$/i)) continue;
-		head.removeChild(node);
-	}
-
-	var marker = head.firstChild;
-	var wHead = doc.head;
-	var wBody = doc.body;
-	for (var wNode; wNode=wHead.firstChild;) {
-		wHead.removeChild(wNode);
-		if (wNode.nodeType != 1) continue;
-		var tagName = wNode.tagName.toLowerCase();
-		switch (tagName) {
-		case "title": // NOTE only import title if not already present
-			if (firstChild(head, "title")) continue;
-			if (!wNode.innerHTML) continue;
-			break;
-		case "link": // FIXME no duplicates @rel, @href pairs
-			break;
-		case "meta": // FIXME no duplicates, warn on clash
-			if (wNode.httpEquiv) continue;
-			break;
-		case "style": 
-			break;
-		case "script":  // FIXME no duplicate @src
-			break;
-		}
-		head.insertBefore(wNode, marker);
-	}
-	// allow scripts to run
-	forEach($$("script", head), enableScript);
-}
-
-function placeContent(content, opts) { // this should work for content from both internal and external documents
-	var node = content, next, body = content.parentNode;
-	for (next=node.nextSibling; node; (node=next) && (next=next.nextSibling)) {
-		var target;
-		if (node.id && (target = $("#"+node.id)) != node) {
-			// TODO compat check between node and target
-			try { target.parentNode.replaceChild(node, target); } // NOTE fails in IE <= 8 if node is still loading
-			catch (error) { break; }
-			// TODO remove @role from node if an ancestor has same role
-			if (opts.onContentPlaced) opts.onContentPlaced(node);
-		}
-		else body.removeChild(node);
-	}
-}
-
-
-function decor_insertBody(doc) {
-	var body = document.body,
-	    wBody = doc.body;
-	// NOTE remove non-empty text-nodes - 
-	// they can't be hidden if that is appropriate
-	for (var node=wBody.firstChild, next=node.nextSibling; next; node=next, next=node.nextSibling) { 
-		if (node.nodeType != 3) continue;
-		if (/\s*/.test(node.nodeValue)) continue;
-		logger.warn("Removing text found as child of decor body.");
-		wBody.removeChild(node);
-	}
-	var content = body.firstChild;
-	for (var wNode; wNode=wBody.firstChild;) {
-		body.insertBefore(wNode, content);
-	}
-
-	for (node=body.firstChild; next=node.nextSibling, node!=content; node=next) {
-		if (node.nodeType !== 1) continue;
-		if ("script" === node.tagName.toLowerCase()) enableScript(node);
-		else forEach($$("script", node), enableScript);
-	}
 }
 
 }); // end decorSystem defn
