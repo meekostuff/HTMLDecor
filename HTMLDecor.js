@@ -114,12 +114,24 @@ if (!document.head) document.head = firstChild(document, "head");
    queue(fn1, fn2, ...) will call (potentially async) functions sequentially
  */
 var Callback = function() {
-	var cb = {
-		async: true,
-		complete: false,
-		onComplete: function() { this.complete = true; }
+	var external = this, hooks = [], complete = false;
+	extend(external, {
+		add: function(fn) {
+			hooks.push(fn);
+			if (complete) fn();
+		}
+	});
+	var cb = function() {
+		if (complete) throw "Attempt to trigger callback after complete";
+		complete = true;
+		for (var i=0, n=hooks.length; i<n; i++) hooks[i]();
 	}
+	cb.external = external;
 	return cb;
+}
+
+function isCallback(obj) {
+	return (obj instanceof Callback);
 }
 
 var defer = (function() {
@@ -132,18 +144,18 @@ function deferback() {
 	timerId = null;
 	while ((callback = list.shift())) {
 		var cb = callback.hook();
-		if (typeof cb == "object" && cb.aysnc && !cb.complete) cb.onComplete = function() { this.complete = true; callback.onComplete(); }
-		else callback.onComplete();
+		if (isCallback(cb)) cb.add(callback);
+		else callback();
 	}
 }
 
 function defer(fn) {
 	if (!callbacks) callbacks = [];
-	var callback = Callback();
+	var callback = new Callback();
 	callback.hook = fn;
 	callbacks.push(callback);
 	if (!timerId) timerId = window.setTimeout(deferback, config["polling-interval"]); // NOTE polling-interval is configured below
-	return callback;
+	return callback.external;
 }
 
 return defer;
@@ -151,19 +163,19 @@ return defer;
 })();
 
 var delay = function(fn, timeout) {
-	var callback = Callback();
+	var callback = new Callback();
 	window.setTimeout(function() {
 		var cb = fn();
-		if (typeof cb == "object" && cb.async && !cb.complete) cb.onComplete = function() { this.complete = true; callback.onComplete(); }
-		else callback.onComplete();
+		if (isCallback(cb)) cb.add(callback);
+		else callback();
 	}, timeout);
-	return callback;
+	return callback.external;
 }
 
 var queue = (function() {
 	
 function queue() {
-	var list = [], callback = Callback();
+	var list = [], callback = new Callback();
 	forEach(arguments, function(fn) {
 		if (typeof fn != "function") throw "Non-function passed to queue()";
 		list.push(fn);
@@ -172,15 +184,15 @@ function queue() {
 		var fn;
 		while ((fn = list.shift())) {
 			var cb = fn();
-			if (typeof cb == "object" && cb.async && !cb.complete) {
-				cb.onComplete = function() { this.complete = true; queueback(); }
+			if (isCallback(cb)) {
+				cb.add(queueback);
 				return;
 			}
 		}
-		callback.onComplete();
+		callback();
 	}
 	queueback();
-	return callback;
+	return callback.external;
 }
 
 return queue;
@@ -454,18 +466,18 @@ var decorate = function(decorURL, opts) {
 	return queue(
 
 	function() {
-		var cb = Callback();
+		var cb = new Callback();
 		loadURL(decorURL, {
 			onSuccess: function(result) {
 				doc = result;
-				cb.onComplete();
+				cb();
 			},
 			onError: function(error) {
 				logger.error("loadURL fail for " + url);
 				throw "loadURL fail";				
 			}
 		});
-		return cb;
+		return cb.external;
 	},
 	function() {
 		return decor_merge(doc, opts);
