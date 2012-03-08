@@ -106,7 +106,7 @@ var firstChild = function(parent, matcher) {
 	}
 }
 
-if (!document.head) document.head = firstChild(document, "head");
+if (!document.head) document.head = firstChild(document.documentElement, "head");
 
 /* Async functions
    delay(fn, timeout) makes one call to fn() after timeout ms (currently wraps window.setTimeout())
@@ -478,6 +478,9 @@ var decorate = function(decorURL, opts) {
 			}
 		});
 		return cb.external;
+	},
+	function waitBody() {
+		return document.body ? true : defer(waitBody);
 	},
 	function() {
 		return decor_merge(doc, opts);
