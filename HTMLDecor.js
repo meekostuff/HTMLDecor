@@ -35,6 +35,10 @@ var modulePrefix = "decor"; // NOTE removed as prefix for data-* attributes
 
 var document = window.document;
 
+var uc = function(str) { return str.toUpperCase(); }
+var lc = function(str) { return str.toLowerCase(); }
+var tagName = function(el) { return el.nodeType == 1 ? el.tagName.toLowerCase() : ""; }
+
 var last = function(a) { return a[a.length - 1]; }
 
 var forEach = ([].forEach) ? 
@@ -90,7 +94,7 @@ var $$ = function(selector, context) { // WARN only selects by tagName
 
 var forSiblings = function(conf, refNode, fn) {
 	var node, lastNode, first = refNode.parentNode.firstChild;
-	switch (conf.toLowerCase()) {
+	switch (lc(conf)) {
 	case "starting": node = refNode; break;
 	case "ending": node = first; lastNode = refNode; break;
 	case "after": node = refNode.nextSibling; break;
@@ -101,9 +105,9 @@ var forSiblings = function(conf, refNode, fn) {
 	for (var next; next=node && node.nextSibling, node && node!=lastNode; node=next) fn(node);
 }
 var matchesElement = function(selector, node) { // WARN only matches by tagName
-	var tagName = selector.toLowerCase();
+	var tag = lc(selector);
 	var matcher = function(el) {
-		return (el.nodeType == 1 && el.tagName.toLowerCase() == tagName);
+		return (el.nodeType == 1 && tagName(el) == tag);
 	}
 	return (node) ? matcher(node) : matcher;
 }
@@ -276,7 +280,7 @@ var levels = words("NONE ERROR WARN INFO DEBUG");
 forEach(levels, function(name, num) {
 	
 this["LOG_"+name] = num;
-this[name.toLowerCase()] = function() { this._log({ level: num, message: arguments }); }
+this[lc(name)] = function() { this._log({ level: num, message: arguments }); }
 
 }, this);
 
@@ -300,7 +304,7 @@ this.LOG_LEVEL = this.LOG_WARN; // DEFAULT
 
 }); // end logger defn
 
-var log_index = logger["LOG_" + config["log-level"].toUpperCase()];
+var log_index = logger["LOG_" + uc(config["log-level"])];
 if (log_index != null) logger.LOG_LEVEL = log_index;
 
 var decorSystem = Meeko.stuff.decorSystem || (Meeko.stuff.decorSystem = new function() {
@@ -346,19 +350,21 @@ return domContentLoaded;
 
 })();
 
-function getDecorLink() {
-	var link = firstChild(document.head, function(el) {
+function getDecorLink(doc) {
+	if (!doc) doc = document;
+	var link = firstChild(doc.head, function(el) {
 		return el.nodeType == 1 &&
-			el.tagName.toLowerCase() == "link" &&
+			tagName(el) == "link" &&
 			/\bMEEKO-DECOR\b/i.test(el.rel);
 	});
 	return link;
 }
 
-function getDecorMeta() {
-	var meta = firstChild(document.head, function(el) {
+function getDecorMeta(doc) {
+	if (!doc) doc = document;
+	var meta = firstChild(doc.head, function(el) {
 		return el.nodeType == 1 &&
-			el.tagName.toLowerCase() == "meta" &&
+			tagName(el) == "meta" &&
 			/\bMEEKO-DECOR\b/i.test(el.name);
 	});
 	return meta;
@@ -460,8 +466,7 @@ var start = sys.start = function() {
 	function() {
 		if (!link) return true;
 		var decorURL = resolveURL(link.getAttribute("href"));
-		var type = link.type.toLowerCase();
-		switch(type) { // FIXME this is just an assert currently
+		switch(lc(link.type)) { // FIXME this is just an assert currently
 		case "text/html": case "":
 			break;
 		default:
@@ -503,18 +508,31 @@ var decorate = function(decorURL, opts) {
 	},
 	function() {
 		return decor_merge(doc, opts);
+	},
+	function() {
+		addEvent(window, "click", function(e) {
+			var target = e.target || e.srcElement;
+			if (tagName(target) != "a") return;
+			var url = resolveURL(target.getAttribute("href"));
+			if (url.indexOf(document.URL + "#") == 0) return;
+			navigate(url);
+			if (e.preventDefault) e.preventDefault();
+			else e.returnValue = false;
+			return false;
+		});
 	}
 	
 	);
 }
 
-var page = sys.page = function(pageURL, opts) {
+var navigate = function(url, opts) {
 	var doc; 
 	return queue(
 
 	function() {
 		var cb = new Callback();
-		loadURL(pageURL, {
+		history.pushState({}, null, url);
+		loadURL(url, {
 			onSuccess: function(result) {
 				doc = result;
 				cb();
@@ -527,8 +545,10 @@ var page = sys.page = function(pageURL, opts) {
 		return cb.external;
 	},
 	function() {
-		console.log(doc.documentElement.outerHTML);
-		return page_merge(doc, opts);
+		var decorURL = resolveURL(getDecorLink().getAttribute("href"));
+		var nextDecorLink = getDecorLink(doc);
+		if (nextDecorLink && nextDecorLink.getAttribute("href") == decorURL) return page_merge(doc, opts);
+		else (location.assign(url));
 	}
 	
 	);	
@@ -588,7 +608,7 @@ function decor_mergeHead(doc) {
 
 	forSiblings ("after", marker, function(node) {
 		if (node.nodeType != 1) return;
-		if (!node.tagName.match(/^(style|link)$/i)) return;
+		if (!tagName(node).match(/^(style|link)$/)) return;
 		if (!node.title.match(/^nodecor$/i)) return;
 		head.removeChild(node);
 	});
@@ -597,8 +617,7 @@ function decor_mergeHead(doc) {
 	forSiblings ("starting", wHead.firstChild, function(wNode) {
 		wHead.removeChild(wNode);
 		if (wNode.nodeType != 1) return;
-		var tagName = wNode.tagName.toLowerCase();
-		switch (tagName) {
+		switch (tagName(wNode)) {
 		case "title": // NOTE only import title if not already present
 			if (firstChild(head, "title")) return;
 			if (!wNode.innerHTML) return;
@@ -623,23 +642,33 @@ function page_mergeHead(doc) {
 	var head = document.head;
 	var marker = getDecorMeta();
 	if (!marker) throw "No meeko-decor marker found. The document has no decor.";
-	else forSiblings ("after", marker, function(node) {
+
+	forSiblings ("after", marker, function(node) {
+		if (node.nodeType == 1) return;
+		if (tagName(node) == "script" && (!node.type || node.type.match(/^text\/javascript$/i))) return;
 		head.removeChild(node);
 	});
 
 	var wHead = doc.head;
 	forSiblings ("starting", wHead.firstChild, function(node) {
 		if (node.nodeType != 1) return;
-		if (!node.tagName.match(/^(style|link)$/i)) return;
-		if (!node.title.match(/^nodecor$/i)) return;
+		switch(tagName(node)) {
+		case "style": case "link":
+			if (!node.title.match(/^nodecor$/i)) return;
+		case "script":
+			if (every($$("script", head), function(el) {
+				return resolveURL(el.src) != node.src;
+			})) return;
+		default: break;
+		}
 		wHead.removeChild(node);
 	});
 
+	// NOTE check for duplicates first
 	forSiblings ("starting", wHead.firstChild, function(wNode) {
 		wHead.removeChild(wNode);
 		if (wNode.nodeType != 1) return;
-		var tagName = wNode.tagName.toLowerCase();
-		switch (tagName) {
+		switch (tagName(wNode)) {
 		case "title":
 			if (!wNode.innerHTML) return; // IE will add a title even if non-existant
 			break;
@@ -653,7 +682,7 @@ function page_mergeHead(doc) {
 		case "script":  // FIXME no duplicate @src
 			break;
 		}
-		head.insertBefore(wNode, marker);
+		head.appendChild(wNode);
 	});
 	// allow scripts to run
 	forEach($$("script", head), enableScript);
@@ -692,15 +721,15 @@ function decor_insertBody(doc) {
 
 	forSiblings ("before", content, function(node) {
 		if (node.nodeType !== 1) return;
-		if ("script" === node.tagName.toLowerCase()) enableScript(node);
+		if ("script" === tagName(node)) enableScript(node);
 		else forEach($$("script", node), enableScript);
 	});
 }
 
 var uriAttrs = {};
 forEach(words("link@href a@href script@src img@src iframe@src video@src audio@src source@src form@action input@formaction button@formaction"), function(text) {
-	var m = text.split("@"), tagName = m[0], attrName = m[1];
-	uriAttrs[tagName] = attrName;
+	var m = text.split("@"), tag = m[0], attrName = m[1];
+	uriAttrs[tag] = attrName;
 });
 
 var loadURL = function(url, opts) {
@@ -718,8 +747,8 @@ var loadURL = function(url, opts) {
 
 var parseHTML = function(html, url, opts) {
 	// prevent resources (<img>, <link>, etc) from loading in parsing context
-	each(uriAttrs, function(tagName, attrName) {
-		html = html.replace(RegExp("<" + tagName + "\\b[^>]*>", "ig"), function(tagString) {
+	each(uriAttrs, function(tag, attrName) {
+		html = html.replace(RegExp("<" + tag + "\\b[^>]*>", "ig"), function(tagString) {
 			var vendorAttrName = vendorPrefix + "-" + attrName;
 			return tagString.replace(RegExp("\\b" + attrName + "=", "i"), vendorAttrName + "=");
 		});		
@@ -760,9 +789,9 @@ var parseHTML = function(html, url, opts) {
 	var pseudoDoc = importDocument(iframeDoc);
 	head.removeChild(iframe);
 	
-	each(uriAttrs, function(tagName, attrName) {
+	each(uriAttrs, function(tag, attrName) {
 		var vendorAttrName = vendorPrefix + "-" + attrName;
-		forEach($$(tagName, pseudoDoc.documentElement), function(el) {
+		forEach($$(tag, pseudoDoc.documentElement), function(el) {
 			var val = el.getAttribute(vendorAttrName);
 			if (!val) return;
 			el.setAttribute(attrName, val);
@@ -771,7 +800,6 @@ var parseHTML = function(html, url, opts) {
 	})
 
 	opts.onSuccess && opts.onSuccess(pseudoDoc);
-
 	// FIXME need warning for doc property mismatches between page and decor
 	// eg. charset, doc-mode, content-type, etc
 }
@@ -783,9 +811,9 @@ function normalizeDocument(doc, baseURL) {
 	var head = doc.head;
 	head.insertBefore(base, head.firstChild);
 	
-	function normalize(tagName, attrName) { 
+	function normalize(tag, attrName) { 
 		var vendorAttrName = vendorPrefix + "-" + attrName;
-		forEach($$(tagName, doc), function(el) {
+		forEach($$(tag, doc), function(el) {
 			var val = el.getAttribute(vendorAttrName);
 			if (val && val.indexOf("#") != 0) el.setAttribute(vendorAttrName, resolveURL(val, doc)); // NOTE anchor hrefs aren't normalized
 		});
@@ -846,12 +874,13 @@ function(srcNode) {
 	return document.importNode(srcNode, false);
 } :
 function(srcNode) { // document.importNode() NOT available on IE < 9
-	var tagName = srcNode.tagName.toLowerCase();
-	var node = document.createElement(tagName);
+	if (srcNode.nodeType != 1) return;
+	var tag = tagName(srcNode);
+	var node = document.createElement(tag);
 	copyAttributes(node, srcNode);
-	switch(tagName) {
+	switch(tag) {
 	case "title":
-		if (node.tagName.toLowerCase() == "title" && node.innerHTML == "") node = null;
+		if (tagName(node) == "title" && node.innerHTML == "") node = null;
 		else node.innerText = srcNode.innerHTML;
 		break;
 	case "style":
@@ -879,7 +908,7 @@ var removeExecutedScripts = function(doc) {
 var enableScript = function(node) {
 	if (!/^text\/javascript\?async$/i.test(node.type)) return;
 	var script = document.createElement("script");
-	copyAttributes(node, script);
+	copyAttributes(script, node);
 	script.type = "text/javascript";
 	
 	// FIXME is this comprehensive?
