@@ -93,16 +93,17 @@ var $$ = function(selector, context) { // WARN only selects by tagName
 }
 
 var forSiblings = function(conf, refNode, fn) {
-	var node, lastNode, first = refNode.parentNode.firstChild;
+	if (!refNode || !refNode.parentNode) return;
+	var node, stopNode, first = refNode.parentNode.firstChild;
 	switch (lc(conf)) {
 	case "starting": node = refNode; break;
-	case "ending": node = first; lastNode = refNode; break;
+	case "ending": node = first; stopNode = refNode.nextSibling; break;
 	case "after": node = refNode.nextSibling; break;
-	case "before": node = first; lastNode = refNode.previousSibling; break;
+	case "before": node = first; stopNode = refNode; break;
 	default: throw conf + " is not a valid configuration in forSiblings";
 	}
 	if (!node) return;
-	for (var next; next=node && node.nextSibling, node && node!=lastNode; node=next) fn(node);
+	for (var next; next=node && node.nextSibling, node && node!=stopNode; node=next) fn(node);
 }
 var matchesElement = function(selector, node) { // WARN only matches by tagName
 	var tag = lc(selector);
@@ -489,7 +490,9 @@ var start = sys.start = function() {
 }
 
 var decorate = function(decorURL, opts) {
-	var doc; 
+	var doc;
+	if (getDecorMeta()) throw "Cannot decorate a document that has already been decorated";
+	
 	return queue(
 
 	function() {
@@ -510,6 +513,10 @@ var decorate = function(decorURL, opts) {
 		return document.body ? true : defer(waitBody);
 	},
 	function() {
+		page_preprocess(document);
+		marker = document.createElement("meta");
+		marker.name = "meeko-decor";
+		document.head.insertBefore(marker, document.head.firstChild);
 		return decor_merge(doc, opts);
 	},
 	function() {
@@ -518,6 +525,7 @@ var decorate = function(decorURL, opts) {
 			if (tagName(target) != "a") return;
 			var url = resolveURL(target.getAttribute("href"));
 			if (url.indexOf(document.URL + "#") == 0) return;
+			// FIXME links to external sites
 			navigate(url);
 			if (e.preventDefault) e.preventDefault();
 			else e.returnValue = false;
@@ -563,7 +571,7 @@ var decor_merge = function(doc, opts) {
 	return queue(
 
 	function() {
-		decor_mergeHead(doc);
+		mergeHead(doc, true);
 	},
 	function() {
 		contentStart = document.body.firstChild;
@@ -584,9 +592,11 @@ var decor_merge = function(doc, opts) {
 var page_merge = function(doc, opts) {
 	if (typeof opts != "object") opts = {};
 	return queue(
-
 	function() {
-		page_mergeHead(doc);
+		page_preprocess(doc);
+	},
+	function() {
+		mergeHead(doc, false);
 	},
 	function() {
 		var contentStart = doc.body.firstChild;
@@ -597,77 +607,29 @@ var page_merge = function(doc, opts) {
 	);
 }
 
-function decor_mergeHead(doc) {
-	var dstHead = document.head;
-	var marker = getDecorMeta();
-	if (!marker) {
-		marker = document.createElement("meta");
-		marker.name = "meeko-decor";
-		dstHead.insertBefore(marker, dstHead.firstChild);
-	}
-	else forSiblings ("before", marker, function(node) {
-		dstHead.removeChild(node);
-	});
-
-	forSiblings ("after", marker, function(node) {
-		if (node.nodeType != 1) return;
-		if (!tagName(node).match(/^(style|link)$/)) return;
-		if (!node.title.match(/^nodecor$/i)) return;
-		dstHead.removeChild(node);
-	});
-
-	var srcHead = doc.head;
-	forSiblings ("starting", srcHead.firstChild, function(srcNode) {
-		srcHead.removeChild(srcNode);
-		if (srcNode.nodeType != 1) return;
-		switch (tagName(srcNode)) {
-		case "title": // NOTE only import title if not already present
-			if (firstChild(dstHead, "title")) return;
-			if (!srcNode.innerHTML) return;
-			break;
-		case "link": // FIXME no duplicates @rel, @href pairs
-			break;
-		case "meta": // FIXME no duplicates, warn on clash
-			if (srcNode.httpEquiv) return;
-			break;
-		case "style": 
-			break;
-		case "script":  // FIXME no duplicate @src
-			break;
-		}
-		dstHead.insertBefore(srcNode, marker);
-	});
-	// allow scripts to run
-	forEach($$("script", dstHead), enableScript);
-}
-
-function page_mergeHead(doc) {
+function mergeHead(doc, isDecor) {
 	var dstHead = document.head;
 	var marker = getDecorMeta();
 	if (!marker) throw "No meeko-decor marker found. The document has no decor.";
 
-	forSiblings ("after", marker, function(node) {
-		if (node.nodeType == 1) return;
+	forSiblings (isDecor ? "before" : "after", marker, function(node) {
 		if (tagName(node) == "script" && (!node.type || node.type.match(/^text\/javascript$/i))) return;
 		dstHead.removeChild(node);
 	});
 
 	var srcHead = doc.head;
 	forSiblings ("starting", srcHead.firstChild, function(node) {
-		if (node.nodeType != 1) return;
 		switch(tagName(node)) {
-		case "style": case "link":
-			if (!node.title.match(/^nodecor$/i)) return;
 		case "script":
 			if (every($$("script", dstHead), function(el) {
 				return resolveURL(el.src) != node.src;
 			})) return;
-		default: break;
+			break;
+		default: return;
 		}
 		srcHead.removeChild(node);
 	});
 
-	// NOTE check for duplicates first
 	forSiblings ("starting", srcHead.firstChild, function(srcNode) {
 		srcHead.removeChild(srcNode);
 		if (srcNode.nodeType != 1) return;
@@ -685,10 +647,24 @@ function page_mergeHead(doc) {
 		case "script":  // FIXME no duplicate @src
 			break;
 		}
-		dstHead.appendChild(srcNode);
+		if (isDecor) dstHead.insertBefore(srcNode, marker);
+		else dstHead.appendChild(srcNode);
 	});
 	// allow scripts to run
 	forEach($$("script", dstHead), enableScript);
+}
+
+function page_preprocess(doc) {
+	var srcHead = doc.head;
+	forSiblings ("starting", srcHead.firstChild, function(node) { // remove nodes that match specified conditions
+		switch(tagName(node)) { 
+		case "style": case "link":
+			if (node.title.match(/^nodecor$/i)) break;
+			return;
+		default: return;
+		}
+		srcHead.removeChild(node);
+	});
 }
 
 function placeContent(content, opts) { // this should work for content from both internal and external documents
@@ -709,17 +685,16 @@ function placeContent(content, opts) { // this should work for content from both
 function decor_insertBody(doc) {
 	var dstBody = document.body,
 	    srcBody = doc.body;
+	var content = dstBody.firstChild;
 	// NOTE remove non-empty text-nodes - 
 	// they can't be hidden if that is appropriate
 	forSiblings ("starting", srcBody.firstChild, function(node) {
-		if (node.nodeType != 3) return;
-		if (/\s*/.test(node.nodeValue)) return;
-		logger.warn("Removing text found as child of decor body.");
 		srcBody.removeChild(node);
-	});
-	var content = dstBody.firstChild;
-	forSiblings ("starting", srcBody.firstChild, function(srcNode) {
-		dstBody.insertBefore(srcNode, content);
+		if (node.nodeType == 3 && !/\s*/.test(node.nodeValue)) {
+			logger.warn("Removing text found as child of decor body.");
+			return;
+		}
+		dstBody.insertBefore(node, content);
 	});
 
 	forSiblings ("before", content, function(node) {
