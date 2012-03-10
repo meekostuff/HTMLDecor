@@ -612,11 +612,13 @@ function mergeHead(doc, isDecor) {
 	var marker = getDecorMeta();
 	if (!marker) throw "No meeko-decor marker found. The document has no decor.";
 
+	// remove decor / page elements except for <script type=text/javascript>
 	forSiblings (isDecor ? "before" : "after", marker, function(node) {
 		if (tagName(node) == "script" && (!node.type || node.type.match(/^text\/javascript$/i))) return;
 		dstHead.removeChild(node);
 	});
 
+	// remove duplicate scripts from srcHead
 	var srcHead = doc.head;
 	forSiblings ("starting", srcHead.firstChild, function(node) {
 		switch(tagName(node)) {
@@ -636,6 +638,8 @@ function mergeHead(doc, isDecor) {
 		switch (tagName(srcNode)) {
 		case "title":
 			if (!srcNode.innerHTML) return; // IE will add a title even if non-existant
+			var dstNode = firstChild(dstHead, "title");
+			if (dstNode && dstNode.innerHTML) return;
 			break;
 		case "link": // FIXME no duplicates @rel, @href pairs
 			break;
