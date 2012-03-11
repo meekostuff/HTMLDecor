@@ -125,7 +125,7 @@ var firstChild = function(parent, matcher) {
 
 var polyfill = function(doc) { // NOTE more stuff could be added here if *necessary*
 	if (!doc) doc = document;
-	if (!doc.head) doc.head = firstChild(document.documentElement, "head");
+	if (!doc.head) doc.head = firstChild(doc.documentElement, "head");
 }
 polyfill();
 
@@ -531,6 +531,7 @@ var decorate = function(decorURL, opts) {
 			else e.returnValue = false;
 			return false;
 		});
+		// FIXME onpopstate
 	}
 	
 	);
@@ -610,7 +611,7 @@ var page_merge = function(doc, opts) {
 function mergeHead(doc, isDecor) {
 	var dstHead = document.head;
 	var marker = getDecorMeta();
-	if (!marker) throw "No meeko-decor marker found. The document has no decor.";
+	if (!marker) throw "No meeko-decor marker found. ";
 
 	// remove decor / page elements except for <script type=text/javascript>
 	forSiblings (isDecor ? "before" : "after", marker, function(node) {
