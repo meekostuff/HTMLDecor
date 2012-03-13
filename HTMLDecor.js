@@ -134,18 +134,67 @@ polyfill();
    defer(fn) makes one call to fn() at the next polling-interval
    queue(fn1, fn2, ...) will call (potentially async) functions sequentially
  */
+var isolate = (function() {
+
+var evType = vendorPrefix + "-isolate";
+var testFn, complete = [], wrapper, isolate;
+wrapper = function() {
+	var i = complete.length;
+	complete.push(false);
+	testFn();
+	complete[i] = true;
+}
+if (window.dispatchEvent) {
+	window.addEventListener(evType, wrapper, false);
+	isolate = function(fn) {
+		testFn = fn;
+		var e = document.createEvent("CustomEvent");
+		e.initEvent("meeko-isolate", true, true);
+		window.dispatchEvent(e);
+		return complete.pop();
+	}
+}
+else if ("onpropertychange" in document) {
+	var meta = document.createElement("meta");
+	meta[evType] = 0;
+	meta.onpropertychange = wrapper;
+	isolate = function(fn) { // by inserting meta every time, it doesn't matter if some code removes meta
+		testFn = fn;
+		if (!meta.parentNode) document.head.appendChild(meta);
+		meta[evType]++;
+		if (meta.parentNode) document.head.removeChild(meta);
+		return complete.pop();
+	}
+}
+else isolate = function(fn) {
+	var complete = false;
+	try { fn(); complete = true; }
+	catch(error) { }
+	return complete;
+}
+
+return isolate;
+})();
+
+
 var Callback = function() {
-	var external = this, hooks = [], complete = false;
+	var external = this, hooks = {};
+	external.complete = false;
 	extend(external, {
-		add: function(fn) {
-			hooks.push(fn);
-			if (complete) fn();
+		listen: function(name, fn) {
+			if (hooks[name]) throw "Max of one hook per callback.";
+			hooks[name] = fn;
+			if (external.complete) fn();
 		}
 	});
-	var cb = function() {
-		if (complete) throw "Attempt to trigger callback after complete";
-		complete = true;
-		for (var i=0, n=hooks.length; i<n; i++) hooks[i]();
+	var cb = function(name) {
+		if (external.complete) throw("Attempt to trigger callback after complete");
+		external.complete = true;
+		var fn = hooks[name];
+		if (fn) {
+			var args = [].splice.call(arguments, 0);
+			isolate(function() { fn.apply(null, args); });
+		}
 	}
 	cb.external = external;
 	return cb;
@@ -160,23 +209,29 @@ var defer = (function() {
 var timerId, callbacks;
 
 function deferback() {
-	var callback, list = callbacks;
+	var myCB, list = callbacks;
 	callbacks = null;
 	timerId = null;
-	while ((callback = list.shift())) {
-		var cb = callback.hook();
-		if (isCallback(cb)) cb.add(callback);
-		else callback();
+	while ((myCB = list.shift())) {
+		var cb = myCB.hook(myCB);
+		if (isCallback(cb)) {
+			if (myCB.external == cb) continue; // callback is delegated
+			if (!cb.complete) { // callback is pending 
+				cb.listen("complete", myCB);
+				continue;
+			}
+		}
+		myCB("complete");
 	}
 }
 
 function defer(fn) {
 	if (!callbacks) callbacks = [];
-	var callback = new Callback();
-	callback.hook = fn;
-	callbacks.push(callback);
+	var myCB = new Callback();
+	myCB.hook = fn;
+	callbacks.push(myCB);
 	if (!timerId) timerId = window.setTimeout(deferback, config["polling-interval"]); // NOTE polling-interval is configured below
-	return callback.external;
+	return myCB.external;
 }
 
 return defer;
@@ -184,19 +239,25 @@ return defer;
 })();
 
 var delay = function(fn, timeout) {
-	var callback = new Callback();
+	var myCB = new Callback();
 	window.setTimeout(function() {
-		var cb = fn();
-		if (isCallback(cb)) cb.add(callback);
-		else callback();
+		var cb = fn(myCB);
+		if (isCallback(cb)) {
+			if (myCB.external == cb) return; // callback is delegated
+			if (!cb.complete) { // callback is pending
+				cb.listen("complete", myCB);
+				return;
+			}
+		}
+		myCB("complete");
 	}, timeout);
-	return callback.external;
+	return myCB.external;
 }
 
 var queue = (function() {
 	
 function queue() {
-	var list = [], callback = new Callback();
+	var list = [], myCB = new Callback(); 
 	forEach(arguments, function(fn) {
 		if (typeof fn != "function") throw "Non-function passed to queue()";
 		list.push(fn);
@@ -205,15 +266,15 @@ function queue() {
 		var fn;
 		while ((fn = list.shift())) {
 			var cb = fn();
-			if (isCallback(cb)) {
-				cb.add(queueback);
+			if (isCallback(cb) && !cb.complete) {
+				cb.listen("complete", queueback);
 				return;
 			}
 		}
-		callback();
+		myCB("complete");
 	}
 	queueback();
-	return callback.external;
+	return myCB.external;
 }
 
 return queue;
@@ -500,7 +561,7 @@ var decorate = function(decorURL, opts) {
 		loadURL(decorURL, {
 			onSuccess: function(result) {
 				doc = result;
-				cb();
+				cb("complete");
 			},
 			onError: function(error) {
 				logger.error("loadURL fail for " + url);
@@ -547,7 +608,7 @@ var navigate = function(url, opts) {
 		loadURL(url, {
 			onSuccess: function(result) {
 				doc = result;
-				cb();
+				cb("complete");
 			},
 			onError: function(error) {
 				logger.error("loadURL fail for " + url);
