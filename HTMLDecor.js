@@ -130,9 +130,10 @@ var polyfill = function(doc) { // NOTE more stuff could be added here if *necess
 polyfill();
 
 /* Async functions
-   delay(fn, timeout) makes one call to fn() after timeout ms (currently wraps window.setTimeout())
-   defer(fn) makes one call to fn() at the next polling-interval
-   queue(fn1, fn2, ...) will call (potentially async) functions sequentially
+   delay(fn, timeout) makes one call to fn() after timeout ms
+   wait(test) waits until test() returns true
+   until(test, fn) repeats call to fn() until test() returns true
+   queue([fn1, fn2, ...]) will call (potentially async) functions sequentially
  */
 var isolate = (function() {
 
@@ -203,36 +204,43 @@ function isCallback(obj) {
 	return (obj && obj.isCallback);
 }
 
-var defer = (function() {
-	
-var timerId, callbacks;
 
-function deferback() {
-	var myCB, list = callbacks;
-	callbacks = null;
-	timerId = null;
-	while ((myCB = list.shift())) {
-		var cb = myCB.hook(myCB);
-		if (isCallback(cb)) {
-			if (myCB != cb) cb.listen("complete", myCB); // otherwise callback is delegated
-			continue;
+var wait = (function() {
+	
+var timerId, callbacks = [];
+
+function waitback() {
+	var myCB, i = 0;
+	while ((myCB = callbacks[i])) {
+		var hook = myCB.hook;
+		var done = hook();
+		if (done) {
+			callbacks.splice(i,1);
+			myCB("complete");
 		}
-		myCB("complete");
+		else i++;
+	}
+	if (!callbacks.length) {
+		window.clearInterval(timerId);
+		timerId = null;
 	}
 }
 
-function defer(fn) {
-	if (!callbacks) callbacks = [];
-	var myCB = Callback();
+function wait(fn, myCB) {
+	if (!myCB) myCB = Callback();
 	myCB.hook = fn;
 	callbacks.push(myCB);
-	if (!timerId) timerId = window.setTimeout(deferback, config["polling-interval"]); // NOTE polling-interval is configured below
+	if (!timerId) timerId = window.setInterval(waitback, config["polling-interval"]); // NOTE polling-interval is configured below
 	return myCB;
 }
 
-return defer;
+return wait;
 
 })();
+
+var until = function(test, fn, myCB) {
+	return wait(function() { fn(); return test(); }, myCB);
+}
 
 var delay = function(fn, timeout) {
 	var myCB = Callback();
@@ -249,9 +257,10 @@ var delay = function(fn, timeout) {
 
 var queue = (function() {
 	
-function queue() {
-	var list = [], myCB = Callback(); 
-	forEach(arguments, function(fn) {
+function queue(fnList, myCB) {
+	var list = [];
+	if (!myCB) myCB = Callback(); 
+	forEach(fnList, function(fn) {
 		if (typeof fn != "function") throw "Non-function passed to queue()";
 		list.push(fn);
 	});
@@ -451,11 +460,12 @@ function hide() {
 function unhide() {
 	if (unhiding) return;
 	unhiding = true;
-	(function detect() {
-		if (checkStyleSheets()) defer(_unhide);
-		else defer(detect);
-	})();
+	return queue([
+		function() { return wait(function() { return checkStyleSheets(); }) },
+		_unhide
+	]);
 }
+
 function _unhide() {
 	if (!hidden) return;
 	hidden = false;
@@ -514,12 +524,13 @@ var start = sys.start = function() {
 	var contentPlaced = false, link;
 	Anim.hide();
 
-	return queue(
+	return queue([
 
-	function searchDecorLink() {
-		link = getDecorLink();
-		if (!link && !document.body) return defer(searchDecorLink);
-		return link;
+	function() {
+		return until(
+			function() { return link || document.body; },
+			function() { link = getDecorLink(); }
+		)
 	},
 	function() {
 		if (!link) return true;
@@ -540,14 +551,14 @@ var start = sys.start = function() {
 		sys.complete = true;
 	}
 	
-	);
+	]);
 }
 
 var decorate = function(decorURL, opts) {
 	var doc;
 	if (getDecorMeta()) throw "Cannot decorate a document that has already been decorated";
 	
-	return queue(
+	return queue([
 
 	function() {
 		var cb = Callback();
@@ -563,8 +574,8 @@ var decorate = function(decorURL, opts) {
 		});
 		return cb;
 	},
-	function waitBody() {
-		return document.body ? true : defer(waitBody);
+	function() {
+		return wait(function() { return !!document.body; });
 	},
 	function() {
 		page_preprocess(document);
@@ -588,12 +599,12 @@ var decorate = function(decorURL, opts) {
 		// FIXME onpopstate
 	}
 	
-	);
+	]);
 }
 
 var navigate = function(url, opts) {
 	var doc; 
-	return queue(
+	return queue([
 
 	function() {
 		var cb = Callback();
@@ -617,13 +628,13 @@ var navigate = function(url, opts) {
 		else (location.replace(url));
 	}
 	
-	);	
+	]);	
 }
 
 var decor_merge = function(doc, opts) {
 	if (typeof opts != "object") opts = {};
 	var contentStart, decorEnd;
-	return queue(
+	return queue([
 
 	function() {
 		mergeHead(doc, true);
@@ -634,19 +645,21 @@ var decor_merge = function(doc, opts) {
 		decorEnd = document.createTextNode("");
 		document.body.insertBefore(decorEnd, contentStart);
 	},
-	function process_content() {
-		contentStart = decorEnd.nextSibling;
-		if (contentStart) placeContent(contentStart, opts);
-		if (!domContentLoaded()) return defer(process_content);
-		return true;
+	function() {
+		return until(
+			domContentLoaded,
+			function() {
+				contentStart = decorEnd.nextSibling;
+				if (contentStart) placeContent(contentStart, opts);				
+			}
+		);
 	}
-
-	);
+	]);
 }
 
 var page_merge = function(doc, opts) {
 	if (typeof opts != "object") opts = {};
-	return queue(
+	return queue([
 	function() {
 		page_preprocess(doc);
 	},
@@ -659,7 +672,7 @@ var page_merge = function(doc, opts) {
 		return true;
 	}
 
-	);
+	]);
 }
 
 function mergeHead(doc, isDecor) {
