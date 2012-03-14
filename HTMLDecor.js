@@ -604,17 +604,23 @@ var decorate = function(decorURL, opts) {
 		return decor_merge(doc, opts);
 	},
 	function() {
-		addEvent(window, "click", function(e) {
-			var target = e.target || e.srcElement;
+		if (!history.pushState) return;
+		// NOTE fortuitously all the browsers that support pushState() also support addEventListener()
+		window.addEventListener("click", function(e) { // implement defaultPrevented
+			if (e.defaultPrevented != null) return;
+			e._preventDefault = e.preventDefault;
+			e.preventDefault = function() { this._preventDefault(); this.defaultPrevented = true; }
+		}, true);
+		window.addEventListener("click", function(e) {
+			if (e.defaultPrevented) return;
+			var target = e.target;
 			if (tagName(target) != "a") return;
 			var url = resolveURL(target.getAttribute("href"));
-			if (url.indexOf(document.URL + "#") == 0) return;
-			// FIXME links to external sites
+			if (url.indexOf(document.URL + "#") == 0) return; // browser handles anchor links
+			if (url.indexOf(location.protocol + "//" + location.host + "/") != 0) return; // and external urls
 			navigate(url);
-			if (e.preventDefault) e.preventDefault();
-			else e.returnValue = false;
-			return false;
-		});
+			e.preventDefault();
+		}, false);
 		// FIXME onpopstate
 	}
 	
@@ -643,8 +649,14 @@ var navigate = function(url, opts) {
 	function() {
 		var decorURL = resolveURL(getDecorLink().getAttribute("href"));
 		var nextDecorLink = getDecorLink(doc);
-		if (nextDecorLink && nextDecorLink.getAttribute("href") == decorURL) return page_merge(doc, opts);
-		else (location.replace(url));
+		if (nextDecorLink && nextDecorLink.getAttribute("href") == decorURL) {
+			scroll(0,0);
+			return page_merge(doc, opts);
+		}
+		else { // trigger browser nav if different decor
+			location.replace(url);
+			return;			
+		}
 	}
 	
 	]);	
