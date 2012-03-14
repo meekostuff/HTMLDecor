@@ -403,6 +403,7 @@ sys["hidden-timeout"] = 0;
 // el.setAttribute(attr, el[attr]) should suffice.
 // But IE doesn't return relative URLs for <link>, and
 // does funny things on anchors
+// TODO check all the uses of resolveURL for correctness and necessity
 var resolveURL = function(relURL, context) {
 	if (!context) context = document;
 	var div = context.createElement("div");
@@ -605,6 +606,7 @@ var decorate = function(decorURL, opts) {
 	},
 	function() {
 		if (!history.pushState) return;
+		history.replaceState({newURL:document.URL}, null, document.URL); // otherwise there will be no popstate when returning to original URL
 		// NOTE fortuitously all the browsers that support pushState() also support addEventListener()
 		window.addEventListener("click", function(e) { // implement defaultPrevented
 			if (e.defaultPrevented != null) return;
@@ -618,22 +620,26 @@ var decorate = function(decorURL, opts) {
 			var url = resolveURL(target.getAttribute("href"));
 			if (url.indexOf(document.URL + "#") == 0) return; // browser handles anchor links
 			if (url.indexOf(location.protocol + "//" + location.host + "/") != 0) return; // and external urls
-			navigate(url);
+			history.pushState({newURL: url}, null, url);
+			page(url);
 			e.preventDefault();
 		}, false);
-		// FIXME onpopstate
+		window.addEventListener("popstate", function(e) {
+			if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+			else e.stopPropagation();
+			page(e.state.newURL);
+		}, true);
 	}
 	
 	]);
 }
 
-var navigate = function(url, opts) {
+var page = function(url, opts) {
 	var doc; 
 	return queue([
 
 	function() {
 		var cb = Callback();
-		history.pushState({}, null, url);
 		loadURL(url, {
 			onSuccess: function(result) {
 				doc = result;
