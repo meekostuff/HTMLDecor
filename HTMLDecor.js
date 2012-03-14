@@ -178,30 +178,29 @@ return isolate;
 
 
 var Callback = function() {
-	var external = this, hooks = {};
-	external.complete = false;
-	extend(external, {
-		listen: function(name, fn) {
-			if (hooks[name]) throw "Max of one hook per callback.";
-			hooks[name] = fn;
-			if (external.complete) fn();
-		}
-	});
+	var hooks = {}, complete = false;
 	var cb = function(name) {
-		if (external.complete) throw("Attempt to trigger callback after complete");
-		external.complete = true;
+		if (complete) throw("Attempt to trigger callback after complete");
+		complete = true;
 		var fn = hooks[name];
 		if (fn) {
 			var args = [].splice.call(arguments, 0);
 			isolate(function() { fn.apply(null, args); });
 		}
 	}
-	cb.external = external;
+	extend(cb, {
+		listen: function(name, fn) {
+			if (hooks[name]) throw "Max of one hook per callback.";
+			hooks[name] = fn;
+			if (complete) fn();
+		},
+		isCallback: true
+	});
 	return cb;
 }
 
 function isCallback(obj) {
-	return (obj instanceof Callback);
+	return (obj && obj.isCallback);
 }
 
 var defer = (function() {
@@ -215,11 +214,8 @@ function deferback() {
 	while ((myCB = list.shift())) {
 		var cb = myCB.hook(myCB);
 		if (isCallback(cb)) {
-			if (myCB.external == cb) continue; // callback is delegated
-			if (!cb.complete) { // callback is pending 
-				cb.listen("complete", myCB);
-				continue;
-			}
+			if (myCB != cb) cb.listen("complete", myCB); // otherwise callback is delegated
+			continue;
 		}
 		myCB("complete");
 	}
@@ -227,11 +223,11 @@ function deferback() {
 
 function defer(fn) {
 	if (!callbacks) callbacks = [];
-	var myCB = new Callback();
+	var myCB = Callback();
 	myCB.hook = fn;
 	callbacks.push(myCB);
 	if (!timerId) timerId = window.setTimeout(deferback, config["polling-interval"]); // NOTE polling-interval is configured below
-	return myCB.external;
+	return myCB;
 }
 
 return defer;
@@ -239,25 +235,22 @@ return defer;
 })();
 
 var delay = function(fn, timeout) {
-	var myCB = new Callback();
+	var myCB = Callback();
 	window.setTimeout(function() {
 		var cb = fn(myCB);
 		if (isCallback(cb)) {
-			if (myCB.external == cb) return; // callback is delegated
-			if (!cb.complete) { // callback is pending
-				cb.listen("complete", myCB);
-				return;
-			}
+			if (myCB != cb) cb.listen("complete", myCB); // otherwise callback is delegated
+			return;
 		}
 		myCB("complete");
 	}, timeout);
-	return myCB.external;
+	return myCB;
 }
 
 var queue = (function() {
 	
 function queue() {
-	var list = [], myCB = new Callback(); 
+	var list = [], myCB = Callback(); 
 	forEach(arguments, function(fn) {
 		if (typeof fn != "function") throw "Non-function passed to queue()";
 		list.push(fn);
@@ -266,7 +259,7 @@ function queue() {
 		var fn;
 		while ((fn = list.shift())) {
 			var cb = fn();
-			if (isCallback(cb) && !cb.complete) {
+			if (isCallback(cb)) {
 				cb.listen("complete", queueback);
 				return;
 			}
@@ -274,7 +267,7 @@ function queue() {
 		myCB("complete");
 	}
 	queueback();
-	return myCB.external;
+	return myCB;
 }
 
 return queue;
@@ -557,7 +550,7 @@ var decorate = function(decorURL, opts) {
 	return queue(
 
 	function() {
-		var cb = new Callback();
+		var cb = Callback();
 		loadURL(decorURL, {
 			onSuccess: function(result) {
 				doc = result;
@@ -568,7 +561,7 @@ var decorate = function(decorURL, opts) {
 				throw "loadURL fail";				
 			}
 		});
-		return cb.external;
+		return cb;
 	},
 	function waitBody() {
 		return document.body ? true : defer(waitBody);
@@ -603,7 +596,7 @@ var navigate = function(url, opts) {
 	return queue(
 
 	function() {
-		var cb = new Callback();
+		var cb = Callback();
 		history.pushState({}, null, url);
 		loadURL(url, {
 			onSuccess: function(result) {
@@ -615,7 +608,7 @@ var navigate = function(url, opts) {
 				throw "loadURL fail";				
 			}
 		});
-		return cb.external;
+		return cb;
 	},
 	function() {
 		var decorURL = resolveURL(getDecorLink().getAttribute("href"));
