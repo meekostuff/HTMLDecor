@@ -135,7 +135,7 @@ polyfill();
    until(test, fn) repeats call to fn() until test() returns true
    queue([fn1, fn2, ...]) will call (potentially async) functions sequentially
  */
-var isolate = (function() {
+var isolate = (function() { // TODO maybe it isn't worth isolating on platforms that don't have dispatchEvent()
 
 var evType = vendorPrefix + "-isolate";
 var testFn, complete = [], wrapper, isolate;
@@ -177,11 +177,11 @@ else isolate = function(fn) {
 return isolate;
 })();
 
-
 var Callback = function() {
-	var hooks = {}, complete = false;
+	var hooks = {}, called = {}, complete = false;
 	var cb = function(name) {
 		if (complete) throw("Attempt to trigger callback after complete");
+		called[name] = true;
 		complete = true;
 		var fn = hooks[name];
 		if (fn) {
@@ -193,7 +193,7 @@ var Callback = function() {
 		listen: function(name, fn) {
 			if (hooks[name]) throw "Max of one hook per callback.";
 			hooks[name] = fn;
-			if (complete) fn();
+			if (called[name]) fn(name); // FIXME this doesn't retain data passed when the callback was called
 		},
 		isCallback: true
 	});
@@ -210,13 +210,18 @@ var wait = (function() {
 var timerId, callbacks = [];
 
 function waitback() {
-	var myCB, i = 0;
-	while ((myCB = callbacks[i])) {
-		var hook = myCB.hook;
-		var done = hook();
-		if (done) {
+	var waitCB, i = 0;
+	while ((waitCB = callbacks[i])) {
+		var hook = waitCB.hook;
+		var done, success;
+		success = isolate(function() { done = hook(); });
+		if (!success) {
 			callbacks.splice(i,1);
-			myCB("complete");
+			waitCB("error");
+		}
+		else if (done) {
+			callbacks.splice(i,1);
+			waitCB("complete");
 		}
 		else i++;
 	}
@@ -226,40 +231,46 @@ function waitback() {
 	}
 }
 
-function wait(fn, myCB) {
-	if (!myCB) myCB = Callback();
-	myCB.hook = fn;
-	callbacks.push(myCB);
+function wait(fn, waitCB) {
+	if (!waitCB) waitCB = Callback();
+	waitCB.hook = fn;
+	callbacks.push(waitCB);
 	if (!timerId) timerId = window.setInterval(waitback, config["polling-interval"]); // NOTE polling-interval is configured below
-	return myCB;
+	return waitCB;
 }
 
 return wait;
 
 })();
 
-var until = function(test, fn, myCB) {
-	return wait(function() { fn(); return test(); }, myCB);
+var until = function(test, fn, untilCB) {
+	return wait(function() { fn(); return test(); }, untilCB);
 }
 
-var delay = function(fn, timeout) {
-	var myCB = Callback();
+var delay = function(fn, timeout, delayCB) {
+	if (!delayCB) delayCB = Callback();
 	window.setTimeout(function() {
-		var cb = fn(myCB);
-		if (isCallback(cb)) {
-			if (myCB != cb) cb.listen("complete", myCB); // otherwise callback is delegated
+		var cb;
+		var success = isolate(function() { cb = fn(delayCB); });
+		if (!success) {
+			delayCB("error");
 			return;
 		}
-		myCB("complete");
+		else if (isCallback(cb)) {
+			if (delayCB == cb) return; // callback is delegated
+			cb.listen("complete", delayCB);
+			cb.listen("error", delayCB);
+		}
+		else delayCB("complete");
 	}, timeout);
-	return myCB;
+	return delayCB;
 }
 
 var queue = (function() {
-	
-function queue(fnList, myCB) {
+
+function queue(fnList, queueCB) {
 	var list = [];
-	if (!myCB) myCB = Callback(); 
+	if (!queueCB) queueCB = Callback(); 
 	forEach(fnList, function(fn) {
 		if (typeof fn != "function") throw "Non-function passed to queue()";
 		list.push(fn);
@@ -267,16 +278,24 @@ function queue(fnList, myCB) {
 	var queueback = function() {
 		var fn;
 		while ((fn = list.shift())) {
-			var cb = fn();
+			var cb;
+			var success = isolate(function() { cb = fn(); });
+			if (!success) {
+				queueCB("error");
+				return;
+			}
 			if (isCallback(cb)) {
 				cb.listen("complete", queueback);
+				cb.listen("error", function() {
+					queueCB("error");
+				})
 				return;
 			}
 		}
-		myCB("complete");
+		queueCB("complete");
 	}
 	queueback();
-	return myCB;
+	return queueCB;
 }
 
 return queue;
