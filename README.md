@@ -231,7 +231,6 @@ URL query options override all other settings.
 TODO
 ----
 - better docs, including logger and decorSystem APIs
-- don't duplicate `<script>` with the same @src, or `<link>` with the same @href.
 - compatibility checks and warnings between the content and decor pages (charset, etc)
 - compatibility checks and warnings between the content element and the decor element it replaces (tagName, attrs, etc). 
 - provide an API for scripts in the decor document to intercept different stages of processing
@@ -240,9 +239,6 @@ TODO
 and load a more appropriate decor page. 
 - URLs in `<style>` sections of the decor are not resolved. This means that relative URLs (which are meant to be relative to the decor URL)
 will probably be wrong when imported into the page. 
-- incorporate history.pushState() to fast-load content pages that share the same decor document. 
-- prevent `<link>`, `<iframe>`, `<object>`, `<img>` and other media from loading when decor is in iframe. 
-This might make the decor page load quicker, plus guarantees that resources aren't loaded twice even if browser caching hasn't been enabled. 
 - investigate the use of [HTML in XMLHttpRequest](https://developer.mozilla.org/en/HTML_in_XMLHttpRequest) in place of an iframe. 
 
 
