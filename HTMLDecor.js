@@ -7,6 +7,8 @@
 // Eventually logger and decorSystem could be in separate modules
 // and built into this script.
 
+// TODO substantial error handling and notification needs to be added
+
 // FIXME for IE7, IE8 sometimes XMLHttpRequest is in a detectable but not callable state
 // This is usually fixed by refreshing, or by the following work-around.
 // OTOH, maybe my IE installation is bad
@@ -617,11 +619,12 @@ var decorate = function(decorURL, opts) {
 			if (e.defaultPrevented) return;
 			var target = e.target;
 			if (tagName(target) != "a") return;
+			if (target.target) return;
 			var url = resolveURL(target.getAttribute("href"));
 			if (url.indexOf(document.URL + "#") == 0) return; // browser handles anchor links
 			if (url.indexOf(location.protocol + "//" + location.host + "/") != 0) return; // and external urls
 			history.pushState({newURL: url}, null, url);
-			page(url);
+			page(url); // FIXME this delegates failure handling to page(), but it should be handled here
 			e.preventDefault();
 		}, false);
 		window.addEventListener("popstate", function(e) {
@@ -660,7 +663,7 @@ var page = function(url, opts) {
 			return page_merge(doc, opts);
 		}
 		else { // trigger browser nav if different decor
-			location.replace(url);
+			location.replace(url); // FIXME this should send a message to the caller
 			return;			
 		}
 	}
