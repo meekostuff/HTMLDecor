@@ -7,6 +7,12 @@ There is still, however, significant duplication in web-pages - banners, navigat
 
 What if there was a way to specify this page decor in an external file? Unadorned web-pages could be sent to the browser which could then add the decor from a common file. **HTMLDecor.js** is designed for this purpose. 
 
+As a bonus, when your site uses HTMLDecor it gets `history.pushState()` support for free.
+That is, when someone viewing your site clicks on a link to another page in your site, 
+if the two pages share the same decor then `history.pushState()` is used to handle the navigation.
+
+HTMLDecor.js is less than 6kB when minified and gzipped.
+
 To see this in action visit http://meekostuff.net/blog/ where I am dog-fooding this script. 
 There is also a trivial test page at http://devel.meekostuff.net/HTMLDecor/1.0-devel/test/normal.html
 
