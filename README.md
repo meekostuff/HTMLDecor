@@ -12,9 +12,11 @@ That is, when someone viewing your site clicks on a link to another page in your
 if the two pages share the same decor then `history.pushState()` is used to handle the navigation.
 
 HTMLDecor.js is less than 6kB when minified and gzipped.
+You can even access HTMLDecor.js from CDN at
+http://dist.meekostuff.net/HTMLDecor/1.1-stable/HTMLDecor.js
 
 To see this in action visit http://meekostuff.net/blog/ where I am dog-fooding this script. 
-There is also a trivial test page at http://devel.meekostuff.net/HTMLDecor/1.0-devel/test/normal.html
+There is also a trivial test page at http://dist.meekostuff.net/HTMLDecor/1.1-stable/test/normal.html
 
 Quick Start
 -----------
@@ -27,7 +29,7 @@ Create a HTML document (page.html) with some page specific content:
 		<!-- create a link to the decor page. All attributes are needed -->
 		<link rel="meeko-decor" type="text/html" href="decor.html" />
 		<!-- and source the HTMLDecor script -->
-		<script src="/path/to/HTMLDecor.js"></script>
+		<script src="http://dist.meekostuff.net/HTMLDecor/1.1-stable/HTMLDecor.js"></script>
 		<style>
 		.page { border: 2px solid green; }
 		</style>
@@ -142,19 +144,20 @@ HTMLDecor is available under
 See the [MPL 2.0 FAQ](http://www.mozilla.org/MPL/2.0/FAQ.html "Frequently Asked Questions")
 for your obligations if you intend to modify or distribute HTMLDecor or part thereof. 
 
+Installation
+------------
+
+The easiest way to use HTMLDecor is via the CDN. Simply include the following line in the `<head>` of your page:
+
+		<script src="http://dist.meekostuff.net/HTMLDecor/1.1-stable/HTMLDecor.js"></script>
+		
+Alternatively you can [download HTMLDecor.js](http://dist.meekostuff.net/HTMLDecor/1.1-stable/HTMLDecor.js)
+and install it on your server. 
+
 Notes and Warnings
 ------------------
-- *Enable browser caching for your decor resources (external stylesheets, images, etc)*,
-otherwise each one will incur *two* round-trips to the server. This would be a **BAD THING**. 
 - If the type of the decor URL is undeclared or "text/html" then the decor page is loaded via XMLHttpRequest(), parsed to disable scripts,
 then written into the iframe using `document.write()`. 
-- it is generally undesirable for scripts in the decor page to run until after they are inserted into the content page. 
-  + For "text/html" decor pages, all scripts are disabled within the decor iframe, except those that have *none* of the attributes: `async`, `defer`.
-  These scripts are enabled when the decor is merged with the page. 
-  + For "text/decor+html" decor pages, scripts can be targeted to the content page by declaring their type as "text/javascript?async".
-  These scripts won't be run, but when they are merged into the content page the type is changed to "text/javascript" and they run then.
-  Scripts with no declared type, or type of "text/javascript" will run in the decor iframe. These could be used to
-  modify the decor in preparation for the specific content page. 
 - unlike CSS, decor pages should be in the same domain as the content page otherwise the browsers cross-site restrictions will apply.
 Detection for this hasn't been implemented yet. 
 - any stylesheets in the content document and with a title of "nodecor" will be deleted at the start of merging of the decor page. 
@@ -166,7 +169,6 @@ or
 in your site if that is desirable. 
 - in most current browsers, elements from the content can be moved into the decor *while the element is still loading*. 
 On IE6,7,8 this will throw an error, so for those browsers the decor is inserted and elements moved only after the DOM has fully loaded.
-This makes the decor the last thing to appear on the page. It would be desirable to provide a different option for these browsers. 
 - the configuration options and mechanism may change in future releases
 
 Debugging
@@ -178,6 +180,9 @@ The configuration options may also be useful for debugging.
 
 Configuration
 -------------
+
+You probably don't want to change the default configuration, but if you find the need, here's how.
+
 HTMLDecor has the following config options (default values in <b>bold</b>).
 
 - log-level: "none", "error", <b>"warn"</b>, "info", "debug"
