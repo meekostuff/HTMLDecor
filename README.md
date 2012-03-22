@@ -139,7 +139,7 @@ from the `<head>` of the decor page into the `<head>` of the content page.
 Navigation
 ----------
 
-If `history.pushState` is available then HTMLDecor will conditionally over-ride the default browser behavior when links are clicked. If the target of the link is a document that specifies the same decor as the current page then it can be merged into the current page in a _similar_ way to the startup merging of decor and document. 
+If `history.pushState` is available then HTMLDecor will conditionally over-ride the default browser behavior when links are clicked. If the @href of the link is a document that specifies the same decor as the current page then it can be merged into the current page in a _similar_ way to the startup merging of decor and document. 
 
 Some links are not appropriate for this and are ignored by HTMLDecor:
 
