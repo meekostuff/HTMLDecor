@@ -23,7 +23,7 @@ Quick Start
 
 Create a HTML document (page.html) with some page specific content:
 
-	<!DOCTYPE html>
+    <!DOCTYPE html>
 	<html>
 	<head>
 		<!-- create a link to the decor page. All attributes are needed -->
@@ -135,6 +135,28 @@ from the `<head>` of the decor page into the `<head>` of the content page.
  - for each child node of the `<body>` in the content page, determine whether it should be deleted or moved into the decor.
  If a child node is an element with an ID, and the ID matches an element in the decor, then the element in the decor is replaced with the element from the content. All other child nodes of the body in the content page are deleted. 
  - when all linked stylesheets for the document have loaded, set the visibility of the page to "visible".
+
+Navigation
+----------
+
+If `history.pushState` is available then HTMLDecor will conditionally over-ride the default browser behavior when links are clicked. If the target of the link is a document that specifies the same decor as the current page then it can be merged into the current page in a _similar_ way to the startup merging of decor and document. 
+
+Some links are not appropriate for this and are ignored by HTMLDecor:
+
+- links to pages on other sites 
+- links with a different protocol, e.g. `javascript:...`, `ftp:`
+- links that target a different window or iframe, e.g.
+
+        <a href="some_page.html" target="_blank">...</a>
+- anchor links - `<a href="#skip">`
+
+That leaves links to other pages within the same site. HTMLDecor assumes that any page within the same site *might* have the same decor. The page is downloaded and, if the specified decor is the same, it is merged. 
+
+Otherwise normal browser navigation to the next page is triggered. 
+
+What happens then is the browser loads the next page from cache (assuming that HTTP caching headers allow it) which in turn loads the HTMLDecor script (again from cache) and then the appropriate decor is loaded and merged into the raw content.  
+
+So, assuming caching is configured, the only thing that needs to be fetched from the server is the decor for the next URL. 
 
 License
 -------
