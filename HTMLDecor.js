@@ -763,7 +763,7 @@ function mergeHead(doc, isDecor) {
 		else dstHead.appendChild(srcNode);
 	});
 	// allow scripts to run
-	forEach($$("script", dstHead), enableScript);
+	forEach($$("script", dstHead), enableScript); // FIXME this breaks if a script inserts other scripts
 }
 
 function page_preprocess(doc) {
