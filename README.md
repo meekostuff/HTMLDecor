@@ -1,18 +1,28 @@
 HTMLDecor
 =========
 
-One of the advantages of CSS is the capability to provide styling information to many web-pages using one (or several) external stylesheets. Not only does this reduce duplication, cutting down the size of each page, it also means that pages don't need to be regenerated whenever styles are updated.
+> Why should you merge your real page content with your 
+> site decor - your page template - on the server. 
+> Do it in the browser and cut the size of every page,
+> plus `pushState()` assisted navigation comes for free. 
 
-There is still, however, significant duplication in web-pages - banners, navigation, and footers are usually the same for many pages of a site, if not the whole site. Any changes to the structure or text in these generic sections will require regenerating all pages. 
+One of the advantages of CSS is the capability to provide styling information to many web-pages using one (or several) external stylesheets.
+Not only does this reduce duplication, cutting down the size of each page, it also means that pages don't need to be regenerated whenever styles are updated.
 
-What if there was a way to specify this page decor in an external file? Unadorned web-pages could be sent to the browser which could then add the decor from a common file. **HTMLDecor.js** is designed for this purpose. 
+There is still, however, significant duplication in web-pages - banners, navigation, and footers are usually the same for many pages of a site, if not the whole site.
+Any changes to the structure or text in these generic sections will require regenerating all pages. 
 
-As a bonus, when your site uses HTMLDecor it gets `history.pushState()` support for free.
-That is, when someone viewing your site clicks on a link to another page in your site, 
-if the two pages share the same decor then `history.pushState()` is used to handle the navigation.
+What if there was a way to specify this page decor in an external file? 
+Unadorned web-pages could be sent to the browser which could then add the decor from a common file. 
+**HTMLDecor.js** is designed for this purpose. 
+
+As a bonus, when your site uses HTMLDecor it gets `history.pushState()` support for free. 
+When someone viewing your page clicks on a link to another page that uses the same decor
+then HTMLDecor updates the real content
+and `history.pushState()` is used to update the browser URL. 
 
 HTMLDecor.js is less than 6kB when minified and gzipped.
-You can even access HTMLDecor.js from CDN at
+You can even access HTMLDecor.js from a CDN at
 http://dist.meekostuff.net/HTMLDecor/1.1-stable/HTMLDecor.js
 
 To see this in action visit http://meekostuff.net/blog/ where I am dog-fooding this script. 
