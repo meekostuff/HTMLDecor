@@ -1,10 +1,12 @@
 HTMLDecor
 =========
 
-> Why should you merge your real page content with your 
-> site decor - your page template - on the server. 
-> Do it in the browser and cut the size of every page,
-> plus `pushState()` assisted navigation comes for free. 
+> Why should you use the server to merge your real page content 
+> with your banner, navbars, ads, page-layout and stylesheets. 
+> Put all that site decor in its own page 
+> and let HTMLDecor merge them in the browser. 
+> You'll cut the download time of every page,
+> plus `pushState()` assisted navigation comes for free.
 
 One of the advantages of CSS is the capability to provide styling information to many web-pages using one (or several) external stylesheets.
 Not only does this reduce duplication, cutting down the size of each page, it also means that pages don't need to be regenerated whenever styles are updated.
