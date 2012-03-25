@@ -2,7 +2,7 @@ HTMLDecor
 =========
 
 > Why should you use the server to merge your real page content 
-> with your banner, navbars, ads, page-layout and stylesheets. 
+> with your banner, navbars, ads, page-layout and stylesheets? 
 > Put all that site decor in its own page 
 > and let HTMLDecor merge them in the browser. 
 > You'll cut the download time of every page,
@@ -29,6 +29,12 @@ http://dist.meekostuff.net/HTMLDecor/1.1-stable/HTMLDecor.js
 
 To see this in action visit http://meekostuff.net/blog/ where I am dog-fooding this script. 
 There is also a trivial test page at http://dist.meekostuff.net/HTMLDecor/1.1-stable/test/normal.html
+
+For more info on the concept of HTMLDecor and its affinity with pushState assisted navigation, read  
+
+- [The HTML decor concept](http://meekostuff.net/blog/HTML-Decor-I/)
+- [Introducing HTMLDecor.js](http://meekostuff.net/blog/HTML-Decor-II/)
+- [pushState was made for HTMLDecor](http://meekostuff.net/blog/pushState-was-made-for-HTMLDecor/)
 
 Quick Start
 -----------
