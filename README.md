@@ -174,7 +174,9 @@ Otherwise normal browser navigation to the next page is triggered.
 
 What happens then is the browser loads the next page from cache (assuming that HTTP caching headers allow it) which in turn loads the HTMLDecor script (again from cache) and then the appropriate decor is loaded and merged into the raw content.  
 
-So, assuming caching is configured, the only thing that needs to be fetched from the server is the decor for the next URL. 
+So, assuming caching is configured, the only thing that needs to be fetched from the server is the decor for the next URL.
+
+**Note** that the HTMLDecor `click` handling can always be prevented by calling `event.preventDefault()`.
 
 License
 -------
