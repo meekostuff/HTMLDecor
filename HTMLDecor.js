@@ -608,35 +608,57 @@ var decorate = function(decorURL, opts) {
 	},
 	function() {
 		if (!history.pushState) return;
-		history.replaceState({newURL:document.URL}, null, document.URL); // otherwise there will be no popstate when returning to original URL
+		history.replaceState({"meeko-decor": true, newURL: document.URL}, null, document.URL); // otherwise there will be no popstate when returning to original URL
 		// NOTE fortuitously all the browsers that support pushState() also support addEventListener()
-		window.addEventListener("click", function(e) { // implement defaultPrevented
-			if (e.defaultPrevented != null) return;
-			e._preventDefault = e.preventDefault;
-			e.preventDefault = function() { this._preventDefault(); this.defaultPrevented = true; }
-		}, true);
-		window.addEventListener("click", function(e) {
-			if (e.defaultPrevented) return;
-			var target = e.target;
-			if (tagName(target) != "a") return;
-			if (target.target) return;
-			var url = resolveURL(target.getAttribute("href"));
-			if (url.indexOf(document.URL + "#") == 0) return; // browser handles anchor links
-			if (url.indexOf(location.protocol + "//" + location.host + "/") != 0) return; // and external urls
-			history.pushState({newURL: url}, null, url);
-			page(url); // FIXME this delegates failure handling to page(), but it should be handled here
-			e.preventDefault();
-		}, false);
+		window.addEventListener("click", registerClickShims, true);
+		window.addEventListener("click", clickHandler, false);
 		window.addEventListener("popstate", function(e) {
+			if (!e.state["meeko-decor"]) return;
 			if (e.stopImmediatePropagation) e.stopImmediatePropagation();
 			else e.stopPropagation();
-			page(e.state.newURL);
+			page(document.URL);
 		}, true);
 	}
 	
 	]);
 }
 
+var clickEventShims = {
+preventDefault: function()	{ this.defaultPrevented = true; }
+// FIXME need to intercept stopPropagation and stopImmediatePropagation
+}
+
+/* DISABLED problematic solution
+var clickEventShims = {
+preventDefault: function()	{ this.defaultPrevented = true; },
+stopPropagation: function() { clickHandler(this); }, // FIXME this is problematic if stopPropagation is called again or if preventDefault is called afterward
+stopImmediatePropagation: function() { clickHandler(this); } // FIXME ditto stopPropagation
+}
+*/
+
+var registerClickShims = function(e) { // intercept for defaultPrevented, stopImmediatePropagation, stopPropagation
+	if (e.defaultPrevented != null) delete clickEventShims.preventDefault;
+	each(clickEventShims, function(name, method) {
+		if (!e[name]) return;
+		var _name = "_" + name;
+		e[_name] = e[name];
+		e[name] = function() { this[_name](); method.call(this); }
+	});
+}
+var clickHandler = function(e) {
+	if (e.defaultPrevented) return;
+	if (e.button != 0) return; // FIXME what is the value for button in IE's W3C events model??
+	var target = e.target;
+	if (tagName(target) != "a") return;
+	if (target.target) return;
+	var url = resolveURL(target.getAttribute("href"));
+	if (url.indexOf(document.URL + "#") == 0) return; // browser handles anchor links
+	if (url.indexOf(location.protocol + "//" + location.host + "/") != 0) return; // and external urls
+	history.pushState({"meeko-decor": true, oldURL: document.URL, newURL: url}, null, url);
+	page(url); // FIXME this delegates failure handling to page(), but it should be handled here
+	e.preventDefault(); // NOTE this won't be our shim
+}
+		
 var page = function(url, opts) {
 	var doc; 
 	return queue([
