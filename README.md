@@ -6,7 +6,7 @@ HTMLDecor
 > Put all that site decor in its own page 
 > and let HTMLDecor merge them in the browser. 
 > You'll cut the download time of every page,
-> plus `pushState()` assisted navigation comes for free.
+> plus "pushState assisted navigation" comes for free.
 
 One of the advantages of CSS is the capability to provide styling information to many web-pages using one (or several) external stylesheets.
 Not only does this reduce duplication, cutting down the size of each page, it also means that pages don't need to be regenerated whenever styles are updated.
@@ -18,7 +18,7 @@ What if there was a way to specify this page decor in an external file?
 Unadorned web-pages could be sent to the browser which could then add the decor from a common file. 
 **HTMLDecor.js** is designed for this purpose. 
 
-As a bonus, when your site uses HTMLDecor it gets `history.pushState()` support for free. 
+As a bonus, when your site uses HTMLDecor it gets "pushState assisted navigation" by default.  
 When someone viewing your page clicks on a link to another page that uses the same decor
 then HTMLDecor updates the real content
 and `history.pushState()` is used to update the browser URL. 
