@@ -3,8 +3,8 @@
  * Mozilla Public License v2.0 (http://mozilla.org/MPL/2.0/)
  */
 
-// TODO Move script and options detection outside of the decorSystem module
-// Eventually logger and decorSystem could be in separate modules
+// TODO Move script and options detection outside of the decor module
+// Eventually logger and decor could be in separate modules
 // and built into this script.
 
 // TODO substantial error handling and notification needs to be added
@@ -1030,10 +1030,10 @@ var enableScript = function(node) {
 	node.parentNode.replaceChild(script, node);
 }
 
-}); // end decorSystem defn
+}); // end decor defn
 
-decorSystem["hidden-timeout"] = config["decor-hidden-timeout"];
-if (config["decor-autostart"]) decorSystem.start();
+decor["hidden-timeout"] = config["decor-hidden-timeout"];
+if (config["decor-autostart"]) decor.start();
 
 })();
 
