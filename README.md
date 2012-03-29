@@ -8,17 +8,15 @@ HTMLDecor
 > You'll cut the download time of every page,
 > plus "pushState assisted navigation" comes for free.
 
-One of the advantages of CSS is the capability to provide styling information to many web-pages using one (or several) external stylesheets.
-Not only does this reduce duplication, cutting down the size of each page, it also means that pages don't need to be regenerated whenever styles are updated.
+HTMLDecor allows your site to deliver real page content first (and fast).
+Your site decor can be placed in its own page and merged in the browser instead of on the server. 
 
-There is still, however, significant duplication in web-pages - banners, navigation, and footers are usually the same for many pages of a site, if not the whole site.
-Any changes to the structure or text in these generic sections will require regenerating all pages. 
+A site decor page is similar to an external stylesheet in that it can be shared between several pages
+**and** it is referenced with a resource link, like so 
 
-What if there was a way to specify this page decor in an external file? 
-Unadorned web-pages could be sent to the browser which could then add the decor from a common file. 
-**HTMLDecor.js** is designed for this purpose. 
+    <link rel="meeko-decor" type="text/html" href="decor.html />
 
-As a bonus, when your site uses HTMLDecor it gets "pushState assisted navigation" by default.  
+As a bonus, when your site uses HTMLDecor it gets "pushState assisted navigation" by default. 
 When someone viewing your page clicks on a link to another page that uses the same decor
 then HTMLDecor updates the real content
 and `history.pushState()` is used to update the browser URL. 
@@ -35,6 +33,12 @@ For more info on the concept of HTMLDecor and its affinity with pushState assist
 - [The HTML decor concept](http://meekostuff.net/blog/HTML-Decor-I/)
 - [Introducing HTMLDecor.js](http://meekostuff.net/blog/HTML-Decor-II/)
 - [pushState was made for HTMLDecor](http://meekostuff.net/blog/pushState-was-made-for-HTMLDecor/)
+
+More features are in the [road-map](https://github.com/shogun70/HTMLDecor/wiki/Road-map), including 
+
+- **alternate** decor pages
+- transition animations for "pushState assisted navigation"
+
 
 Quick Start
 -----------
