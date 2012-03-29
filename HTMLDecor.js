@@ -396,10 +396,10 @@ this.LOG_LEVEL = this.LOG_WARN; // DEFAULT
 var log_index = logger["LOG_" + uc(config["log-level"])];
 if (log_index != null) logger.LOG_LEVEL = log_index;
 
-var decorSystem = Meeko.stuff.decorSystem || (Meeko.stuff.decorSystem = new function() {
+var decor = Meeko.stuff.decor || (Meeko.stuff.decor = new function() {
 
-var sys = this;
-sys["hidden-timeout"] = 0;
+var decor = this;
+decor["hidden-timeout"] = 0;
 
 // NOTE resolveURL shouldn't be needed, or at least
 // el.setAttribute(attr, el[attr]) should suffice.
@@ -416,7 +416,7 @@ var resolveURL = function(relURL, context) {
 	return href;
 }
 
-sys.complete = false;
+decor.complete = false;
 
 var readyStateLookup = {
 	"uninitialized": false,
@@ -472,7 +472,7 @@ else style.textContent = "body { visibility: hidden; }";
 var hidden = false;
 var unhiding = true;
 function hide() {
-	var timeout = sys["hidden-timeout"];
+	var timeout = decor["hidden-timeout"];
 	if (timeout <= 0) return;
 	document.head.insertBefore(style, script);
 	hidden = true;
@@ -507,7 +507,7 @@ NOTE:  for more details on how checkStyleSheets() works cross-browser see
 http://aaronheckmann.blogspot.com/2010/01/writing-jquery-plugin-manager-part-1.html
 TODO: does this still work when there are errors loading stylesheets??
 */
-var checkStyleSheets = sys.checkStyleSheets = function() {
+var checkStyleSheets = decor.checkStyleSheets = function() {
 	// check that every <link rel="stylesheet" type="text/css" /> 
 	// has loaded
 	return every($$("link"), function(node) {
@@ -542,7 +542,7 @@ return {
 
 })();
 
-var start = sys.start = function() {
+var start = decor.start = function() {
 	var contentPlaced = false, link;
 	Anim.hide();
 
@@ -570,7 +570,7 @@ var start = sys.start = function() {
 		});
 	},
 	function() {
-		sys.complete = true;
+		decor.complete = true;
 	}
 	
 	]);
