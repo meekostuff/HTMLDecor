@@ -14,7 +14,7 @@ Your site decor can be placed in its own page and merged in the browser instead 
 A site decor page is similar to an external stylesheet in that it can be shared between several pages
 **and** it is referenced with a resource link, like so 
 
-    <link rel="meeko-decor" type="text/html" href="decor.html />
+    <link rel="meeko-decor" type="text/html" href="decor.html" />
 
 As a bonus, when your site uses HTMLDecor it gets "pushState assisted navigation" by default. 
 When someone viewing your page clicks on a link to another page that uses the same decor
@@ -202,6 +202,7 @@ and install it on your server.
 
 Notes and Warnings
 ------------------
+- All decor `<link>` elements must be in the head **before** the HTMLDecor `<script>`. Later ones are ignored. 
 - If the type of the decor URL is undeclared or "text/html" then the decor page is loaded via XMLHttpRequest(), parsed to disable scripts,
 then written into the iframe using `document.write()`. 
 - unlike CSS, decor pages should be in the same domain as the content page otherwise the browsers cross-site restrictions will apply.

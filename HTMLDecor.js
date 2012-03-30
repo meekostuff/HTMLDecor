@@ -25,6 +25,7 @@ if (/(^\?|&)nodecor($|&)/.test(location.search)) return; // WARN deprecated
 var defaults = { // NOTE defaults also define the type of the associated config option
 	"log-level": "warn",
 	"decor-autostart": true,
+	"decor-theme": "",
 	"decor-hidden-timeout": 3000,
 	"polling-interval": 50
 }
@@ -442,10 +443,33 @@ return domContentLoaded;
 
 function getDecorLink(doc) {
 	if (!doc) doc = document;
-	var link = firstChild(doc.head, function(el) {
-		return el.nodeType == 1 &&
-			tagName(el) == "link" &&
-			/\bMEEKO-DECOR\b/i.test(el.rel);
+	var frameTheme, userTheme;
+	if (window.frameElement) frameTheme = window.frameElement.getAttribute("data-theme");
+	// FIXME should userTheme come from the config??
+	userTheme = decor["theme"]; 
+	var matchingLinks = [];
+	var link, specificity = 0;
+	forEach($$("link", doc.head), function(el) {
+		var tmp, sp = 0;
+		if (el.nodeType != 1) return;
+		if (/\bMEEKO-DECOR\b/i.test(el.rel)) sp += 1;
+		else return;
+		if (tmp = el.getAttribute("media")) { // FIXME polyfill for media??
+			if (window.matchMedia && window.matchMedia(tmp).matches) sp += 10;
+			else return;
+		}
+		if (tmp = el.getAttribute("data-frame-theme")) {
+			if (tmp == frameTheme) sp += 100;
+			else return;
+		}
+		if (tmp = el.getAttribute("data-user-theme")) {
+			if (tmp == userTheme) sp += 1000;
+			else return;
+		}
+		if (sp > specificity) {
+			specificity = sp;
+			link = el;
+		}
 	});
 	return link;
 }
@@ -543,19 +567,13 @@ return {
 })();
 
 var start = decor.start = function() {
-	var contentPlaced = false, link;
+	var contentPlaced = false;
 	Anim.hide();
 
 	return queue([
-
 	function() {
-		return until(
-			function() { return link || document.body; },
-			function() { link = getDecorLink(); }
-		)
-	},
-	function() {
-		if (!link) return true;
+		var link = getDecorLink();
+		if (!link) return true; // FIXME warning message
 		var decorURL = resolveURL(link.getAttribute("href"));
 		switch(lc(link.type)) { // FIXME this is just an assert currently
 		case "text/html": case "":
@@ -1032,6 +1050,7 @@ var enableScript = function(node) {
 
 }); // end decor defn
 
+decor["theme"] = config["decor-theme"];
 decor["hidden-timeout"] = config["decor-hidden-timeout"];
 if (config["decor-autostart"]) decor.start();
 
