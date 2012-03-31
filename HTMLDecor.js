@@ -454,9 +454,9 @@ function getDecorLink(doc) {
 		if (el.nodeType != 1) return;
 		if (/\bMEEKO-DECOR\b/i.test(el.rel)) sp += 1;
 		else return;
-		if (tmp = el.getAttribute("media")) { // FIXME polyfill for media??
+		if (tmp = el.getAttribute("media")) { // FIXME polyfill for matchMedia??
 			if (window.matchMedia && window.matchMedia(tmp).matches) sp += 10;
-			else return;
+			else return; // NOTE if the platform doesn't support media queries then this decor is rejected
 		}
 		if (tmp = el.getAttribute("data-frame-theme")) {
 			if (tmp == frameTheme) sp += 100;
