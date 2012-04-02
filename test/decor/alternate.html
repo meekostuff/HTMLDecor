@@ -2,16 +2,17 @@
 <html>
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
-<link rel="alternate" data-frame-theme="alternate" href="alternate.html" />
 <link rel="stylesheet" href="decor.css" />
 <style>
 .style-fail { display: none; }
 
-body { background-color: #ffffff; }
+/* This is the modified styling */
+body { background-color: #ccffcc; }
 </style>
 </head>
 <body>
-<h1>This is the normal decor</h1>
+<h1>This is the alternate decor</h1>
+<p>It is basically the same as the <a href="decor.html">normal</a> but with colored background.</p>
 
 <div class="style-fail" style="background-color: red;">
 If you can see this then &lt;style&gt; elements
@@ -44,6 +45,7 @@ if (window.name != "_decor") (function() {
 })();
 else alert("Error: script was executed in " + window.name + " document context");
 </script>
+
 </body>
 </html>
 
