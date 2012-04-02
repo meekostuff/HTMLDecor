@@ -631,8 +631,9 @@ var decorate = function(decorURL, opts) {
 		return cb;
 	},
 	function() {
+		// NOTE don't need to keep track of altDecorURL, since it has a 1-to-1 relationship with decorURL
+		// TODO but it would be nice to store more data
 		var altDecorURL = getDecorURL(doc, true);
-console.log(altDecorURL);
 		if (!altDecorURL) return true; 
 		var cb = Callback();
 		loadURL(altDecorURL, {
