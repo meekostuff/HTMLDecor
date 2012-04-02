@@ -15,7 +15,6 @@
 // FIXME for IE7, IE8 sometimes XMLHttpRequest is in a detectable but not callable state
 // This is usually fixed by refreshing, or by the following work-around.
 // OTOH, maybe my IE installation is bad
-
 var XMLHttpRequest = window.XMLHttpRequest; 
 
 (function() {
@@ -445,7 +444,22 @@ return domContentLoaded;
 
 })();
 
-function getDecorLink(doc) {
+function getDecorURL(doc, inDecor) {
+	var link = getDecorLink(doc, inDecor);
+	if (!link) return null; // FIXME warning message
+	var decorURL = resolveURL(link.getAttribute("href"));
+	switch(lc(link.type)) { // FIXME this is just an assert currently
+	case "text/html": case "":
+		break;
+	default:
+		logger.error("Invalid decor document type: " + type);
+		throw "Invalid document type";
+		break;
+	}
+	return decorURL;
+}
+
+function getDecorLink(doc, inDecor) {
 	if (!doc) doc = document;
 	var frameTheme, userTheme;
 	if (window.frameElement) frameTheme = window.frameElement.getAttribute("data-theme");
@@ -456,18 +470,25 @@ function getDecorLink(doc) {
 	forEach($$("link", doc.head), function(el) {
 		var tmp, sp = 0;
 		if (el.nodeType != 1) return;
-		if (/\bMEEKO-DECOR\b/i.test(el.rel)) sp += 1;
-		else return;
+		if (inDecor) {
+			if (/^\s*ALTERNATE\s*$/i.test(el.rel)) sp += 1;
+			else return;
+		}
+		else {
+			if (/^\s*MEEKO-DECOR\s*$/i.test(el.rel)) sp += 1;
+			else return;
+		}
+		// TODO @data-assert="<js-code>"
 		if (tmp = el.getAttribute("media")) { // FIXME polyfill for matchMedia??
-			if (window.matchMedia && window.matchMedia(tmp).matches) sp += 10;
+			if (window.matchMedia && window.matchMedia(tmp).matches) sp += 4;
 			else return; // NOTE if the platform doesn't support media queries then this decor is rejected
 		}
 		if (tmp = el.getAttribute("data-frame-theme")) {
-			if (tmp == frameTheme) sp += 100;
+			if (tmp == frameTheme) sp += 8;
 			else return;
 		}
 		if (tmp = el.getAttribute("data-user-theme")) {
-			if (tmp == userTheme) sp += 1000;
+			if (tmp == userTheme) sp += 16;
 			else return;
 		}
 		if (sp > specificity) {
@@ -576,17 +597,8 @@ var start = decor.start = function() {
 
 	return queue([
 	function() {
-		var link = getDecorLink();
-		if (!link) return true; // FIXME warning message
-		var decorURL = resolveURL(link.getAttribute("href"));
-		switch(lc(link.type)) { // FIXME this is just an assert currently
-		case "text/html": case "":
-			break;
-		default:
-			logger.error("Invalid decor document type: " + type);
-			throw "Invalid document type";
-			break;
-		}
+		var decorURL = getDecorURL(document);
+		if (!decorURL) return true; // FIXME warning message
 		return decorate(decorURL, {
 			onContentPlaced: function() { Anim.unhide(); }
 		});
@@ -612,8 +624,25 @@ var decorate = function(decorURL, opts) {
 				cb("complete");
 			},
 			onError: function(error) {
-				logger.error("loadURL fail for " + url);
-				throw "loadURL fail";				
+				logger.error("loadURL fail for " + decorURL);
+				throw "loadURL fail";
+			}
+		});
+		return cb;
+	},
+	function() {
+		var altDecorURL = getDecorURL(doc, true);
+console.log(altDecorURL);
+		if (!altDecorURL) return true; 
+		var cb = Callback();
+		loadURL(altDecorURL, {
+			onSuccess: function(result) {
+				doc = result;
+				cb("complete");
+			},
+			onError: function(error) {
+				logger.error("loadURL fail for " + altDecorURL);
+				throw "loadURL fail";
 			}
 		});
 		return cb;
@@ -700,9 +729,7 @@ var page = function(url, opts) {
 		return cb;
 	},
 	function() {
-		var decorURL = resolveURL(getDecorLink().getAttribute("href"));
-		var nextDecorLink = getDecorLink(doc);
-		if (nextDecorLink && nextDecorLink.getAttribute("href") == decorURL) {
+		if (getDecorURL(document) == getDecorURL(doc)) {
 			scroll(0,0);
 			return page_merge(doc, opts);
 		}
