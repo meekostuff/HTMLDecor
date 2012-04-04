@@ -218,7 +218,7 @@ So, assuming caching is configured, the only thing that needs to be fetched from
 - Scripts in the page are not handled by HTMLDecor - they execute at the expected time in the browser's script handling.
 The page does not need and SHOULD NOT have scripts - they SHOULD all be part of the decor. 
 
-- All scripts from decor or page content which are not in the initial page are executed via dynamic script insertion.
+- All scripts which are not in the initial page (that is, decor content or panned page content) are executed via dynamic script insertion.
 Thus inline scripts are executed immediately, and downloaded scripts are executed asynchronously.
 This dynamic script insertion is referred to as **enabling** in the following rules. 
 
@@ -234,22 +234,59 @@ You do not need and you SHOULD NOT have scripts in the next page.
 Alternate Decor
 ---------------
 
-TODO
+HTMLDecor relies on `<link>` elements to reference the decor for a page, like so
 
     <link rel="meeko-decor" type="text/html" href="decor.html" />
-    <link rel="meeko-decor" type="text/html" data-frame-theme="simple" href="simple-decor.html" />
-    <link rel="meeko-decor" type="text/html" data-user-theme="minimal" href="minimal-decor.html" />
+
+This is similar to the way external stylesheets are associated with the page,
+the main exception being that multiple stylesheets can be applied to the page.
+
+**NOTE** that all decor `<link>` must be in the `<head>` of the page before the `HTMLDecor.js` script is included.
+
+HTMLDecor also allows a page to specify more than one decor file and let the most specific one be chosen in the browser.
+A decor `<link>` may have attributes that, when matched, increase its specificity for the page and,
+when unmatched, disqualify it from being chosen. The attributes are:
+
+#### media
+
     <link rel="meeko-decor" type="text/html" media="handheld" href="handheld-decor.html" />
 
-or in the decor page
+This is intended to have the same meaning as `media` stylesheets.
+If the `window.matchMedia()` method doesn't exist then these decor pages are disqualified.
+Otherwise `window.matchMedia()` is used to determine if the decor is appropriate. 
 
-    <link rel="meeko-decor" type="text/html" href="normal-decor.html" />
+**WARNING** Some media probably don't support javascript (e.g. `print`).
+HTMLDecor settings would be useless for those media.
+
+#### data-frame-theme
+
+    <link rel="meeko-decor" type="text/html" data-frame-theme="simple" href="simple-decor.html" />
+
+This allows a page to have a different decor when inside an `iframe` - say a popup view of another page.  
+The decor can only be chosen if the page is in an `iframe` and the `iframe` has a `data-theme` attribute with matching value.
+
+#### data-user-theme
+
+    <link rel="meeko-decor" type="text/html" data-user-theme="minimal" href="minimal-decor.html" />
+
+This allows the page to let the user influence the choice of decor. 
+The decor can only be chosen if if the `meeko-decor-theme` key from `sessionStorage` or `localStorage` has a matching value.
+
+If one or more of these attributes are present then they MUST ALL be valid, otherwise the decor is disqualified.
+If there are several decor files that still qualify then any decor with `@data-user-theme` is most specific,
+followed by `@data-frame-theme`, followed by `@media`, followed by decor with none of these attributes.
+
+If there is more than one decor with the same specifity then the first one in the page is chosen. 
+
+### Decor Redirection
+
+Alternate decor can also be specified from the decor file.
+This allows you to start using alternate decor without modifying the real content pages.
+In the decor file for a page, simply link to alternate versions of the decor using `@rel="alternate"`, e.g.
+
+    <link rel="alternate" type="text/html" media="handheld" href="handheld-decor.html" />
     <link rel="alternate" type="text/html" data-frame-theme="simple" href="simple-decor.html" />
     <link rel="alternate" type="text/html" data-user-theme="minimal" href="minimal-decor.html" />
-    <link rel="alternate" type="text/html" media="handheld" href="handheld-decor.html" />
-
-
-FIXME Is javascript even supported for different media devices? e.g. `print`
 
 License
 -------
