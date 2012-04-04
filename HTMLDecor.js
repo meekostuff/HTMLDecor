@@ -1054,7 +1054,8 @@ function(srcNode) { // document.importNode() NOT available on IE < 9
 	case "script":
 		node.text = srcNode.text;
 		break;
-	default: // meta, link have no content
+	default: // meta, link, base have no content
+		// FIXME what to do with <base>?
 		break;
 	}
 	return node;
