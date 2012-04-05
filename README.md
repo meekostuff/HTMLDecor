@@ -210,7 +210,7 @@ So, assuming caching is configured, the only thing that needs to be fetched from
 
 **Note** that the HTMLDecor `click` handling can always be prevented by calling `event.preventDefault()`.
 
-`PushState Assisted Navigation` (PAN) may sometimes be referred to as panning, as in [camera panning](http://en.wikipedia.org/Panning_\(camera\)). 
+"PushState Assisted Navigation" (PAN) may sometimes be referred to as panning, as in [camera panning](http://en.wikipedia.org/Panning_\(camera\)). 
 
 `<script>` handling
 -------------------
@@ -228,7 +228,7 @@ This dynamic script insertion is referred to as **enabling** in the following ru
 but BEFORE the page content is MERGED WITH the decor.
 
 - When panning occurs, scripts in the `<head>` of the next page are **enabled** AFTER all the content in the `<head>` of the next page is MERGED WITH the page. 
-Scripts in the `<body> of the next page are **enabled** AFTER the content in the `<body>` of the next page is MERGED WITH the page.
+Scripts in the `<body>` of the next page are **enabled** AFTER the content in the `<body>` of the next page is MERGED WITH the page.
 You do not need and you SHOULD NOT have scripts in the next page.
 
 Alternate Decor
@@ -276,7 +276,7 @@ If one or more of these attributes are present then they MUST ALL be valid, othe
 If there are several decor files that still qualify then any decor with `@data-user-theme` is most specific,
 followed by `@data-frame-theme`, followed by `@media`, followed by decor with none of these attributes.
 
-If there is more than one decor with the same specifity then the first one in the page is chosen. 
+If there is more than one decor with the same specificity then the first one in the page is chosen. 
 
 ### Decor Redirection
 
@@ -392,9 +392,9 @@ TODO
 - URLs in `<style>` sections of the decor are not resolved. This means that relative URLs (which are meant to be relative to the decor URL)
 will probably be wrong when imported into the page. 
 - investigate the use of [HTML in XMLHttpRequest](https://developer.mozilla.org/en/HTML_in_XMLHttpRequest) in place of an iframe. 
-- delayed loaded (or user-triggered loading) of sections of the page
+- delayed loading (or user-triggered loading) of sections of the page
 - configuration might be better using JSON
-- configuration by data-options might be better as a `<meta>`
+- configuration by data-options on the HTMLDecor `<script>` might be better as a `<meta>`
 - an alternative for pan-triggering hyperlinks might be to use `@target="_self"`;
 - `<link rel="meeko-decor" data-assert="capability_check()" ... />` for more flexibility in specifying decor document
 - HTMLDecor equivalents of `showModalDialog()` and `showModelessDialog()` using iframes and with theming option
