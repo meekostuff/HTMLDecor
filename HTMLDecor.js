@@ -708,7 +708,7 @@ var clickHandler = function(e) {
 	if (url.indexOf(location.protocol + "//" + location.host + "/") != 0) return; // and external urls
 	history.pushState({"meeko-decor": true, oldURL: document.URL, newURL: url}, null, url);
 	page(url); // FIXME this delegates failure handling to page(), but it should be handled here
-	e.preventDefault(); // NOTE this won't be our shim
+	e.preventDefault(); // NOTE this won't be our shim for preventDefault()
 }
 		
 var page = function(url, opts) {
@@ -970,8 +970,7 @@ function normalizeDocument(doc, baseURL) {
 	// insert <base href=baseURL> at top of <head>
 	var base = doc.createElement("base");
 	base.setAttribute("href", baseURL);
-	var docHead = doc.head;
-	docHead.insertBefore(base, docHead.firstChild);
+	doc.head.insertBefore(base, doc.head.firstChild);
 	
 	function normalize(tag, attrName) { 
 		var vendorAttrName = vendorPrefix + "-" + attrName;
@@ -982,7 +981,7 @@ function normalizeDocument(doc, baseURL) {
 	}
 	each(uriAttrs, normalize);
 
-	docHead.removeChild(base);
+	doc.head.removeChild(base);
 }
 
 var copyAttributes = function(node, srcNode) { // implements srcNode.cloneNode(false)
