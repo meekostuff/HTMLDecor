@@ -357,7 +357,7 @@ This tells HTMLDecor not to start automatically, and when a manual start is requ
 hide the page until all decor-resources are loaded *or*
 1000 milliseconds (1 second) have elapsed, whichever comes *first*.
 
-If autostart is turned off, HTMLDecor can be manually started by calling `Meeko.stuff.decorSystem.start()`.
+If autostart is turned off, HTMLDecor can be manually started by calling `Meeko.decor.start()`.
 
 ### From localStorage and sessionStorage
 When debugging a page you probably don't want to modify the page source to change HTMLDecor options,

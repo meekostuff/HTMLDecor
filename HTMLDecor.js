@@ -8,6 +8,7 @@
 // and built into this script.
 
 // TODO substantial error handling and notification needs to be added
+// Also more isolation. 
 
 // FIXME Is javascript even supported for different media devices? 
 // e.g. will <link rel="meeko-decor" media="print" /> even work?
@@ -364,9 +365,8 @@ var getConfig = function() {
 var config = getConfig();
 
 var Meeko = window.Meeko || (window.Meeko = {});
-var stuff = Meeko.stuff || (Meeko.stuff = {});
 
-var logger = Meeko.stuff.logger || (Meeko.stuff.logger = new function() {
+var logger = Meeko.logger || (Meeko.logger = new function() {
 
 var levels = words("NONE ERROR WARN INFO DEBUG");
 
@@ -400,7 +400,7 @@ this.LOG_LEVEL = this.LOG_WARN; // DEFAULT
 var log_index = logger["LOG_" + uc(config["log-level"])];
 if (log_index != null) logger.LOG_LEVEL = log_index;
 
-var decor = Meeko.stuff.decor || (Meeko.stuff.decor = new function() {
+var decor = Meeko.decor || (Meeko.decor = new function() {
 
 var decor = this;
 decor["hidden-timeout"] = 0;
