@@ -137,9 +137,9 @@ var polyfill = function(doc) { // NOTE more stuff could be added here if *necess
 polyfill();
 
 /* Async functions
-   delay(fn, timeout) makes one call to fn() after timeout ms
    wait(test) waits until test() returns true
    until(test, fn) repeats call to fn() until test() returns true
+   delay(fn, timeout) makes one call to fn() after timeout ms
    queue([fn1, fn2, ...]) will call (potentially async) functions sequentially
  */
 var isolate = (function() { // TODO maybe it isn't worth isolating on platforms that don't have dispatchEvent()
@@ -404,192 +404,7 @@ var decor = Meeko.decor || (Meeko.decor = new function() {
 
 var decor = this;
 decor["hidden-timeout"] = 0;
-
-// NOTE resolveURL shouldn't be needed, or at least
-// el.setAttribute(attr, el[attr]) should suffice.
-// But IE doesn't return relative URLs for <link>, and
-// does funny things on anchors
-// TODO check all the uses of resolveURL for correctness and necessity
-var resolveURL = function(relURL, context) {
-	if (!context) context = document;
-	var div = context.createElement("div");
-	if (context != document) context.body.appendChild(div); // WARN assumes context.body exists
-	div.innerHTML = '<a href="'+ relURL + '"></a>';	
-	var href = div.firstChild.href;
-	if (div.parentNode) div.parentNode.removeChild(div);
-	return href;
-}
-
 decor.complete = false;
-
-var readyStateLookup = {
-	"uninitialized": false,
-	"loading": false,
-	"interactive": false,
-	"loaded": true, // TODO is this correct??
-	"complete": true
-}
-
-var domContentLoaded = (function() {
-
-var loaded = false;
-if (!document.readyState) {
-	addEvent(document, "DOMContentLoaded", function() { loaded = true; });
-	addEvent(window, "load", function() { loaded = true; });
-}
-function domContentLoaded() { 
-	return loaded || readyStateLookup[document.readyState];
-}
-return domContentLoaded;
-
-})();
-
-function getDecorURL(doc, inDecor) {
-	var link = getDecorLink(doc, inDecor);
-	if (!link) return null; // FIXME warning message
-	var decorURL = resolveURL(link.getAttribute("href"));
-	switch(lc(link.type)) { // FIXME this is just an assert currently
-	case "text/html": case "":
-		break;
-	default:
-		logger.error("Invalid decor document type: " + type);
-		throw "Invalid document type";
-		break;
-	}
-	return decorURL;
-}
-
-function getDecorLink(doc, inDecor) {
-	if (!doc) doc = document;
-	var frameTheme, userTheme;
-	if (window.frameElement) frameTheme = window.frameElement.getAttribute("data-theme");
-	// FIXME should userTheme come from the config??
-	userTheme = decor["theme"]; 
-	var matchingLinks = [];
-	var link, specificity = 0;
-	forEach($$("link", doc.head), function(el) {
-		var tmp, sp = 0;
-		if (el.nodeType != 1) return;
-		if (inDecor) {
-			if (/^\s*ALTERNATE\s*$/i.test(el.rel)) sp += 1;
-			else return;
-		}
-		else {
-			if (/^\s*MEEKO-DECOR\s*$/i.test(el.rel)) sp += 1;
-			else return;
-		}
-		// TODO @data-assert="<js-code>"
-		if (tmp = el.getAttribute("media")) { // FIXME polyfill for matchMedia??
-			if (window.matchMedia && window.matchMedia(tmp).matches) sp += 4;
-			else return; // NOTE if the platform doesn't support media queries then this decor is rejected
-		}
-		if (tmp = el.getAttribute("data-frame-theme")) {
-			if (tmp == frameTheme) sp += 8;
-			else return;
-		}
-		if (tmp = el.getAttribute("data-user-theme")) {
-			if (tmp == userTheme) sp += 16;
-			else return;
-		}
-		if (sp > specificity) {
-			specificity = sp;
-			link = el;
-		}
-	});
-	return link;
-}
-
-function getDecorMeta(doc) {
-	if (!doc) doc = document;
-	var meta = firstChild(doc.head, function(el) {
-		return el.nodeType == 1 &&
-			tagName(el) == "meta" &&
-			/\bMEEKO-DECOR\b/i.test(el.name);
-	});
-	return meta;
-}
-
-var Anim = (function() {
-	
-var fragment = document.createDocumentFragment();
-var style = document.createElement("style");
-fragment.appendChild(style); // NOTE on IE this realizes style.styleSheet 
-
-// NOTE hide the page until the decor is ready
-if (style.styleSheet) style.styleSheet.cssText = "body { visibility: hidden; }";
-else style.textContent = "body { visibility: hidden; }";
-var hidden = false;
-var unhiding = true;
-function hide() {
-	var timeout = decor["hidden-timeout"];
-	if (timeout <= 0) return;
-	document.head.insertBefore(style, script);
-	hidden = true;
-	unhiding = false;
-	delay(_unhide, timeout);
-}
-function unhide() {
-	if (unhiding) return;
-	unhiding = true;
-	return queue([
-		function() { return wait(function() { return checkStyleSheets(); }) },
-		_unhide
-	]);
-}
-
-function _unhide() {
-	if (!hidden) return;
-	hidden = false;
-	document.head.removeChild(style);
-	// NOTE on IE sometimes content stays hidden although 
-	// the stylesheet has been removed.
-	// The following forces the content to be revealed
-	var docBody = document.body;
-	if (docBody) {
-		docBody.style.visibility = "hidden";
-		docBody.style.visibility = "";
-	}
-}
-
-/* 
-NOTE:  for more details on how checkStyleSheets() works cross-browser see 
-http://aaronheckmann.blogspot.com/2010/01/writing-jquery-plugin-manager-part-1.html
-TODO: does this still work when there are errors loading stylesheets??
-*/
-var checkStyleSheets = decor.checkStyleSheets = function() {
-	// check that every <link rel="stylesheet" type="text/css" /> 
-	// has loaded
-	return every($$("link"), function(node) {
-		if (!node.rel || !/^stylesheet$/i.test(node.rel)) return true;
-		if (node.type && !/^text\/css$/i.test(node.type)) return true;
-		if (node.disabled) return true;
-		
-		// handle IE
-		if (node.readyState) return readyStateLookup[node.readyState];
-
-		var sheet = node.sheet || node.styleSheet;
-
-		// handle webkit
-		if (!sheet) return false;
-
-		try {
-			// Firefox should throw if not loaded or cross-domain
-			var rules = sheet.rules || sheet.cssRules;
-			return true;
-		} 
-		catch (error) {
-			// handle Firefox cross-domain
-			return (error.name == "NS_ERROR_DOM_SECURITY_ERR");
-		} 
-	});
-}
-
-return {
-	hide: hide,
-	unhide: unhide
-}
-
-})();
 
 var start = decor.start = function() {
 	var contentPlaced = false;
@@ -888,6 +703,26 @@ function decor_insertBody(doc) {
 	});
 }
 
+var removeExecutedScripts = function(doc) {
+	forEach($$("script", doc), function(node) {
+		if (node.type && !/^text\/javascript$/i.test(node.type)) return;
+		node.parentNode.removeChild(node);
+	});
+}
+
+var enableScript = function(node) {
+	if (!/^text\/javascript\?async$/i.test(node.type)) return;
+	var script = document.createElement("script");
+	copyAttributes(script, node);
+	script.type = "text/javascript";
+	
+	// FIXME is this comprehensive?
+	try { script.innerHTML = node.innerHTML; }
+	catch (error) { script.text = node.text; }
+
+	node.parentNode.replaceChild(script, node);
+}
+
 var uriAttrs = {};
 forEach(words("link@href a@href script@src img@src iframe@src video@src audio@src source@src form@action input@formaction button@formaction"), function(text) {
 	var m = text.split("@"), tag = m[0], attrName = m[1];
@@ -984,15 +819,6 @@ function normalizeDocument(doc, baseURL) {
 	doc.head.removeChild(base);
 }
 
-var copyAttributes = function(node, srcNode) { // implements srcNode.cloneNode(false)
-	var attrs = srcNode.attributes;
-	forEach(attrs, function(attr) {
-		if (!attr.specified) return;
-		node.setAttribute(attr.name, attr.value);
-	});
-	return node;
-}
-
 var importDocument = document.importNode ? // NOTE returns a pseudoDoc
 function(srcDoc) {
 	var docEl = document.importNode(srcDoc.documentElement, true);
@@ -1060,25 +886,198 @@ function(srcNode) { // document.importNode() NOT available on IE < 9
 	return node;
 }
 
-var removeExecutedScripts = function(doc) {
-	forEach($$("script", doc), function(node) {
-		if (node.type && !/^text\/javascript$/i.test(node.type)) return;
-		node.parentNode.removeChild(node);
+var copyAttributes = function(node, srcNode) { // implements srcNode.cloneNode(false)
+	var attrs = srcNode.attributes;
+	forEach(attrs, function(attr) {
+		if (!attr.specified) return;
+		node.setAttribute(attr.name, attr.value);
+	});
+	return node;
+}
+
+// NOTE resolveURL shouldn't be needed, or at least
+// el.setAttribute(attr, el[attr]) should suffice.
+// But IE doesn't return relative URLs for <link>, and
+// does funny things on anchors
+// TODO check all the uses of resolveURL for correctness and necessity
+var resolveURL = function(relURL, context) {
+	if (!context) context = document;
+	var div = context.createElement("div");
+	if (context != document) context.body.appendChild(div); // WARN assumes context.body exists
+	div.innerHTML = '<a href="'+ relURL + '"></a>';	
+	var href = div.firstChild.href;
+	if (div.parentNode) div.parentNode.removeChild(div);
+	return href;
+}
+
+var readyStateLookup = {
+	"uninitialized": false,
+	"loading": false,
+	"interactive": false,
+	"loaded": true, // TODO is this correct??
+	"complete": true
+}
+
+var domContentLoaded = (function() {
+
+var loaded = false;
+if (!document.readyState) {
+	addEvent(document, "DOMContentLoaded", function() { loaded = true; });
+	addEvent(window, "load", function() { loaded = true; });
+}
+function domContentLoaded() { 
+	return loaded || readyStateLookup[document.readyState];
+}
+return domContentLoaded;
+
+})();
+
+function getDecorURL(doc, inDecor) {
+	var link = getDecorLink(doc, inDecor);
+	if (!link) return null; // FIXME warning message
+	var decorURL = resolveURL(link.getAttribute("href"));
+	switch(lc(link.type)) { // FIXME this is just an assert currently
+	case "text/html": case "":
+		break;
+	default:
+		logger.error("Invalid decor document type: " + type);
+		throw "Invalid document type";
+		break;
+	}
+	return decorURL;
+}
+
+function getDecorLink(doc, inDecor) {
+	if (!doc) doc = document;
+	var frameTheme, userTheme;
+	if (window.frameElement) frameTheme = window.frameElement.getAttribute("data-theme");
+	// FIXME should userTheme come from the config??
+	userTheme = decor["theme"]; 
+	var matchingLinks = [];
+	var link, specificity = 0;
+	forEach($$("link", doc.head), function(el) {
+		var tmp, sp = 0;
+		if (el.nodeType != 1) return;
+		if (inDecor) {
+			if (/^\s*ALTERNATE\s*$/i.test(el.rel)) sp += 1;
+			else return;
+		}
+		else {
+			if (/^\s*MEEKO-DECOR\s*$/i.test(el.rel)) sp += 1;
+			else return;
+		}
+		// TODO @data-assert="<js-code>"
+		if (tmp = el.getAttribute("media")) { // FIXME polyfill for matchMedia??
+			if (window.matchMedia && window.matchMedia(tmp).matches) sp += 4;
+			else return; // NOTE if the platform doesn't support media queries then this decor is rejected
+		}
+		if (tmp = el.getAttribute("data-frame-theme")) {
+			if (tmp == frameTheme) sp += 8;
+			else return;
+		}
+		if (tmp = el.getAttribute("data-user-theme")) {
+			if (tmp == userTheme) sp += 16;
+			else return;
+		}
+		if (sp > specificity) {
+			specificity = sp;
+			link = el;
+		}
+	});
+	return link;
+}
+
+function getDecorMeta(doc) {
+	if (!doc) doc = document;
+	var meta = firstChild(doc.head, function(el) {
+		return el.nodeType == 1 &&
+			tagName(el) == "meta" &&
+			/\bMEEKO-DECOR\b/i.test(el.name);
+	});
+	return meta;
+}
+
+var Anim = (function() {
+	
+var fragment = document.createDocumentFragment();
+var style = document.createElement("style");
+fragment.appendChild(style); // NOTE on IE this realizes style.styleSheet 
+
+// NOTE hide the page until the decor is ready
+if (style.styleSheet) style.styleSheet.cssText = "body { visibility: hidden; }";
+else style.textContent = "body { visibility: hidden; }";
+var hidden = false;
+var unhiding = true;
+function hide() {
+	var timeout = decor["hidden-timeout"];
+	if (timeout <= 0) return;
+	document.head.insertBefore(style, script);
+	hidden = true;
+	unhiding = false;
+	delay(_unhide, timeout);
+}
+function unhide() {
+	if (unhiding) return;
+	unhiding = true;
+	return queue([
+		function() { return wait(function() { return checkStyleSheets(); }) },
+		_unhide
+	]);
+}
+
+function _unhide() {
+	if (!hidden) return;
+	hidden = false;
+	document.head.removeChild(style);
+	// NOTE on IE sometimes content stays hidden although 
+	// the stylesheet has been removed.
+	// The following forces the content to be revealed
+	var docBody = document.body;
+	if (docBody) {
+		docBody.style.visibility = "hidden";
+		docBody.style.visibility = "";
+	}
+}
+
+/* 
+NOTE:  for more details on how checkStyleSheets() works cross-browser see 
+http://aaronheckmann.blogspot.com/2010/01/writing-jquery-plugin-manager-part-1.html
+TODO: does this still work when there are errors loading stylesheets??
+*/
+var checkStyleSheets = decor.checkStyleSheets = function() {
+	// check that every <link rel="stylesheet" type="text/css" /> 
+	// has loaded
+	return every($$("link"), function(node) {
+		if (!node.rel || !/^stylesheet$/i.test(node.rel)) return true;
+		if (node.type && !/^text\/css$/i.test(node.type)) return true;
+		if (node.disabled) return true;
+		
+		// handle IE
+		if (node.readyState) return readyStateLookup[node.readyState];
+
+		var sheet = node.sheet || node.styleSheet;
+
+		// handle webkit
+		if (!sheet) return false;
+
+		try {
+			// Firefox should throw if not loaded or cross-domain
+			var rules = sheet.rules || sheet.cssRules;
+			return true;
+		} 
+		catch (error) {
+			// handle Firefox cross-domain
+			return (error.name == "NS_ERROR_DOM_SECURITY_ERR");
+		} 
 	});
 }
 
-var enableScript = function(node) {
-	if (!/^text\/javascript\?async$/i.test(node.type)) return;
-	var script = document.createElement("script");
-	copyAttributes(script, node);
-	script.type = "text/javascript";
-	
-	// FIXME is this comprehensive?
-	try { script.innerHTML = node.innerHTML; }
-	catch (error) { script.text = node.text; }
-
-	node.parentNode.replaceChild(script, node);
+return {
+	hide: hide,
+	unhide: unhide
 }
+
+})();
 
 }); // end decor defn
 
