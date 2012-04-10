@@ -1044,7 +1044,7 @@ var unhiding = true;
 function hide() {
 	var timeout = decor["hidden-timeout"];
 	if (timeout <= 0) return;
-	document.head.insertBefore(style, script);
+	document.head.insertBefore(style, document.head.firstChild);
 	hidden = true;
 	unhiding = false;
 	delay(_unhide, timeout);
