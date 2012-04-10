@@ -81,8 +81,9 @@ var addEvent =
 var $ = function(selector, context) { // WARN only selects by #id
 	if (!context) context = document;
 	else if (context.nodeType != 9) context = context.ownerDocument;
+	if (!selector) return; // TODO more arg checks??
 	var m = selector.match(/^#([-_a-zA-Z0-9]+)$/);
-	if (!m[0]) throw (selector + " can only be an ID selector in $()");
+	if (!m || !m[0]) throw (selector + " can only be an ID selector in $()");
 	var id = m[1], node = context.getElementById(id);
 	if (node.id == id) return node;
 	var nodeList = context.getElementsByName(id);
@@ -484,9 +485,8 @@ var decorate = function(decorURL, opts) {
 		window.addEventListener("hashchange", function(e) {
 			history.replaceState({"meeko-decor": true }, null);
 		}, true);
-		// NOTE fortuitously all the browsers that support pushState() also support addEventListener()
-		window.addEventListener("click", registerClickShims, true);
-		window.addEventListener("click", clickHandler, false);
+		// NOTE fortuitously all the browsers that support pushState() also support addEventListener() and dispatchEvent()
+		window.addEventListener("click", clickHandler, true);
 		window.addEventListener("popstate", function(e) {
 			if (!e.state || !e.state["meeko-decor"]) return;
 			if (e.stopImmediatePropagation) e.stopImmediatePropagation();
@@ -508,41 +508,39 @@ var decorate = function(decorURL, opts) {
 	]);
 }
 
-var clickEventShims = {
-preventDefault: function()	{ this.defaultPrevented = true; }
-// FIXME need to intercept stopPropagation and stopImmediatePropagation
-}
-
-/* DISABLED problematic solution
-var clickEventShims = {
-preventDefault: function()	{ this.defaultPrevented = true; },
-stopPropagation: function() { clickHandler(this); }, // FIXME this is problematic if stopPropagation is called again or if preventDefault is called afterward
-stopImmediatePropagation: function() { clickHandler(this); } // FIXME ditto stopPropagation
-}
-*/
-
-var registerClickShims = function(e) { // intercept for defaultPrevented, stopImmediatePropagation, stopPropagation
-	if (e.defaultPrevented != null) delete clickEventShims.preventDefault;
-	each(clickEventShims, function(name, method) {
-		if (!e[name]) return;
-		var _name = "_" + name;
-		e[_name] = e[name];
-		e[name] = function() { this[_name](); method.call(this); }
-	});
-}
-var clickHandler = function(e) {
-	if (e.defaultPrevented) return;
+var clickHandler = function(e) { // NOTE only pushState enabled browsers use this
+	if (e["meeko-decor"]) return; // a fake event
 	if (e.button != 0) return; // FIXME what is the value for button in IE's W3C events model??
 	var target = e.target;
-	if (tagName(target) != "a") return;
+	if (tagName(target) != "a") return; // only handling hyperlink clicks
 	if (target.target) return;
-	var url = resolveURL(target.getAttribute("href"));
-	if (url.indexOf(document.URL + "#") == 0) return; // browser handles anchor links
+	var href = target.getAttribute("href");
+	if (!href) return;
+	var url = resolveURL(href); // TODO probably don't need resolveURL on browsers that support pushState
+	if (url.indexOf(document.URL + "#") == 0) return; // browser handles anchor links...
 	if (url.indexOf(location.protocol + "//" + location.host + "/") != 0) return; // and external urls
+	
+	e.preventDefault(); // by this point either HTMLDecor wants to prevent the default or other scripts do.
+	if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+	else e.stopPropagation();
+
+	// dispatch a fake click event
+	var fakeEvent = document.createEvent("MouseEvent");
+	fakeEvent.initMouseEvent("click", e.bubbles, e.cancelable, e.view, e.detail,
+			e.screenX, e.screenY, e.clientX, e.clientY,
+			e.ctrlKey, e.altKey, e.shiftKey, e.metaKey,
+			e.button, e.relatedTarget);
+	fakeEvent["meeko-decor"] = true;
+	
+	fakeEvent.preventDefault(); // stop the fake event from triggering navigation. TODO why do browsers even do that? WARN fakeEvent.defaultPrevented will be misleading
+	var defaultPrevented = false;
+	fakeEvent.preventDefault = function() { defaultPrevented = true; }
+	e.target.dispatchEvent(fakeEvent); 
+	if (defaultPrevented) return; // other scripts want to disable HTMLDecor. FIXME is this a good idea? 
+	
 	history.pushState({"meeko-decor": true }, null, url);
 	page(url); // FIXME this delegates failure handling to page(), but it should be handled here
 	decor.contentURL = serverURL();
-	e.preventDefault(); // NOTE this won't be our shim for preventDefault()
 }
 
 // FIXME shouldn't be able to call page() if decorate() wasn't successful 
