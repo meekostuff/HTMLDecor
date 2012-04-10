@@ -403,8 +403,12 @@ if (log_index != null) logger.LOG_LEVEL = log_index;
 var decor = Meeko.decor || (Meeko.decor = new function() {
 
 var decor = this;
-decor["hidden-timeout"] = 0;
-decor.complete = false;
+
+extend(decor, {
+	contentURL: "",
+	complete: false,
+	"hidden-timeout": 0
+});
 
 var start = decor.start = function() {
 	var contentPlaced = false;
@@ -419,6 +423,7 @@ var start = decor.start = function() {
 		});
 	},
 	function() {
+		this.contentURL = serverURL();
 		decor.complete = true;
 	}
 	
@@ -475,15 +480,28 @@ var decorate = function(decorURL, opts) {
 	},
 	function() {
 		if (!history.pushState) return;
-		history.replaceState({"meeko-decor": true, newURL: document.URL}, null, document.URL); // otherwise there will be no popstate when returning to original URL
+		history.replaceState({"meeko-decor": true }, null); // otherwise there will be no popstate when returning to original URL
+		window.addEventListener("hashchange", function(e) {
+			history.replaceState({"meeko-decor": true }, null);
+		}, true);
 		// NOTE fortuitously all the browsers that support pushState() also support addEventListener()
 		window.addEventListener("click", registerClickShims, true);
 		window.addEventListener("click", clickHandler, false);
 		window.addEventListener("popstate", function(e) {
-			if (!e.state["meeko-decor"]) return;
+			if (!e.state || !e.state["meeko-decor"]) return;
 			if (e.stopImmediatePropagation) e.stopImmediatePropagation();
 			else e.stopPropagation();
-			page(document.URL);
+			// NOTE there is no default-action for popstate
+			var newURL = serverURL();
+			if (newURL != decor.contentURL) {
+				page(document.URL);
+				decor.contentURL = newURL;
+			}
+			else {
+				var el = $(location.hash);
+				if (el) el.scrollIntoView(true);
+				else window.scroll(0, 0);
+			}
 		}, true);
 	}
 	
@@ -521,11 +539,13 @@ var clickHandler = function(e) {
 	var url = resolveURL(target.getAttribute("href"));
 	if (url.indexOf(document.URL + "#") == 0) return; // browser handles anchor links
 	if (url.indexOf(location.protocol + "//" + location.host + "/") != 0) return; // and external urls
-	history.pushState({"meeko-decor": true, oldURL: document.URL, newURL: url}, null, url);
+	history.pushState({"meeko-decor": true }, null, url);
 	page(url); // FIXME this delegates failure handling to page(), but it should be handled here
+	decor.contentURL = serverURL();
 	e.preventDefault(); // NOTE this won't be our shim for preventDefault()
 }
-		
+
+// FIXME shouldn't be able to call page() if decorate() wasn't successful 
 var page = function(url, opts) {
 	var doc; 
 	return queue([
@@ -553,6 +573,10 @@ var page = function(url, opts) {
 			location.replace(url); // FIXME this should send a message to the caller
 			return;			
 		}
+	},
+	function() { // we don't get to here if location.replace() was called
+		var el = $(location.hash);
+		if (el) el.scrollIntoView(true); 		
 	}
 	
 	]);	
@@ -908,6 +932,15 @@ var resolveURL = function(relURL, context) {
 	var href = div.firstChild.href;
 	if (div.parentNode) div.parentNode.removeChild(div);
 	return href;
+}
+
+// NOTE serverURL only needs to be valid on browsers that support pushState
+var serverURL = function(relURL) {
+	if (!relURL) relURL = document.URL;
+	var a = document.createElement("a");
+	a.href = relURL;
+	a.hash = null;
+	return a.href;
 }
 
 var readyStateLookup = {
