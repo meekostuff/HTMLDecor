@@ -23,7 +23,7 @@ and `history.pushState()` is used to update the browser URL.
 
 HTMLDecor.js is less than 6kB when minified and gzipped.
 You can even access HTMLDecor.js from a CDN at
-http://dist.meekostuff.net/HTMLDecor/1.2-stable/HTMLDecor.js
+http://dist.meekostuff.net/HTMLDecor/1.3-stable/HTMLDecor.js
 
 To see this in action visit my [blog](http://meekostuff.net/blog/) where I am dog-fooding this script.
 Make sure you view the page source and check that it is just raw content.
@@ -59,7 +59,7 @@ The `<head>` may also contain fallback stylesheets, which have `@title="nodecor"
 		<!-- create a link to the decor page. All attributes are needed -->
 		<link rel="meeko-decor" type="text/html" href="decor.html" />
 		<!-- and source the HTMLDecor script -->
-		<script src="http://dist.meekostuff.net/HTMLDecor/1.2-stable/HTMLDecor.js"></script>
+		<script src="http://dist.meekostuff.net/HTMLDecor/1.3-stable/HTMLDecor.js"></script>
 		<style>
 		.page { border: 2px solid green; }
 		</style>
@@ -163,9 +163,9 @@ Installation
 
 The easiest way to use HTMLDecor is via the CDN. Simply include the following line in the `<head>` of your page:
 
-		<script src="http://dist.meekostuff.net/HTMLDecor/1.2-stable/HTMLDecor.js"></script>
+		<script src="http://dist.meekostuff.net/HTMLDecor/1.3-stable/HTMLDecor.js"></script>
 		
-Alternatively you can [download HTMLDecor.js](http://dist.meekostuff.net/HTMLDecor/1.2-stable/HTMLDecor.js)
+Alternatively you can [download HTMLDecor.js](http://dist.meekostuff.net/HTMLDecor/1.3-stable/HTMLDecor.js)
 and install it on your server. 
 
 How it works
