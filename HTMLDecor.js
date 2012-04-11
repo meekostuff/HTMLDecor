@@ -412,16 +412,13 @@ extend(decor, {
 });
 
 var start = decor.start = function() {
-	var contentPlaced = false;
 	Anim.hide();
 
 	return queue([
 	function() {
 		var decorURL = getDecorURL(document);
 		if (!decorURL) return true; // FIXME warning message
-		return decorate(decorURL, {
-			onContentPlaced: function() { Anim.unhide(); }
-		});
+		return decorate(decorURL);
 	},
 	function() {
 		this.contentURL = serverURL();
@@ -587,12 +584,14 @@ var decor_merge = function(doc, opts) {
 
 	function() {
 		mergeHead(doc, true);
+		Anim.unhide();
 	},
 	function() {
 		contentStart = document.body.firstChild;
 		decor_insertBody(doc);
 		decorEnd = document.createTextNode("");
 		document.body.insertBefore(decorEnd, contentStart);
+		notify("decorReady", document);
 	},
 	function() {
 		return until(
@@ -602,6 +601,9 @@ var decor_merge = function(doc, opts) {
 				if (contentStart) placeContent(contentStart, opts);				
 			}
 		);
+	},
+	function() {
+		notify("contentReady", document);
 	}
 	]);
 }
@@ -610,6 +612,7 @@ var page_merge = function(doc, opts) {
 	if (typeof opts != "object") opts = {};
 	return queue([
 	function() {
+		notify("decorReady", document);
 		page_preprocess(doc);
 	},
 	function() {
@@ -619,6 +622,9 @@ var page_merge = function(doc, opts) {
 		var contentStart = doc.body.firstChild;
 		if (contentStart) placeContent(contentStart, opts);
 		return true;
+	},
+	function() {
+		notify("contentReady", document);
 	}
 
 	]);
@@ -632,6 +638,7 @@ function mergeHead(doc, isDecor) {
 	// remove decor / page elements except for <script type=text/javascript>
 	forSiblings (isDecor ? "before" : "after", marker, function(node) {
 		if (tagName(node) == "script" && (!node.type || node.type.match(/^text\/javascript$/i))) return;
+		notify(isDecor ? "decorNodeRemoved" : "contentNodeRemoved", document.head, node);
 		dstHead.removeChild(node);
 	});
 
@@ -670,6 +677,7 @@ function mergeHead(doc, isDecor) {
 		}
 		if (isDecor) dstHead.insertBefore(srcNode, marker);
 		else dstHead.appendChild(srcNode);
+		notify(isDecor ? "decorNodeInserted" : "contentNodeInserted", document.body, srcNode); // TODO notify for scripts should occur when enabled
 	});
 	// allow scripts to run
 	forEach($$("script", dstHead), enableScript); // FIXME this breaks if a script inserts other scripts
@@ -698,6 +706,7 @@ function placeContent(content, opts) { // this should work for content from both
 			catch (error) { return; }
 			// TODO remove @role from node if an ancestor has same role
 			if (opts.onContentPlaced) opts.onContentPlaced(node);
+			notify("contentNodeInserted", document.body, node);
 		}
 		else try { srcBody.removeChild(node); } catch (error) {}
 	});
@@ -716,6 +725,7 @@ function decor_insertBody(doc) {
 			return;
 		}
 		dstBody.insertBefore(node, content);
+		notify("decorNodeInserted", document.body, node);
 	});
 
 	forSiblings ("before", content, function(node) {
@@ -744,6 +754,14 @@ var enableScript = function(node) {
 
 	node.parentNode.replaceChild(script, node);
 }
+
+var notify = decor.notify = document.createEvent ?
+function(type, target, detail) { // TODO is there a need for cancelable events?
+	var e = document.createEvent("CustomEvent");
+	e.initCustomEvent(type, true, false, detail); // canBubble, cancelable
+	target.dispatchEvent(e);
+} :
+function() { return; } // TODO what to do for browsers that don't support custom events (IE6,7,8)? For now you can override Meeko.decor.notify()
 
 var uriAttrs = {};
 forEach(words("link@href a@href script@src img@src iframe@src video@src audio@src source@src form@action input@formaction button@formaction"), function(text) {
