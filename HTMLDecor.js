@@ -412,26 +412,87 @@ extend(decor, {
 });
 
 var start = decor.start = function() {
-	Anim.hide();
+	var decorURL = getDecorURL(document);
+	if (!decorURL) return; // FIXME warning message
 
 	return queue([
 	function() {
-		var decorURL = getDecorURL(document);
-		if (!decorURL) return true; // FIXME warning message
 		return decorate(decorURL);
 	},
 	function() {
 		this.contentURL = serverURL();
 		decor.complete = true;
+
+		if (!history.pushState) return;
+		history.replaceState({"meeko-decor": true }, null); // otherwise there will be no popstate when returning to original URL
+		window.addEventListener("hashchange", function(e) {
+			history.replaceState({"meeko-decor": true }, null);
+		}, true);
+		// NOTE fortuitously all the browsers that support pushState() also support addEventListener() and dispatchEvent()
+		window.addEventListener("click", onClick, true);
+		window.addEventListener("popstate", onPopState, true);
 	}
-	
+		
 	]);
 }
 
-var decorate = function(decorURL, opts) {
-	var doc;
-	if (getDecorMeta()) throw "Cannot decorate a document that has already been decorated";
+var onClick = function(e) { // NOTE only pushState enabled browsers use this
+	if (e["meeko-decor"]) return; // a fake event
+	if (e.button != 0) return; // FIXME what is the value for button in IE's W3C events model??
+	var target = e.target;
+	if (tagName(target) != "a") return; // only handling hyperlink clicks
+	if (target.target) return;
+	var href = target.getAttribute("href");
+	if (!href) return;
+	var url = resolveURL(href); // TODO probably don't need resolveURL on browsers that support pushState
+	if (url.indexOf(document.URL + "#") == 0) return; // browser handles anchor links...
+	if (url.indexOf(location.protocol + "//" + location.host + "/") != 0) return; // and external urls
 	
+	e.preventDefault(); // by this point either HTMLDecor wants to prevent the default or other scripts do.
+	if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+	else e.stopPropagation();
+
+	// dispatch a fake click event
+	var fakeEvent = document.createEvent("MouseEvent");
+	fakeEvent.initMouseEvent("click", e.bubbles, e.cancelable, e.view, e.detail,
+			e.screenX, e.screenY, e.clientX, e.clientY,
+			e.ctrlKey, e.altKey, e.shiftKey, e.metaKey,
+			e.button, e.relatedTarget);
+	fakeEvent["meeko-decor"] = true;
+	
+	fakeEvent.preventDefault(); // stop the fake event from triggering navigation. TODO why do browsers even do that? WARN fakeEvent.defaultPrevented will be misleading
+	var defaultPrevented = false;
+	fakeEvent.preventDefault = function() { defaultPrevented = true; }
+	e.target.dispatchEvent(fakeEvent); 
+	if (defaultPrevented) return; // other scripts want to disable HTMLDecor. FIXME is this a good idea? 
+	
+	navigate(url);
+}
+
+var onPopState = function(e) {
+	if (!e.state || !e.state["meeko-decor"]) return;
+	if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+	else e.stopPropagation();
+	// NOTE there is no default-action for popstate
+	var newURL = serverURL();
+	if (newURL != decor.contentURL) {
+		page(document.URL);
+		decor.contentURL = newURL;
+	}
+	else {
+		var el = $(location.hash);
+		if (el) el.scrollIntoView(true);
+		else window.scroll(0, 0);
+	}
+}
+
+var decorate = function(decorURL) {
+	var doc;
+	var contentStart, decorEnd;
+
+	if (getDecorMeta()) throw "Cannot decorate a document that has already been decorated";
+	Anim.hide();
+
 	return queue([
 
 	function() {
@@ -474,75 +535,52 @@ var decorate = function(decorURL, opts) {
 		marker = document.createElement("meta");
 		marker.name = "meeko-decor";
 		document.head.insertBefore(marker, document.head.firstChild);
-		return decor_merge(doc, opts);
+	},
+	
+	/* Now merge decor into page */
+	function() {
+		mergeHead(doc, true);
+		Anim.unhide(); // can unhide page now that decor declared stylesheets have been added
 	},
 	function() {
-		if (!history.pushState) return;
-		history.replaceState({"meeko-decor": true }, null); // otherwise there will be no popstate when returning to original URL
-		window.addEventListener("hashchange", function(e) {
-			history.replaceState({"meeko-decor": true }, null);
-		}, true);
-		// NOTE fortuitously all the browsers that support pushState() also support addEventListener() and dispatchEvent()
-		window.addEventListener("click", clickHandler, true);
-		window.addEventListener("popstate", function(e) {
-			if (!e.state || !e.state["meeko-decor"]) return;
-			if (e.stopImmediatePropagation) e.stopImmediatePropagation();
-			else e.stopPropagation();
-			// NOTE there is no default-action for popstate
-			var newURL = serverURL();
-			if (newURL != decor.contentURL) {
-				page(document.URL);
-				decor.contentURL = newURL;
+		contentStart = document.body.firstChild;
+		decor_insertBody(doc);
+		decorEnd = document.createTextNode("");
+		document.body.insertBefore(decorEnd, contentStart);
+		notify("decorReady", document);
+	},
+	function() {
+		return until(
+			domContentLoaded,
+			function() {
+				contentStart = decorEnd.nextSibling;
+				if (contentStart) placeContent(contentStart);				
 			}
-			else {
-				var el = $(location.hash);
-				if (el) el.scrollIntoView(true);
-				else window.scroll(0, 0);
-			}
-		}, true);
+		);
+	},
+	function() {
+		notify("contentReady", document);
 	}
-	
+
 	]);
 }
 
-var clickHandler = function(e) { // NOTE only pushState enabled browsers use this
-	if (e["meeko-decor"]) return; // a fake event
-	if (e.button != 0) return; // FIXME what is the value for button in IE's W3C events model??
-	var target = e.target;
-	if (tagName(target) != "a") return; // only handling hyperlink clicks
-	if (target.target) return;
-	var href = target.getAttribute("href");
-	if (!href) return;
-	var url = resolveURL(href); // TODO probably don't need resolveURL on browsers that support pushState
-	if (url.indexOf(document.URL + "#") == 0) return; // browser handles anchor links...
-	if (url.indexOf(location.protocol + "//" + location.host + "/") != 0) return; // and external urls
-	
-	e.preventDefault(); // by this point either HTMLDecor wants to prevent the default or other scripts do.
-	if (e.stopImmediatePropagation) e.stopImmediatePropagation();
-	else e.stopPropagation();
-
-	// dispatch a fake click event
-	var fakeEvent = document.createEvent("MouseEvent");
-	fakeEvent.initMouseEvent("click", e.bubbles, e.cancelable, e.view, e.detail,
-			e.screenX, e.screenY, e.clientX, e.clientY,
-			e.ctrlKey, e.altKey, e.shiftKey, e.metaKey,
-			e.button, e.relatedTarget);
-	fakeEvent["meeko-decor"] = true;
-	
-	fakeEvent.preventDefault(); // stop the fake event from triggering navigation. TODO why do browsers even do that? WARN fakeEvent.defaultPrevented will be misleading
-	var defaultPrevented = false;
-	fakeEvent.preventDefault = function() { defaultPrevented = true; }
-	e.target.dispatchEvent(fakeEvent); 
-	if (defaultPrevented) return; // other scripts want to disable HTMLDecor. FIXME is this a good idea? 
-	
+var navigate = function(url) {
 	history.pushState({"meeko-decor": true }, null, url);
-	page(url); // FIXME this delegates failure handling to page(), but it should be handled here
-	decor.contentURL = serverURL();
+	var cb = page(url);
+	cb.listen("error", function(msg) {
+		location.replace(url);		
+	});
+	cb.listen("success", function(msg) {
+		decor.contentURL = serverURL();		
+	});
 }
 
 // FIXME shouldn't be able to call page() if decorate() wasn't successful 
-var page = function(url, opts) {
+var page = function(url) {
 	var doc; 
+	if (!getDecorMeta()) throw "Cannot pan the next page if the document has not been decorated";
+
 	return queue([
 
 	function() {
@@ -560,58 +598,11 @@ var page = function(url, opts) {
 		return cb;
 	},
 	function() {
-		if (getDecorURL(document) == getDecorURL(doc)) {
-			scroll(0,0);
-			return page_merge(doc, opts);
-		}
-		else { // trigger browser nav if different decor
-			location.replace(url); // FIXME this should send a message to the caller
-			return;			
-		}
+		if (getDecorURL(document) == getDecorURL(doc)) window.scroll(0,0);
+		else throw "Next page has different decor"; 
 	},
+	/* Now merge the real content */
 	function() { // we don't get to here if location.replace() was called
-		var el = $(location.hash);
-		if (el) el.scrollIntoView(true); 		
-	}
-	
-	]);	
-}
-
-var decor_merge = function(doc, opts) {
-	if (typeof opts != "object") opts = {};
-	var contentStart, decorEnd;
-	return queue([
-
-	function() {
-		mergeHead(doc, true);
-		Anim.unhide();
-	},
-	function() {
-		contentStart = document.body.firstChild;
-		decor_insertBody(doc);
-		decorEnd = document.createTextNode("");
-		document.body.insertBefore(decorEnd, contentStart);
-		notify("decorReady", document);
-	},
-	function() {
-		return until(
-			domContentLoaded,
-			function() {
-				contentStart = decorEnd.nextSibling;
-				if (contentStart) placeContent(contentStart, opts);				
-			}
-		);
-	},
-	function() {
-		notify("contentReady", document);
-	}
-	]);
-}
-
-var page_merge = function(doc, opts) {
-	if (typeof opts != "object") opts = {};
-	return queue([
-	function() {
 		notify("decorReady", document);
 		page_preprocess(doc);
 	},
@@ -620,14 +611,18 @@ var page_merge = function(doc, opts) {
 	},
 	function() {
 		var contentStart = doc.body.firstChild;
-		if (contentStart) placeContent(contentStart, opts);
+		if (contentStart) placeContent(contentStart);
 		return true;
 	},
 	function() {
 		notify("contentReady", document);
+	},
+	function() {
+		var el = $(location.hash);
+		if (el) el.scrollIntoView(true); 		
 	}
-
-	]);
+	
+	]);	
 }
 
 function mergeHead(doc, isDecor) {
@@ -696,7 +691,7 @@ function page_preprocess(doc) {
 	});
 }
 
-function placeContent(content, opts) { // this should work for content from both internal and external documents
+function placeContent(content) { // this should work for content from both internal and external documents
 	var srcBody = content.parentNode;
 	forSiblings ("starting", content, function(node) { 
 		var target;
@@ -705,7 +700,6 @@ function placeContent(content, opts) { // this should work for content from both
 			try { target.parentNode.replaceChild(node, target); } // NOTE fails in IE <= 8 if node is still loading
 			catch (error) { return; }
 			// TODO remove @role from node if an ancestor has same role
-			if (opts.onContentPlaced) opts.onContentPlaced(node);
 			notify("contentNodeInserted", document.body, node);
 		}
 		else try { srcBody.removeChild(node); } catch (error) {}
