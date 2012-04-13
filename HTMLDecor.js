@@ -407,6 +407,7 @@ var decor = this;
 
 extend(decor, {
 	contentURL: "",
+	placeHolders: {},
 	complete: false,
 	"hidden-timeout": 0
 });
@@ -437,6 +438,7 @@ var start = decor.start = function() {
 }
 
 var onClick = function(e) { // NOTE only pushState enabled browsers use this
+	// Before panning to the next page, have to work out if that is appropriate
 	if (e["meeko-decor"]) return; // a fake event
 	if (e.button != 0) return; // FIXME what is the value for button in IE's W3C events model??
 	var target = e.target;
@@ -466,6 +468,7 @@ var onClick = function(e) { // NOTE only pushState enabled browsers use this
 	e.target.dispatchEvent(fakeEvent); 
 	if (defaultPrevented) return; // other scripts want to disable HTMLDecor. FIXME is this a good idea? 
 	
+	// Now attempt to pan
 	navigate(url);
 }
 
@@ -554,7 +557,10 @@ var decorate = function(decorURL) {
 			domContentLoaded,
 			function() {
 				contentStart = decorEnd.nextSibling;
-				if (contentStart) placeContent(contentStart);				
+				if (contentStart) placeContent(contentStart, function(node, target) {
+					decor.placeHolders[target.id] = target;
+					notify("contentNodeInserted", document.body, node);
+				});	
 			}
 		);
 	},
@@ -583,6 +589,20 @@ var page = function(url) {
 
 	return queue([
 
+	function() { // FIXME contentNodeRemoved
+		each(decor.placeHolders, function(id, node) {
+			var target = $("#" + id);
+			target.style.MozTransition = "opacity 750ms ease-out";
+			target.style.opacity = "0";
+			return;
+		});
+		delay(function() {
+			if (doc) return;
+			each(decor.placeHolders, function(id, node) {
+				target.parentNode.replaceChild(node, target);				
+			});
+		}, 750);
+	},
 	function() {
 		var cb = Callback();
 		loadURL(url, {
@@ -597,6 +617,7 @@ var page = function(url) {
 		});
 		return cb;
 	},
+	function() { return delay(function() {}, 750) },
 	function() {
 		if (getDecorURL(document) == getDecorURL(doc)) window.scroll(0,0);
 		else throw "Next page has different decor"; 
@@ -611,7 +632,12 @@ var page = function(url) {
 	},
 	function() {
 		var contentStart = doc.body.firstChild;
-		if (contentStart) placeContent(contentStart);
+		if (contentStart) placeContent(contentStart, function(node) {
+			notify("contentNodeInserted", document.body, node);
+			node.style.opacity = 0;
+			node.style.MozTransition = "opacity 750ms ease-in";
+			delay(function() { node.style.opacity = 1; });
+		});
 		return true;
 	},
 	function() {
@@ -691,7 +717,7 @@ function page_preprocess(doc) {
 	});
 }
 
-function placeContent(content) { // this should work for content from both internal and external documents
+function placeContent(content, onNodeReplaced) { // this should work for content from both internal and external documents
 	var srcBody = content.parentNode;
 	forSiblings ("starting", content, function(node) { 
 		var target;
@@ -700,7 +726,7 @@ function placeContent(content) { // this should work for content from both inter
 			try { target.parentNode.replaceChild(node, target); } // NOTE fails in IE <= 8 if node is still loading
 			catch (error) { return; }
 			// TODO remove @role from node if an ancestor has same role
-			notify("contentNodeInserted", document.body, node);
+			if (onNodeReplaced) onNodeReplaced(node, target);
 		}
 		else try { srcBody.removeChild(node); } catch (error) {}
 	});
