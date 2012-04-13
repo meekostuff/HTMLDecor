@@ -21,7 +21,7 @@ When someone viewing your page clicks on a link to another page that uses the sa
 then HTMLDecor updates the real content
 and `history.pushState()` is used to update the browser URL. 
 
-HTMLDecor.js is less than 6kB when minified and gzipped.
+HTMLDecor.js is less than 7kB when minified and gzipped.
 You can even access HTMLDecor.js from a CDN at
 http://dist.meekostuff.net/HTMLDecor/1.3-stable/HTMLDecor.js
 
