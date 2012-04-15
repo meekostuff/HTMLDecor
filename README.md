@@ -35,9 +35,7 @@ For more info on the concept of HTMLDecor and its affinity with pushState assist
 - [Introducing HTMLDecor.js](http://meekostuff.net/blog/HTML-Decor-II/)
 - [pushState was made for HTMLDecor](http://meekostuff.net/blog/pushState-was-made-for-HTMLDecor/)
 
-More features are in the [road-map](https://github.com/shogun70/HTMLDecor/wiki/Road-map), including 
-
-- transition animations for "pushState assisted navigation"
+More features are in the [road-map](https://github.com/shogun70/HTMLDecor/wiki/Road-map).
 
 If you have any questions or comments, don't hesitate to contact the author via
 [web](http://meekostuff.net/), [email](mailto:shogun70@gmail.com) or [twitter](http://twitter.com/#!/meekostuff). 
