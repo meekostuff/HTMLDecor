@@ -130,6 +130,38 @@ var firstChild = function(parent, matcher) {
 		if (fn(node)) return node;
 	}
 }
+var ucFirst = function(txt) {
+    return uc(txt.charAt(0)) + txt.slice(1);	
+}
+/*
+ getStyleProperty is modified code from http://github.com/kangax/cft
+ under MIT license
+*/
+var getStyleProperty = (function() { 
+
+var prefixes = ['Moz', 'Webkit', 'Khtml', 'O', 'Ms'];
+
+function getStyleProperty(propName, element) {
+	element = element || document.documentElement;
+	var style = element.style,
+		prefixed;
+  
+	// test standard property first
+	if (typeof style[propName] == 'string') return propName;
+  
+	// capitalize
+	propName = ucFirst(propName);
+  
+	// test vendor specific properties
+	for (var i=0, l=prefixes.length; i<l; i++) {
+	  prefixed = prefixes[i] + propName;
+	  if (typeof style[prefixed] == 'string') return prefixed;
+	}
+}
+
+return getStyleProperty;
+
+})();
 
 var polyfill = function(doc) { // NOTE more stuff could be added here if *necessary*
 	if (!doc) doc = document;
@@ -582,7 +614,9 @@ var navigate = function(url) {
 	});
 }
 
-// FIXME shouldn't be able to call page() if decorate() wasn't successful 
+var transitionPropName = getStyleProperty("transition");
+
+// FIXME shouldn't be able to call page() if decorate() wasn't successful
 var page = function(url) {
 	var doc; 
 	if (!getDecorMeta()) throw "Cannot pan the next page if the document has not been decorated";
@@ -592,13 +626,14 @@ var page = function(url) {
 	function() { // FIXME contentNodeRemoved
 		each(decor.placeHolders, function(id, node) {
 			var target = $("#" + id);
-			target.style.MozTransition = "opacity 750ms ease-out";
+			target.style[transitionPropName] = "opacity 750ms ease-in-out";
 			target.style.opacity = "0";
 			return;
 		});
 		delay(function() {
 			if (doc) return;
 			each(decor.placeHolders, function(id, node) {
+				var target = $("#" + id);
 				target.parentNode.replaceChild(node, target);				
 			});
 		}, 750);
@@ -635,7 +670,7 @@ var page = function(url) {
 		if (contentStart) placeContent(contentStart, function(node) {
 			notify("contentNodeInserted", document.body, node);
 			node.style.opacity = 0;
-			node.style.MozTransition = "opacity 750ms ease-in";
+			node.style[transitionPropName] = "opacity 750ms ease-in-out";
 			delay(function() { node.style.opacity = 1; });
 		});
 		return true;
@@ -1005,14 +1040,6 @@ function getDecorURL(doc, inDecor) {
 	var link = getDecorLink(doc, inDecor);
 	if (!link) return null; // FIXME warning message
 	var decorURL = resolveURL(link.getAttribute("href"));
-	switch(lc(link.type)) { // FIXME this is just an assert currently
-	case "text/html": case "":
-		break;
-	default:
-		logger.error("Invalid decor document type: " + type);
-		throw "Invalid document type";
-		break;
-	}
 	return decorURL;
 }
 
@@ -1027,13 +1054,19 @@ function getDecorLink(doc, inDecor) {
 	forEach($$("link", doc.head), function(el) {
 		var tmp, sp = 0;
 		if (el.nodeType != 1) return;
+		var type = lc(el.type);
 		if (inDecor) {
-			if (/^\s*ALTERNATE\s*$/i.test(el.rel)) sp += 1;
+			if (!/^\s*ALTERNATE\s*$/i.test(el.rel)) return;
+			if (type == "text/html" || type == "") sp += 1;
 			else return;
 		}
 		else {
-			if (/^\s*MEEKO-DECOR\s*$/i.test(el.rel)) sp += 1;
-			else return;
+			if (!/^\s*MEEKO-DECOR\s*$/i.test(el.rel)) return;
+			if (type == "text/html" || type == "") sp += 1;
+			else {
+				logger.error("Invalid decor document type: " + type);
+				return;
+			}
 		}
 		// TODO @data-assert="<js-code>"
 		if (tmp = el.getAttribute("media")) { // FIXME polyfill for matchMedia??
