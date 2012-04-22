@@ -607,9 +607,22 @@ var navigate = function(url) {
 	history.pushState({"meeko-decor": true }, null, url);
 	var cb = page(url);
 	cb.listen("error", function(msg) {
-		location.replace(url);		
+		/*
+		  Ideally we just use
+		      location.reload()
+		  but Webkit / Chrome and Opera have buggy behavior, see https://bugs.webkit.org/show_bug.cgi?id=80697
+		  Basically, if `location.replace(url)` is the equivalent of `location.reload()` then
+		  back-button behavior is broken on the next-page.
+		  Webkit / Chrome would be fixed by
+		      history.replaceState({}, null, "#");
+		      location.replace("");
+		  but Opera needs something more.
+		  The following solution works on all browsers test.
+		*/
+		history.replaceState({}, null, decor.contentURL);
+		location.replace(url);
 	});
-	cb.listen("success", function(msg) {
+	cb.listen("complete", function(msg) {
 		decor.contentURL = serverURL();		
 	});
 }
