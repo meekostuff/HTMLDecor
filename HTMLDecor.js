@@ -517,7 +517,7 @@ var onPopState = function(e) {
 	// NOTE there is no default-action for popstate
 	var newURL = serverURL();
 	if (newURL != decor.contentURL) {
-		window.scroll(0, 0);
+		window.scroll(0, 0); // TODO Webkit / Chrome scroll the page to the historical page-offset sometime after this
 		page(document.URL);
 		decor.contentURL = newURL;
 	}
