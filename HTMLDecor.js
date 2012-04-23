@@ -517,6 +517,7 @@ var onPopState = function(e) {
 	// NOTE there is no default-action for popstate
 	var newURL = serverURL();
 	if (newURL != decor.contentURL) {
+		window.scroll(0, 0);
 		page(document.URL);
 		decor.contentURL = newURL;
 	}
