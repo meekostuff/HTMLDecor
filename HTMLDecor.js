@@ -478,7 +478,6 @@ var onClick = function(e) { // NOTE only pushState enabled browsers use this
 	var href = target.getAttribute("href");
 	if (!href) return;
 	var url = resolveURL(href); // TODO probably don't need resolveURL on browsers that support pushState
-	if (url.indexOf(document.URL + "#") == 0) return; // browser handles anchor links...
 	if (url.indexOf(location.protocol + "//" + location.host + "/") != 0) return; // and external urls
 	
 	e.preventDefault(); // by this point either HTMLDecor wants to prevent the default or other scripts do.
@@ -498,6 +497,14 @@ var onClick = function(e) { // NOTE only pushState enabled browsers use this
 	fakeEvent.preventDefault = function() { defaultPrevented = true; }
 	e.target.dispatchEvent(fakeEvent); 
 	if (defaultPrevented) return; // other scripts want to disable HTMLDecor. FIXME is this a good idea? 
+	
+	// TODO Need to handle anchor links. The following just replicates browser behavior
+	if (url.indexOf(serverURL() + "#") == 0) {
+		history.pushState({"meeko-decor": true}, null, url);
+		var el = $id(target.hash.substr(1));
+		if (el) el.scrollIntoView(true);
+		return;
+	}
 	
 	// Now attempt to pan
 	navigate(url);
