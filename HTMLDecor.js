@@ -1031,7 +1031,7 @@ var serverURL = function(relURL) {
 	var a = document.createElement("a");
 	a.href = relURL;
 	a.hash = null;
-	return a.href;
+	return a.href.replace(/#$/, ""); // NOTE work-around for Webkit
 }
 
 var readyStateLookup = {
