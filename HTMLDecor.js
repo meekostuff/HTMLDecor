@@ -78,14 +78,13 @@ var addEvent =
 	document.attachEvent && function(node, event, fn) { return node.attachEvent("on" + event, fn); } ||
 	function(node, event, fn) { node["on" + event] = fn; }
 
-var $ = function(selector, context) { // WARN only selects by #id
+var $id = function(id, context) {
 	if (!context) context = document;
 	else if (context.nodeType != 9) context = context.ownerDocument;
-	if (!selector) return; // TODO more arg checks??
-	var m = selector.match(/^#([-_a-zA-Z0-9]+)$/);
-	if (!m || !m[0]) throw (selector + " can only be an ID selector in $()");
-	var id = m[1], node = context.getElementById(id);
+	if (!id) return;
+	var node = context.getElementById(id);
 	if (node.id == id) return node;
+	// work around for broken getElementById in old IE
 	var nodeList = context.getElementsByName(id);
 	for (var n=nodeList.length, i=0; i<n; i++) {
 		node = nodeList[i];
@@ -515,7 +514,7 @@ var onPopState = function(e) {
 		decor.contentURL = newURL;
 	}
 	else {
-		var el = $(location.hash);
+		var el = $id(location.hash && location.hash.substr(1));
 		if (el) el.scrollIntoView(true);
 		else window.scroll(0, 0);
 	}
@@ -638,7 +637,7 @@ var page = function(url) {
 
 	function() { // FIXME contentNodeRemoved
 		each(decor.placeHolders, function(id, node) {
-			var target = $("#" + id);
+			var target = $id(id);
 			target.style[transitionPropName] = "opacity 750ms ease-in-out";
 			target.style.opacity = "0";
 			return;
@@ -646,7 +645,7 @@ var page = function(url) {
 		delay(function() {
 			if (doc) return;
 			each(decor.placeHolders, function(id, node) {
-				var target = $("#" + id);
+				var target = $id(id);
 				target.parentNode.replaceChild(node, target);				
 			});
 		}, 750);
@@ -692,7 +691,7 @@ var page = function(url) {
 		notify("contentReady", document);
 	},
 	function() {
-		var el = $(location.hash);
+		var el = $id(location.hash && location.hash.substr(1));
 		if (el) el.scrollIntoView(true); 		
 	}
 	
@@ -769,7 +768,7 @@ function placeContent(content, onNodeReplaced) { // this should work for content
 	var srcBody = content.parentNode;
 	forSiblings ("starting", content, function(node) { 
 		var target;
-		if (node.id && (target = $("#"+node.id)) != node) {
+		if (node.id && (target = $id(node.id)) != node) {
 			// TODO compat check between node and target
 			try { target.parentNode.replaceChild(node, target); } // NOTE fails in IE <= 8 if node is still loading
 			catch (error) { return; }
