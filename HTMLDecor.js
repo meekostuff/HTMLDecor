@@ -31,8 +31,10 @@ var defaults = { // NOTE defaults also define the type of the associated config 
 	"decor-autostart": true,
 	"decor-theme": "",
 	"decor-hidden-timeout": 3000,
-	"polling-interval": 50
+	"polling-interval": 50,
+	"transition-duration": 500
 }
+
 var vendorPrefix = "meeko"; // NOTE added as prefix for url-options, and *Storage
 var modulePrefix = "decor"; // NOTE removed as prefix for data-* attributes
 
@@ -132,35 +134,6 @@ var firstChild = function(parent, matcher) {
 var ucFirst = function(txt) {
     return uc(txt.charAt(0)) + txt.slice(1);	
 }
-/*
- getStyleProperty is modified code from http://github.com/kangax/cft
- under MIT license
-*/
-var getStyleProperty = (function() { 
-
-var prefixes = ['Moz', 'Webkit', 'Khtml', 'O', 'Ms'];
-
-function getStyleProperty(propName, element) {
-	element = element || document.documentElement;
-	var style = element.style,
-		prefixed;
-  
-	// test standard property first
-	if (typeof style[propName] == 'string') return propName;
-  
-	// capitalize
-	propName = ucFirst(propName);
-  
-	// test vendor specific properties
-	for (var i=0, l=prefixes.length; i<l; i++) {
-	  prefixed = prefixes[i] + propName;
-	  if (typeof style[prefixed] == 'string') return prefixed;
-	}
-}
-
-return getStyleProperty;
-
-})();
 
 var polyfill = function(doc) { // NOTE more stuff could be added here if *necessary*
 	if (!doc) doc = document;
@@ -634,29 +607,27 @@ var navigate = function(url) {
 	});
 }
 
-var transitionPropName = getStyleProperty("transition");
-
-// FIXME shouldn't be able to call page() if decorate() wasn't successful
 var page = function(url) {
-	var doc; 
+	var doc, ready = false;; 
 	if (!getDecorMeta()) throw "Cannot pan the next page if the document has not been decorated";
+	
+	delay(function() {
+		ready = true;
+		if (doc) return;
+		each(decor.placeHolders, function(id, node) {
+			var target = $id(id);
+			target.parentNode.replaceChild(node, target);
+		});
+	}, config["page-transition-duration"]);
 
 	return queue([
 
 	function() { // FIXME contentNodeRemoved
 		each(decor.placeHolders, function(id, node) {
 			var target = $id(id);
-			target.style[transitionPropName] = "opacity 750ms ease-in-out";
-			target.style.opacity = "0";
+			target.setAttribute("hidden", "hidden");
 			return;
 		});
-		delay(function() {
-			if (doc) return;
-			each(decor.placeHolders, function(id, node) {
-				var target = $id(id);
-				target.parentNode.replaceChild(node, target);				
-			});
-		}, 750);
 	},
 	function() {
 		var cb = Callback();
@@ -672,7 +643,7 @@ var page = function(url) {
 		});
 		return cb;
 	},
-	function() { return delay(function() {}, 750) },
+	function() { return wait(function() { return ready; }); },
 	function() {
 		if (getDecorURL(document) == getDecorURL(doc)) window.scroll(0,0);
 		else throw "Next page has different decor"; 
@@ -687,12 +658,10 @@ var page = function(url) {
 	},
 	function() {
 		var contentStart = doc.body.firstChild;
-		if (contentStart) placeContent(contentStart, function(node) {
-			notify("contentNodeInserted", document.body, node);
-			node.style.opacity = 0;
-			node.style[transitionPropName] = "opacity 750ms ease-in-out";
-			delay(function() { node.style.opacity = 1; });
-		});
+		if (contentStart) placeContent(contentStart,
+			function(node) { node.setAttribute("hidden", "hidden"); },
+			function(node) { node.removeAttribute("hidden"); }
+		);
 		return true;
 	},
 	function() {
@@ -772,16 +741,17 @@ function page_preprocess(doc) {
 	});
 }
 
-function placeContent(content, onNodeReplaced) { // this should work for content from both internal and external documents
+function placeContent(content, beforeReplace, afterReplace) { // this should work for content from both internal and external documents
 	var srcBody = content.parentNode;
 	forSiblings ("starting", content, function(node) { 
 		var target;
 		if (node.id && (target = $id(node.id)) != node) {
 			// TODO compat check between node and target
+			if (beforeReplace) beforeReplace(node, target);
 			try { target.parentNode.replaceChild(node, target); } // NOTE fails in IE <= 8 if node is still loading
 			catch (error) { return; }
 			// TODO remove @role from node if an ancestor has same role
-			if (onNodeReplaced) onNodeReplaced(node, target);
+			if (afterReplace) delay(function() { afterReplace(node, target); });
 		}
 		else try { srcBody.removeChild(node); } catch (error) {}
 	});
