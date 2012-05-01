@@ -49,7 +49,12 @@ var lc = function(str) { return str.toLowerCase(); }
 var tagName = function(el) { return el.nodeType == 1 ? el.tagName.toLowerCase() : ""; }
 
 var last = function(a) { return a[a.length - 1]; }
-
+var indexOf = ([].indexOf) ?
+function(a, item) { return a.indexOf(item); } :
+function(a, item) {
+	for (var n=a.length, i=0; i<n; i++) if (a[i] == item) return i;
+	return -1;
+}
 var forEach = ([].forEach) ? 
 function(a, fn, context) { return [].forEach.call(a, fn, context); } :
 function(a, fn, context) { for (var n=a.length, i=0; i<n; i++) fn.call(context, a[i], i, a); }
@@ -133,6 +138,15 @@ var firstChild = function(parent, matcher) {
 }
 var ucFirst = function(txt) {
     return uc(txt.charAt(0)) + txt.slice(1);	
+}
+
+var scrollToId = function(id) {
+	if (id) {
+		var el = $id(id);
+		if (el) el.scrollIntoView(true);
+	}
+	else window.scroll(0, 0);
+	document.documentElement.scrollHeight; // force page reflow
 }
 
 var polyfill = function(doc) { // NOTE more stuff could be added here if *necessary*
@@ -504,8 +518,7 @@ var onClick = function(e) { // NOTE only pushState enabled browsers use this
 	// TODO Need to handle anchor links. The following just replicates browser behavior
 	if (url.indexOf(serverURL() + "#") == 0) {
 		history.pushState({"meeko-decor": true}, null, url);
-		var el = $id(target.hash.substr(1));
-		if (el) el.scrollIntoView(true);
+		scrollToId(target.hash.substr(1));
 		return;
 	}
 	
@@ -520,19 +533,17 @@ var onPopState = function(e) {
 	// NOTE there is no default-action for popstate
 	var newURL = serverURL();
 	if (newURL != decor.contentURL) {
-		window.scroll(0, 0); // TODO Webkit / Chrome scroll the page to the historical page-offset sometime after this
+		scrollToId(); 
 		page(document.URL);
 		decor.contentURL = newURL;
 	}
 	else {
-		var el = $id(location.hash && location.hash.substr(1));
-		if (el) el.scrollIntoView(true);
-		else window.scroll(0, 0);
+		scrollToId(location.hash && location.hash.substr(1));
 	}
 }
 
 var decorate = function(decorURL) {
-	var doc;
+	var doc, complete = false;
 	var contentStart, decorEnd;
 
 	if (getDecorMeta()) throw "Cannot decorate a document that has already been decorated";
@@ -598,6 +609,7 @@ var decorate = function(decorURL) {
 		return until(
 			domContentLoaded,
 			function() {
+				var nodeList = [];
 				contentStart = decorEnd.nextSibling;
 				if (contentStart) placeContent(
 					contentStart,
@@ -605,14 +617,22 @@ var decorate = function(decorURL) {
 						decor.placeHolders[target.id] = target;
 						notify("before", "nodeInserted", document.body, node);
 					},
-					function(node, target) {
-						notify("after", "nodeInserted", document.body, node);
-					});	
+					function(node) {
+						nodeList.push(node.id);
+						delay(function() {
+							notify("after", "nodeInserted", document.body, node);
+							nodeList.splice(indexOf(nodeList, node.id), 1);
+							if (!nodeList.length) complete = true;
+						});
+					}
+				);
 			}
 		);
 	},
+	function() { return wait(function() { return complete; }); },
 	function() {
 		notify("after", "pageIn", document);
+		scrollToId(location.hash && location.hash.substr(1));
 	}
 
 	]);
@@ -643,7 +663,7 @@ var navigate = function(url) {
 }
 
 var page = function(url) {
-	var doc, ready = false;; 
+	var doc, ready = false, complete = false; 
 	if (!getDecorMeta()) throw "Cannot pan the next page if the document has not been decorated";
 	
 	delay(function() {
@@ -680,7 +700,7 @@ var page = function(url) {
 	},
 	function() { return wait(function() { return ready; }); },
 	function() {
-		if (getDecorURL(document) == getDecorURL(doc)) window.scroll(0,0);
+		if (getDecorURL(document) == getDecorURL(doc)) scrollToId();
 		else throw "Next page has different decor"; 
 	},
 	/* Now merge the real content */
@@ -692,19 +712,27 @@ var page = function(url) {
 		mergeHead(doc, false);
 	},
 	function() {
+		var nodeList = [];
 		var contentStart = doc.body.firstChild;
 		if (contentStart) placeContent(contentStart,
 			function(node) { notify("before", "nodeInserted", document.body, node); },
-			function(node) { notify("after", "nodeInserted", document.body, node); }
+			function(node) {
+				nodeList.push(node);
+				delay(function() {
+					notify("after", "nodeInserted", document.body, node);
+					nodeList.splice(indexOf(nodeList,node), 1);
+					if (!nodeList.length) complete = true;
+				});
+			}
 		);
 		return true;
 	},
+	function() { return wait(function() { return complete; }); },
 	function() {
 		notify("after", "pageIn", document);
 	},
 	function() {
-		var el = $id(location.hash && location.hash.substr(1));
-		if (el) el.scrollIntoView(true); 		
+		scrollToId(location.hash && location.hash.substr(1));
 	}
 	
 	]);	
@@ -783,7 +811,7 @@ function placeContent(content, beforeReplace, afterReplace) { // this should wor
 			if (beforeReplace) beforeReplace(node, target);
 			try { target.parentNode.replaceChild(node, target); } // NOTE fails in IE <= 8 if node is still loading
 			catch (error) { return; }
-			if (afterReplace) delay(function() { afterReplace(node, target); });
+			if (afterReplace) afterReplace(node, target);
 		}
 		else try { srcBody.removeChild(node); } catch (error) {}
 	});
