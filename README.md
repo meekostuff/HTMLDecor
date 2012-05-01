@@ -211,6 +211,67 @@ So, assuming caching is configured, the only thing that needs to be fetched from
 
 "PushState Assisted Navigation" (PAN) may sometimes be referred to as panning, as in [camera panning](http://en.wikipedia.org/Panning_\(camera\)). 
 
+## Page Transition Animation
+
+**WARNING** this is an experimental feature and the API call at least is quite likely to change. 
+
+To enable author supplied animation of page transitions, HTMLDecor provides the `Meeko.decor.configurePaging()` method. You could use it like
+
+	Meeko.decor.configurePaging({
+		duration: 0, // minimum time (ms) between paging start and end
+		nodeRemoved: {
+			before: hide, // handler for before a content node leaves the page. Called at start of transition.
+			after: show // handler for after a content node leaves the page. Cannot be called before duration has expired. 
+		},
+		nodeInserted: {
+			before: hide, // handler for before a node enters the page, after the new url has been downloaded.
+			after: show // handler for after a node enters the page. Called after a delay to allow styles set by `before` to be applied. 
+		},
+		pageOut: {
+			before: noop,
+			after: noop
+		},
+		pageIn: {
+			before: noop, // indicates that the decor is ready for content to be placed. This would allow decor to be mutated in url dependent way
+			after: noop // the equivalent of `window.onload` in non-pushstate enabled environments.
+		}
+	});
+
+	function hide(node) { node.setAttribute("hidden", "hidden"); }
+	function show(node) { node.removeAttribute("hidden"); }
+	function noop() {}
+
+This is actually the default configuration so there's no need to repeat these settings.
+The method can be called at anytime. Key / value pairs in the passed configuration object overwrite the matching internal setting. 
+A simple way to achieve a fade-out / fade-in effect on page transition is to use the following in the decor document.
+
+	<script>
+	Meeko.decor.configurePaging({
+		duration: 500
+	});
+	</script>
+	<style>
+	#main { /* assuming #main is the page-specific content */
+		-webkit-transition: opacity 0.5s linear;
+		-moz-transition: opacity 0.5s linear;
+		-ms-transition: opacity 0.5s linear;
+		-o-transition: opacity 0.5s linear;
+		transition: opacity 0.5s linear;
+	}
+	#main[hidden] {
+		display: block;
+		visibility: visible;
+		opacity: 0;
+	}
+	</style>
+
+### Waiting Indicators
+
+If a new page takes longer than one second to load, the user may wonder if the loading has stalled.
+In this case a waiting indicator is typically used to reassure the user that the page is still loading.
+HTMLDecor provides a simple way to do this - when the `duration` has expired (and the next page still hasn't loaded)
+the decor document is used as the waiting page. 
+
 `<script>` handling
 -------------------
 
@@ -322,6 +383,8 @@ The configuration options may also be useful for debugging.
 
 Configuration
 -------------
+
+**WARNING** the method of configuration is almost certain to change in a future release.
 
 You probably don't want to change the default configuration, but if you find the need, here's how.
 
