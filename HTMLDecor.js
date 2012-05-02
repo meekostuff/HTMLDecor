@@ -14,6 +14,8 @@
 // FIXME Is javascript even supported for different media devices? 
 // e.g. will <link rel="meeko-decor" media="print" /> even work?
 
+// FIXME paging events haven't been tested
+
 // FIXME for IE7, IE8 sometimes XMLHttpRequest is in a detectable but not callable state
 // This is usually fixed by refreshing, or by the following work-around.
 // OTOH, maybe my IE installation is bad
@@ -458,7 +460,7 @@ var notify = function(phase, type, target, detail) {
 		(type == "nodeRemoved" || type == "pageOut") ?
 			(phase == "before") ? handler : null :
 			(phase == "after") ? handler : null;
-	if (listener) isolate(function() { listener(detail); });
+	if (listener) isolate(function() { listener(detail); }); // TODO isFunction(listener)
 }
 
 var start = decor.start = function() {
@@ -666,24 +668,27 @@ var page = function(url) {
 	var doc, ready = false, complete = false; 
 	if (!getDecorMeta()) throw "Cannot pan the next page if the document has not been decorated";
 	
+	notify("before", "pageOut", document);
+
+	each(decor.placeHolders, function(id, node) {
+		var target = $id(id);
+		notify("before", "nodeRemoved", document.body, target);
+		return;
+	});
+
 	delay(function() {
 		ready = true;
 		if (doc) return;
 		each(decor.placeHolders, function(id, node) {
 			var target = $id(id);
 			target.parentNode.replaceChild(node, target);
+			notify("after", "nodeRemoved", document.body, target);
 		});
+		notify("after", "pageOut", document); // NOTE after pageOut won't be triggered unless in waiting state
 	}, paging.duration);
 
 	return queue([
 
-	function() { // FIXME contentNodeRemoved
-		each(decor.placeHolders, function(id, node) {
-			var target = $id(id);
-			notify("before", "nodeRemoved", document.body, target);
-			return;
-		});
-	},
 	function() {
 		var cb = Callback();
 		loadURL(url, {
