@@ -14,7 +14,8 @@
 // FIXME Is javascript even supported for different media devices? 
 // e.g. will <link rel="meeko-decor" media="print" /> even work?
 
-// FIXME paging events haven't been tested
+// FIXME paging notifications haven't been tested.
+// Also need pageOut notification onbeforeunload
 
 // FIXME for IE7, IE8 sometimes XMLHttpRequest is in a detectable but not callable state
 // This is usually fixed by refreshing, or by the following work-around.
@@ -514,8 +515,8 @@ var onClick = function(e) { // NOTE only pushState enabled browsers use this
 	fakeEvent.preventDefault(); // stop the fake event from triggering navigation. TODO why do browsers even do that? WARN fakeEvent.defaultPrevented will be misleading
 	var defaultPrevented = false;
 	fakeEvent.preventDefault = function() { defaultPrevented = true; }
-	e.target.dispatchEvent(fakeEvent); 
-	if (defaultPrevented) return; // other scripts want to disable HTMLDecor. FIXME is this a good idea? 
+	var result = e.target.dispatchEvent(fakeEvent); 
+	if (result == false || defaultPrevented) return; // other scripts want to disable HTMLDecor. FIXME is this a good idea? 
 	
 	// TODO Need to handle anchor links. The following just replicates browser behavior
 	if (url.indexOf(serverURL() + "#") == 0) {
