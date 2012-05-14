@@ -512,11 +512,16 @@ var onClick = function(e) { // NOTE only pushState enabled browsers use this
 			e.button, e.relatedTarget);
 	fakeEvent["meeko-decor"] = true;
 	
-	fakeEvent.preventDefault(); // stop the fake event from triggering navigation. TODO why do browsers even do that? WARN fakeEvent.defaultPrevented will be misleading
 	var defaultPrevented = false;
-	fakeEvent.preventDefault = function() { defaultPrevented = true; }
+	function preventDefault(event) { if (event.defaultPrevented) defaultPrevented = true; event.preventDefault(); }
+	fakeEvent._stopPropagation = fakeEvent.stopPropagation;
+	fakeEvent.stopPropagation = function() { preventDefault(this); this._stopPropagation(); }
+	fakeEvent._stopImmediatePropagation = fakeEvent.stopImmediatePropagation;
+	fakeEvent.stopImmediatePropagation = function() { preventDefault(this); this._stopImmediatePropagation(); }
+	window.addEventListener("click", preventDefault, false);
 	var result = e.target.dispatchEvent(fakeEvent); 
-	if (result == false || defaultPrevented) return; // other scripts want to disable HTMLDecor. FIXME is this a good idea? 
+	window.removeEventListener("click", preventDefault, false);
+	if (defaultPrevented) return; // other scripts want to disable HTMLDecor. FIXME is this a good idea? 
 	
 	// TODO Need to handle anchor links. The following just replicates browser behavior
 	if (url.indexOf(serverURL() + "#") == 0) {
