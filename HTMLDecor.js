@@ -93,6 +93,7 @@ var $id = function(id, context) {
 	else if (context.nodeType != 9) context = context.ownerDocument;
 	if (!id) return;
 	var node = context.getElementById(id);
+	if (!node) return;
 	if (node.id == id) return node;
 	// work around for broken getElementById in old IE
 	var nodeList = context.getElementsByName(id);
