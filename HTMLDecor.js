@@ -88,6 +88,11 @@ var addEvent =
 	document.attachEvent && function(node, event, fn) { return node.attachEvent("on" + event, fn); } ||
 	function(node, event, fn) { node["on" + event] = fn; }
 
+var removeEvent = 
+	document.removeEventListener && function(node, event, fn) { return node.removeEventListener(event, fn, false); } ||
+	document.detachEvent && function(node, event, fn) { return node.detachEvent("on" + event, fn); } ||
+	function(node, event, fn) { if (node["on" + event] == fn) node["on" + event] = null; }
+
 var $id = function(id, context) {
 	if (!context) context = document;
 	else if (context.nodeType != 9) context = context.ownerDocument;
@@ -474,9 +479,11 @@ var start = decor.start = function() {
 		return decorate(decorURL);
 	},
 	function() {
-		this.contentURL = serverURL();
-
+		decor.contentURL = serverURL();
+		addEvent(window, "unload", pageOut);
+		
 		if (!history.pushState) return;
+		
 		history.replaceState({"meeko-decor": true }, null); // otherwise there will be no popstate when returning to original URL
 		window.addEventListener("hashchange", function(e) {
 			history.replaceState({"meeko-decor": true }, null);
@@ -664,6 +671,7 @@ var navigate = function(url) {
 		  The following solution works on all browsers test.
 		*/
 		history.replaceState({}, null, decor.contentURL);
+		removeEvent(window, "unload", pageOut);
 		location.replace(url);
 	});
 	cb.listen("complete", function(msg) {
@@ -671,9 +679,31 @@ var navigate = function(url) {
 	});
 }
 
+var pageOut = function() { // this is only called by window.onunload
+	// TODO this shares a lot of code with page()
+	if (!getDecorMeta()) throw "Cannot page if the document has not been decorated";
+
+	notify("before", "pageOut", document);
+
+	each(decor.placeHolders, function(id, node) {
+		var target = $id(id);
+		notify("before", "nodeRemoved", document.body, target);
+		return;
+	});
+
+	delay(function() { // NOTE might never get to this point
+		each(decor.placeHolders, function(id, node) {
+			var target = $id(id);
+			target.parentNode.replaceChild(node, target);
+			notify("after", "nodeRemoved", document.body, target);
+		});
+		notify("after", "pageOut", document);
+	}, paging.duration);	
+}
+
 var page = function(url) {
 	var doc, ready = false, complete = false; 
-	if (!getDecorMeta()) throw "Cannot pan the next page if the document has not been decorated";
+	if (!getDecorMeta()) throw "Cannot page if the document has not been decorated";
 	
 	notify("before", "pageOut", document);
 
