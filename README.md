@@ -8,7 +8,8 @@ HTMLDecor
 > You'll cut the download time of every page,
 > plus "pushState assisted navigation" comes for free.
 
-HTMLDecor allows your site to deliver real page content first (and fast).
+HTMLDecor is a Javascript page template engine which runs in the browser.
+It allows your site to deliver real page content first (and fast).
 Your site decor can be placed in its own page and merged in the browser instead of on the server. 
 
 A site decor page is similar to an external stylesheet in that it can be shared between several pages
@@ -290,6 +291,8 @@ but BEFORE the page content is MERGED WITH the decor.
 - When panning occurs, scripts in the `<head>` of the next page are **enabled** AFTER all the content in the `<head>` of the next page is MERGED WITH the page. 
 Scripts in the `<body>` of the next page are **enabled** AFTER the content in the `<body>` of the next page is MERGED WITH the page.
 You do not need and you SHOULD NOT have scripts in the next page.
+
+**WARNING** Execution order of downloaded scripts will not necessarily be the same as their source order. 
 
 Alternate Decor
 ---------------
