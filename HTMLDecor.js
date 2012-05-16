@@ -145,6 +145,10 @@ var firstChild = function(parent, matcher) {
 		if (fn(node)) return node;
 	}
 }
+var replaceNode = function(current, next) {
+	current.parentNode.replaceChild(next, current);
+	return current;
+}
 var ucFirst = function(txt) {
     return uc(txt.charAt(0)) + txt.slice(1);	
 }
@@ -691,10 +695,10 @@ var pageOut = function() { // this is only called by window.onunload
 		return;
 	});
 
-	delay(function() { // NOTE might never get to this point
+	delay(function() { // NOTE might never get to this point - browsing context may already have moved on
 		each(decor.placeHolders, function(id, node) {
 			var target = $id(id);
-			target.parentNode.replaceChild(node, target);
+			replaceNode(target, node);
 			notify("after", "nodeRemoved", document.body, target);
 		});
 		notify("after", "pageOut", document);
@@ -718,7 +722,7 @@ var page = function(url) {
 		if (doc) return;
 		each(decor.placeHolders, function(id, node) {
 			var target = $id(id);
-			target.parentNode.replaceChild(node, target);
+			replaceNode(target, node);
 			notify("after", "nodeRemoved", document.body, target);
 		});
 		notify("after", "pageOut", document); // NOTE after pageOut won't be triggered unless in waiting state
@@ -851,7 +855,7 @@ function placeContent(content, beforeReplace, afterReplace) { // this should wor
 		if (node.id && (target = $id(node.id)) != node) {
 			// TODO compat check between node and target
 			if (beforeReplace) beforeReplace(node, target);
-			try { target.parentNode.replaceChild(node, target); } // NOTE fails in IE <= 8 if node is still loading
+			try { replaceNode(target, node); } // NOTE fails in IE <= 8 if node is still loading
 			catch (error) { return; }
 			if (afterReplace) afterReplace(node, target);
 		}
@@ -898,7 +902,7 @@ var enableScript = function(node) {
 	try { script.innerHTML = node.innerHTML; }
 	catch (error) { script.text = node.text; }
 
-	node.parentNode.replaceChild(script, node);
+	replaceNode(node, script);
 }
 
 var uriAttrs = {};
