@@ -676,7 +676,7 @@ var navigate = function(url) {
 		*/
 		history.replaceState({}, null, decor.contentURL);
 		removeEvent(window, "unload", pageOut);
-		addEvent(window, "unload", noop);
+		addEvent(window, "unload", noop); // Disable bfcache
 		location.replace(url);
 	});
 	cb.listen("complete", function(msg) {
