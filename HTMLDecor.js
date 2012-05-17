@@ -14,9 +14,6 @@
 // FIXME Is javascript even supported for different media devices? 
 // e.g. will <link rel="meeko-decor" media="print" /> even work?
 
-// FIXME paging notifications haven't been tested.
-// Also need pageOut notification onbeforeunload
-
 // FIXME for IE7, IE8 sometimes XMLHttpRequest is in a detectable but not callable state
 // This is usually fixed by refreshing, or by the following work-around.
 // OTOH, maybe my IE installation is bad
