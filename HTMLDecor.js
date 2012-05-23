@@ -146,9 +146,6 @@ var replaceNode = function(current, next) {
 	current.parentNode.replaceChild(next, current);
 	return current;
 }
-var ucFirst = function(txt) {
-    return uc(txt.charAt(0)) + txt.slice(1);	
-}
 
 var scrollToId = function(id) {
 	if (id) {
