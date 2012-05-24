@@ -266,6 +266,10 @@ A simple way to achieve a fade-out / fade-in effect on page transition is to use
 	}
 	</style>
 
+**NOTE** There is not always a notification **after** `pageOut`.
+For instance, if the next page is ready before the transition duration has expired
+then the new nodes replace the old nodes directly, rather than transitioning through the decor placeholders. 
+
 ### Waiting Indicators
 
 If a new page takes longer than one second to load, the user may wonder if the loading has stalled.
