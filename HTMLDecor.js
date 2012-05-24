@@ -143,6 +143,7 @@ var firstChild = function(parent, matcher) {
 	}
 }
 var replaceNode = function(current, next) {
+	if (document.adoptNode) next = document.adoptNode(next); // Safari 5 was throwing because imported nodes had been added to a document node
 	current.parentNode.replaceChild(next, current);
 	return current;
 }
@@ -746,7 +747,7 @@ var page = function(url) {
 	},
 	/* Now merge the real content */
 	function() { // we don't get to here if location.replace() was called
-		notify("before", "pageIn", document);
+		notify("before", "pageIn", document, doc);
 		page_preprocess(doc);
 	},
 	function() {
@@ -999,17 +1000,15 @@ function normalizeDocument(doc, baseURL) {
 var importDocument = document.importNode ? // NOTE returns a pseudoDoc
 function(srcDoc) {
 	var docEl = document.importNode(srcDoc.documentElement, true);
-	var pseudoDoc = {
-		documentElement: docEl,
-		head: firstChild(docEl, "head"),
-		body: firstChild(docEl, "body")
-	}
+	var doc = createDocument();
+	doc.appendChild(docEl);
+	polyfill(doc);
 	// WARN sometimes IE9 doesn't read the content of inserted <style>
-	forEach($$("style", docEl), function(node) {
+	forEach($$("style", doc), function(node) {
 		if (node.styleSheet && node.styleSheet.cssText == "") node.styleSheet.cssText = node.innerHTML;		
 	});
 	
-	return pseudoDoc;
+	return doc;
 } :
 function(srcDoc) {
 	var docEl = importNode(srcDoc.documentElement),
@@ -1025,13 +1024,21 @@ function(srcDoc) {
 
 	docEl.appendChild(docBody);
 	docBody.innerHTML = srcDoc.body.innerHTML;
-	var pseudoDoc = {
-		documentElement: docEl,
-		head: docHead,
-		body: docBody
-	}
-	return pseudoDoc;
+
+	var doc = createDocument();
+	doc.appendChild(docEl);
+	polyfill(doc);
+	return doc;
 }
+
+var createDocument =
+document.implementation.createHTMLDocument && function() {
+	var doc = document.implementation.createHTMLDocument("");
+	doc.removeChild(doc.documentElement);
+	return doc;
+} ||
+document.createDocumentFragment().getElementById && function() { return document.createDocumentFragment(); } || // IE <= 8 
+function() { return document.cloneNode(false); } 
 
 var importNode = document.importNode ? // NOTE only for single nodes, especially elements in <head>
 function(srcNode) { 
@@ -1216,11 +1223,7 @@ function _unhide() {
 	// NOTE on IE sometimes content stays hidden although 
 	// the stylesheet has been removed.
 	// The following forces the content to be revealed
-	var docBody = document.body;
-	if (docBody) {
-		docBody.style.visibility = "hidden";
-		docBody.style.visibility = "";
-	}
+	delay(function() { document.body.style.visibility = ""; }, config["polling-interval"]);
 }
 
 /* 
