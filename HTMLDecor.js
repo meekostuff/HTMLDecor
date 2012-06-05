@@ -499,7 +499,8 @@ var onClick = function(e) { // NOTE only pushState enabled browsers use this
 	// Before panning to the next page, have to work out if that is appropriate
 	if (e["meeko-decor"]) return; // a fake event
 	if (e.button != 0) return; // FIXME what is the value for button in IE's W3C events model??
-	var target = e.target;
+	// Find closest <a> to e.target
+	for (var target=e.target; target!=document.body; target=target.parentNode) if (tagName(target) == "a") break;
 	if (tagName(target) != "a") return; // only handling hyperlink clicks
 	if (target.target) return;
 	var href = target.getAttribute("href");
@@ -575,7 +576,7 @@ var decorate = function(decorURL) {
 			},
 			onError: function(error) {
 				logger.error("loadURL fail for " + decorURL);
-				throw "loadURL fail";
+				cb("error");
 			}
 		});
 		return cb;
@@ -593,7 +594,7 @@ var decorate = function(decorURL) {
 			},
 			onError: function(error) {
 				logger.error("loadURL fail for " + altDecorURL);
-				throw "loadURL fail";
+				cb("error");
 			}
 		});
 		return cb;
@@ -735,7 +736,7 @@ var page = function(url) {
 			},
 			onError: function(error) {
 				logger.error("loadURL fail for " + url);
-				throw "loadURL fail";				
+				cb("error");
 			}
 		});
 		return cb;
