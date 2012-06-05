@@ -233,7 +233,7 @@ To enable author supplied animation of page transitions, HTMLDecor provides the 
 			after: noop
 		},
 		pageIn: {
-			before: noop, // indicates that the decor is ready for content to be placed. This would allow decor to be mutated in url dependent way
+			before: preprocess, // indicates that the decor is ready for content to be placed. This would allow decor to be mutated in url dependent way
 			after: noop // the equivalent of `window.onload` in non-pushstate enabled environments.
 		}
 	});
@@ -241,6 +241,7 @@ To enable author supplied animation of page transitions, HTMLDecor provides the 
 	function hide(node) { node.setAttribute("hidden", "hidden"); }
 	function show(node) { node.removeAttribute("hidden"); }
 	function noop() {}
+	function preprocess(doc) { /* `doc` is the DOM of the next page which can be preprocessed before merged */ }
 
 This is actually the default configuration so there's no need to repeat these settings.
 The method can be called at anytime. Key / value pairs in the passed configuration object overwrite the matching internal setting. 
