@@ -38,15 +38,21 @@ var defaults = { // NOTE defaults also define the type of the associated config 
 var vendorPrefix = "meeko"; // NOTE added as prefix for url-options, and *Storage
 var modulePrefix = "decor"; // NOTE removed as prefix for data-* attributes
 
+var Meeko = window.Meeko || (window.Meeko = {});
+
 /*
  ### Utility functions
  */
 
 var document = window.document;
 
+var extend = function(dest, src) {
+	each(src, function(key, val) { dest[key] = val; });
+}
+
 var uc = function(str) { return str.toUpperCase(); }
 var lc = function(str) { return str.toLowerCase(); }
-var tagName = function(el) { return el.nodeType == 1 ? el.tagName.toLowerCase() : ""; }
+var tagName = function(el) { return el.nodeType == 1 ? lc(el.tagName) : ""; }
 
 var last = function(a) { return a[a.length - 1]; }
 var indexOf = ([].indexOf) ?
@@ -74,10 +80,6 @@ var each = function(object, fn) {
 	for (slot in object) {
 		if (object.hasOwnProperty && object.hasOwnProperty(slot)) fn(slot, object[slot]);
 	}
-}
-
-var extend = function(dest, src) {
-	each(src, function(key, val) { dest[key] = val; });
 }
 
 var addEvent = 
@@ -391,8 +393,6 @@ var getConfig = function() {
 
 var config = getConfig();
 
-var Meeko = window.Meeko || (window.Meeko = {});
-
 var logger = Meeko.logger || (Meeko.logger = new function() {
 
 var levels = words("NONE ERROR WARN INFO DEBUG");
@@ -488,31 +488,29 @@ var start = decor.start = function() {
 			history.replaceState({"meeko-decor": true }, null);
 		}, true);
 		// NOTE fortuitously all the browsers that support pushState() also support addEventListener() and dispatchEvent()
-		window.addEventListener("click", onClick, true);
-		window.addEventListener("popstate", onPopState, true);
+		window.addEventListener("click", decor.onClick, true);
+		window.addEventListener("popstate", decor.onPopState, true);
 	}
 		
 	]);
 }
 
-var onClick = function(e) { // NOTE only pushState enabled browsers use this
+extend(decor, {
+onClick: function(e) { // NOTE only pushState enabled browsers use this
 	// Before panning to the next page, have to work out if that is appropriate
 	if (e["meeko-decor"]) return; // a fake event
 	if (e.button != 0) return; // FIXME what is the value for button in IE's W3C events model??
 	// Find closest <a> to e.target
 	for (var target=e.target; target!=document.body; target=target.parentNode) if (tagName(target) == "a") break;
 	if (tagName(target) != "a") return; // only handling hyperlink clicks
-	if (target.target) return;
 	var href = target.getAttribute("href");
 	if (!href) return;
-	var url = resolveURL(href); // TODO probably don't need resolveURL on browsers that support pushState
-	if (url.indexOf(location.protocol + "//" + location.host + "/") != 0) return; // and external urls
-	
-	e.preventDefault(); // by this point either HTMLDecor wants to prevent the default or other scripts do.
+
+	// stop the real click event propagating...
 	if (e.stopImmediatePropagation) e.stopImmediatePropagation();
 	else e.stopPropagation();
 
-	// dispatch a fake click event
+	// and dispatch a fake click event
 	var fakeEvent = document.createEvent("MouseEvent");
 	fakeEvent.initMouseEvent("click", e.bubbles, e.cancelable, e.view, e.detail,
 			e.screenX, e.screenY, e.clientX, e.clientY,
@@ -520,29 +518,49 @@ var onClick = function(e) { // NOTE only pushState enabled browsers use this
 			e.button, e.relatedTarget);
 	fakeEvent["meeko-decor"] = true;
 	
-	var defaultPrevented = false;
+	// NOTE the fake event MUST have the default prevented, so provide a way to discover if another script requested it
+	var defaultPrevented = false; 
 	function preventDefault(event) { if (event.defaultPrevented) defaultPrevented = true; event.preventDefault(); }
 	fakeEvent._stopPropagation = fakeEvent.stopPropagation;
 	fakeEvent.stopPropagation = function() { preventDefault(this); this._stopPropagation(); }
 	fakeEvent._stopImmediatePropagation = fakeEvent.stopImmediatePropagation;
 	fakeEvent.stopImmediatePropagation = function() { preventDefault(this); this._stopImmediatePropagation(); }
 	window.addEventListener("click", preventDefault, false);
-	var result = e.target.dispatchEvent(fakeEvent); 
+	e.target.dispatchEvent(fakeEvent); 
 	window.removeEventListener("click", preventDefault, false);
-	if (defaultPrevented) return; // other scripts want to disable HTMLDecor. FIXME is this a good idea? 
 	
+	if (defaultPrevented) { // other scripts want to disable HTMLDecor. FIXME is this a good idea?
+		e.preventDefault();
+		return;
+	}
+	
+	var acceptDefault = decor.onHyperlink(target);
+	if (acceptDefault == false) e.preventDefault();
+},
+
+onHyperlink: function(target) { // return false to preventDefault
+	if (target.target) return;
+	var url = resolveURL(target.getAttribute("href")); // TODO probably don't need resolveURL on browsers that support pushState
+	if (url.indexOf(location.protocol + "//" + location.host + "/") != 0) return; // and external urls
+	
+	// by this point HTMLDecor wants to prevent the browser default
 	// TODO Need to handle anchor links. The following just replicates browser behavior
 	if (url.indexOf(serverURL() + "#") == 0) {
 		history.pushState({"meeko-decor": true}, null, url);
 		scrollToId(target.hash.substr(1));
-		return;
+		return false;
 	}
-	
+
+	return decor.onSiteLink(url);
+},
+
+onSiteLink: function(url) { // return false to preventDefault
 	// Now attempt to pan
 	navigate(url);
-}
+	return false;
+},
 
-var onPopState = function(e) {
+onPopState: function(e) {
 	if (!e.state || !e.state["meeko-decor"]) return;
 	if (e.stopImmediatePropagation) e.stopImmediatePropagation();
 	else e.stopPropagation();
@@ -557,6 +575,9 @@ var onPopState = function(e) {
 		scrollToId(location.hash && location.hash.substr(1));
 	}
 }
+
+});
+
 
 var decorate = function(decorURL) {
 	var doc, complete = false;
@@ -680,50 +701,12 @@ var navigate = function(url) {
 	});
 }
 
-var pageOut = function() { // this is only called by window.onunload
-	// TODO this shares a lot of code with page()
-	if (!getDecorMeta()) throw "Cannot page if the document has not been decorated";
-
-	notify("before", "pageOut", document);
-
-	each(decor.placeHolders, function(id, node) {
-		var target = $id(id);
-		notify("before", "nodeRemoved", document.body, target);
-		return;
-	});
-
-	delay(function() { // NOTE might never get to this point - browsing context may already have moved on
-		each(decor.placeHolders, function(id, node) {
-			var target = $id(id);
-			replaceNode(target, node);
-			notify("after", "nodeRemoved", document.body, target);
-		});
-		notify("after", "pageOut", document);
-	}, paging.duration);	
-}
-
 var page = function(url) {
-	var doc, ready = false, complete = false; 
-	if (!getDecorMeta()) throw "Cannot page if the document has not been decorated";
+	var doc, ready = false, complete = false;
+
+	pageOut();
 	
-	notify("before", "pageOut", document);
-
-	each(decor.placeHolders, function(id, node) {
-		var target = $id(id);
-		notify("before", "nodeRemoved", document.body, target);
-		return;
-	});
-
-	delay(function() {
-		ready = true;
-		if (doc) return;
-		each(decor.placeHolders, function(id, node) {
-			var target = $id(id);
-			replaceNode(target, node);
-			notify("after", "nodeRemoved", document.body, target);
-		});
-		notify("after", "pageOut", document); // NOTE after pageOut won't be triggered unless in waiting state
-	}, paging.duration);
+	delay(function() { ready = true; }, paging.duration);
 
 	return queue([
 
@@ -731,7 +714,7 @@ var page = function(url) {
 		var cb = Callback();
 		loadURL(url, {
 			onSuccess: function(result) {
-				doc = result;
+				doc = decor.newDocument = result;
 				cb("complete");
 			},
 			onError: function(error) {
@@ -746,8 +729,45 @@ var page = function(url) {
 		if (getDecorURL(document) == getDecorURL(doc)) scrollToId();
 		else throw "Next page has different decor"; 
 	},
-	/* Now merge the real content */
-	function() { // we don't get to here if location.replace() was called
+	// we don't get to here if location.replace() was called
+	function() {
+		return pageIn();
+	},
+	function() {
+		decor.newDocument = null;
+	},
+	
+	]);	
+}
+
+var pageOut = function() { // this is only called by window.onunload
+	// TODO this shares a lot of code with page()
+	if (!getDecorMeta()) throw "Cannot page if the document has not been decorated";
+
+	notify("before", "pageOut", document);
+
+	each(decor.placeHolders, function(id, node) {
+		var target = $id(id);
+		notify("before", "nodeRemoved", document.body, target);
+		return;
+	});
+
+	delay(function() { // NOTE might never get to this point - browsing context may already have moved on
+		if (decor.newDocument) return;
+		each(decor.placeHolders, function(id, node) {
+			var target = $id(id);
+			replaceNode(target, node);
+			notify("after", "nodeRemoved", document.body, target);
+		});
+		notify("after", "pageOut", document);
+	}, paging.duration);	
+}
+
+var pageIn = function() {
+	var doc = decor.newDocument;
+	return queue([
+
+	function() {
 		notify("before", "pageIn", document, doc);
 		page_preprocess(doc);
 	},
@@ -755,6 +775,7 @@ var page = function(url) {
 		mergeHead(doc, false);
 	},
 	function() {
+		var cb = Callback();
 		var nodeList = [];
 		var contentStart = doc.body.firstChild;
 		if (contentStart) placeContent(contentStart,
@@ -764,22 +785,21 @@ var page = function(url) {
 				delay(function() {
 					notify("after", "nodeInserted", document.body, node);
 					nodeList.splice(indexOf(nodeList,node), 1);
-					if (!nodeList.length) complete = true;
+					if (!nodeList.length) cb("complete");
 				});
 			}
 		);
-		return true;
-	},
-	function() { return wait(function() { return complete; }); },
-	function() {
-		notify("after", "pageIn", document);
+		return cb;
 	},
 	function() {
 		scrollToId(location.hash && location.hash.substr(1));
+		notify("after", "pageIn", document);
 	}
 	
-	]);	
+	
+	]);
 }
+
 
 function mergeHead(doc, isDecor) {
 	var dstHead = document.head;
