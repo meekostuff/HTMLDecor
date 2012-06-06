@@ -46,13 +46,8 @@ var Meeko = window.Meeko || (window.Meeko = {});
 
 var document = window.document;
 
-var extend = function(dest, src) {
-	each(src, function(key, val) { dest[key] = val; });
-}
-
 var uc = function(str) { return str.toUpperCase(); }
 var lc = function(str) { return str.toLowerCase(); }
-var tagName = function(el) { return el.nodeType == 1 ? lc(el.tagName) : ""; }
 
 var last = function(a) { return a[a.length - 1]; }
 var indexOf = ([].indexOf) ?
@@ -82,90 +77,17 @@ var each = function(object, fn) {
 	}
 }
 
-var addEvent = 
-	document.addEventListener && function(node, event, fn) { return node.addEventListener(event, fn, false); } ||
-	document.attachEvent && function(node, event, fn) { return node.attachEvent("on" + event, fn); } ||
-	function(node, event, fn) { node["on" + event] = fn; }
-
-var removeEvent = 
-	document.removeEventListener && function(node, event, fn) { return node.removeEventListener(event, fn, false); } ||
-	document.detachEvent && function(node, event, fn) { return node.detachEvent("on" + event, fn); } ||
-	function(node, event, fn) { if (node["on" + event] == fn) node["on" + event] = null; }
-
-var $id = function(id, context) {
-	if (!context) context = document;
-	else if (context.nodeType != 9) context = context.ownerDocument;
-	if (!id) return;
-	var node = context.getElementById(id);
-	if (!node) return;
-	if (node.id == id) return node;
-	// work around for broken getElementById in old IE
-	var nodeList = context.getElementsByName(id);
-	for (var n=nodeList.length, i=0; i<n; i++) {
-		node = nodeList[i];
-		if (node.id == id) return node;
-	}
-}
-var $$ = function(selector, context) { // WARN only selects by tagName
-	context = context || document;
-	try { return context.getElementsByTagName(selector); }
-	catch (error) {
-		throw (selector + " can only be a tagName selector in $$()");
-	}
+var extend = function(dest, src) {
+	each(src, function(key, val) { dest[key] = val; });
 }
 
-var forSiblings = function(conf, refNode, fn) {
-	if (!refNode || !refNode.parentNode) return;
-	var node, stopNode, first = refNode.parentNode.firstChild;
-	switch (lc(conf)) {
-	case "starting": node = refNode; break;
-	case "ending": node = first; stopNode = refNode.nextSibling; break;
-	case "after": node = refNode.nextSibling; break;
-	case "before": node = first; stopNode = refNode; break;
-	default: throw conf + " is not a valid configuration in forSiblings";
-	}
-	if (!node) return;
-	for (var next; next=node && node.nextSibling, node && node!=stopNode; node=next) fn(node);
-}
-var matchesElement = function(selector, node) { // WARN only matches by tagName
-	var tag = lc(selector);
-	var matcher = function(el) {
-		return (el.nodeType == 1 && tagName(el) == tag);
-	}
-	return (node) ? matcher(node) : matcher;
-}
-var firstChild = function(parent, matcher) {
-	var fn = (typeof matcher == "function") ? 
-		matcher : 
-		matchesElement(matcher);
-	var nodeList = parent.childNodes;
-	for (var n=nodeList.length, i=0; i<n; i++) {
-		var node = nodeList[i];
-		if (fn(node)) return node;
-	}
-}
-var replaceNode = function(current, next) {
-	if (document.adoptNode) next = document.adoptNode(next); // Safari 5 was throwing because imported nodes had been added to a document node
-	current.parentNode.replaceChild(next, current);
-	return current;
-}
+if (!Meeko.stuff) Meeko.stuff = {}
+extend(Meeko.stuff, {
+	uc: uc, lc: lc, last: last, indexOf: indexOf, forEach: forEach, every: every, words: words, each: each, extend: extend
+});
 
-var scrollToId = function(id) {
-	if (id) {
-		var el = $id(id);
-		if (el) el.scrollIntoView(true);
-	}
-	else window.scroll(0, 0);
-	document.documentElement.scrollHeight; // force page reflow
-}
-
-var polyfill = function(doc) { // NOTE more stuff could be added here if *necessary*
-	if (!doc) doc = document;
-	if (!doc.head) doc.head = firstChild(doc.documentElement, "head");
-}
-polyfill();
-
-/* Async functions
+/*
+ ### Async functions
    wait(test) waits until test() returns true
    until(test, fn) repeats call to fn() until test() returns true
    delay(fn, timeout) makes one call to fn() after timeout ms
@@ -239,7 +161,6 @@ var Callback = function() {
 function isCallback(obj) {
 	return (obj && obj.isCallback);
 }
-
 
 var wait = (function() {
 	
@@ -337,6 +258,317 @@ function queue(fnList, queueCB) {
 return queue;
 
 })();
+
+/*
+ ### DOM utility functions
+ */
+var tagName = function(el) { return el.nodeType == 1 ? lc(el.tagName) : ""; }
+
+var $id = function(id, context) {
+	if (!context) context = document;
+	else if (context.nodeType != 9) context = context.ownerDocument;
+	if (!id) return;
+	var node = context.getElementById(id);
+	if (!node) return;
+	if (node.id == id) return node;
+	// work around for broken getElementById in old IE
+	var nodeList = context.getElementsByName(id);
+	for (var n=nodeList.length, i=0; i<n; i++) {
+		node = nodeList[i];
+		if (node.id == id) return node;
+	}
+}
+var $$ = function(selector, context) { // WARN only selects by tagName
+	context = context || document;
+	try { return context.getElementsByTagName(selector); }
+	catch (error) {
+		throw (selector + " can only be a tagName selector in $$()");
+	}
+}
+
+var forSiblings = function(conf, refNode, fn) {
+	if (!refNode || !refNode.parentNode) return;
+	var node, stopNode, first = refNode.parentNode.firstChild;
+	switch (lc(conf)) {
+	case "starting": node = refNode; break;
+	case "ending": node = first; stopNode = refNode.nextSibling; break;
+	case "after": node = refNode.nextSibling; break;
+	case "before": node = first; stopNode = refNode; break;
+	default: throw conf + " is not a valid configuration in forSiblings";
+	}
+	if (!node) return;
+	for (var next; next=node && node.nextSibling, node && node!=stopNode; node=next) fn(node);
+}
+var matchesElement = function(selector, node) { // WARN only matches by tagName
+	var tag = lc(selector);
+	var matcher = function(el) {
+		return (el.nodeType == 1 && tagName(el) == tag);
+	}
+	return (node) ? matcher(node) : matcher;
+}
+var firstChild = function(parent, matcher) {
+	var fn = (typeof matcher == "function") ? 
+		matcher : 
+		matchesElement(matcher);
+	var nodeList = parent.childNodes;
+	for (var n=nodeList.length, i=0; i<n; i++) {
+		var node = nodeList[i];
+		if (fn(node)) return node;
+	}
+}
+var replaceNode = function(current, next) {
+	if (document.adoptNode) next = document.adoptNode(next); // Safari 5 was throwing because imported nodes had been added to a document node
+	current.parentNode.replaceChild(next, current);
+	return current;
+}
+
+var copyAttributes = function(node, srcNode) { // implements srcNode.cloneNode(false)
+	var attrs = srcNode.attributes;
+	forEach(attrs, function(attr) {
+		if (!attr.specified) return;
+		node.setAttribute(attr.name, attr.value);
+	});
+	return node;
+}
+
+var scrollToId = function(id) {
+	if (id) {
+		var el = $id(id);
+		if (el) el.scrollIntoView(true);
+	}
+	else window.scroll(0, 0);
+	document.documentElement.scrollHeight; // force page reflow
+}
+
+var addEvent = 
+	document.addEventListener && function(node, event, fn) { return node.addEventListener(event, fn, false); } ||
+	document.attachEvent && function(node, event, fn) { return node.attachEvent("on" + event, fn); } ||
+	function(node, event, fn) { node["on" + event] = fn; }
+
+var removeEvent = 
+	document.removeEventListener && function(node, event, fn) { return node.removeEventListener(event, fn, false); } ||
+	document.detachEvent && function(node, event, fn) { return node.detachEvent("on" + event, fn); } ||
+	function(node, event, fn) { if (node["on" + event] == fn) node["on" + event] = null; }
+
+// NOTE resolveURL shouldn't be needed, or at least
+// el.setAttribute(attr, el[attr]) should suffice.
+// But IE doesn't return relative URLs for <link>, and
+// does funny things on anchors
+// TODO check all the uses of resolveURL for correctness and necessity
+var resolveURL = function(relURL, context) {
+	if (!context) context = document;
+	var div = context.createElement("div");
+	if (context != document) context.body.appendChild(div); // WARN assumes context.body exists
+	div.innerHTML = '<a href="'+ relURL + '"></a>';	
+	var href = div.firstChild.href;
+	if (div.parentNode) div.parentNode.removeChild(div);
+	return href;
+}
+
+// NOTE serverURL only needs to be valid on browsers that support pushState
+var serverURL = function(relURL) {
+	if (!relURL) relURL = document.URL;
+	var a = document.createElement("a");
+	a.href = relURL;
+	a.hash = null;
+	return a.href.replace(/#$/, ""); // NOTE work-around for Webkit
+}
+
+var loadHTML = function(url, cb) {
+	if (!cb) cb = Callback();
+	var DOM = this;
+	var xhr = window.XMLHttpRequest ?
+		new XMLHttpRequest() :
+		new ActiveXObject("Microsoft.XMLHTTP");
+	xhr.onreadystatechange = function() {
+		if (xhr.readyState != 4) return;
+		if (xhr.status != 200) cb("error", xhr.status); // FIXME what should status be??
+		else {
+			var doc = DOM.parseHTML(xhr.responseText, url);
+			cb("complete", doc);
+		}
+	}
+	xhr.open("GET", url, true);
+	xhr.send("");
+	return cb;
+}
+
+var parseHTML = (function() {
+
+var uriAttrs = {};
+forEach(words("link@href a@href script@src img@src iframe@src video@src audio@src source@src form@action input@formaction button@formaction"), function(text) {
+	var m = text.split("@"), tag = m[0], attrName = m[1];
+	uriAttrs[tag] = attrName;
+});
+	
+function parseHTML(html, url) {
+	
+	// prevent resources (<img>, <link>, etc) from loading in parsing context, by renaming @src, @href to @meeko-src, @meeko-href
+	each(uriAttrs, function(tag, attrName) {
+		html = html.replace(RegExp("<" + tag + "\\b[^>]*>", "ig"), function(tagString) {
+			var vendorAttrName = vendorPrefix + "-" + attrName;
+			return tagString.replace(RegExp("\\b" + attrName + "=", "i"), vendorAttrName + "=");
+		});
+	});
+	
+	// disable <script>
+	// TODO currently handles script @type=""|"text/javascript"
+	// What about "application/javascript", etc??
+	html = html.replace(/<script\b[^>]*>/ig, function(tag) {
+		if (/\btype=['"]?text\/javascript['"]?(?=\s|\>)/i.test(tag)) {
+			return tag.replace(/\btype=['"]?text\/javascript['"]?(?=\s|\>)/i, 'type="text/javascript?async"');
+		}
+		return tag.replace(/\>$/, ' type="text/javascript?async">');
+	});
+
+	var iframe = document.createElement("iframe");
+	    docHead = document.head;
+	iframe.name = "_decor";
+	docHead.insertBefore(iframe, docHead.firstChild);
+	var iframeDoc = iframe.contentWindow.document;
+
+	iframeDoc.open();
+	iframeDoc.write(html);
+	iframeDoc.close();
+
+	polyfill(iframeDoc);
+
+	// DISABLED removeExecutedScripts(htmlDocument); 
+	normalizeDocument(iframeDoc, url);
+
+	forEach($$("style", iframeDoc.body), function(node) { // TODO support <style scoped>
+		iframeDoc.head.appendChild(node);
+	});
+	
+	var pseudoDoc = importDocument(iframeDoc);
+	docHead.removeChild(iframe);
+	
+	each(uriAttrs, function(tag, attrName) {
+		var vendorAttrName = vendorPrefix + "-" + attrName;
+		forEach($$(tag, pseudoDoc.documentElement), function(el) {
+			var val = el.getAttribute(vendorAttrName);
+			if (!val) return;
+			el.setAttribute(attrName, val);
+			el.removeAttribute(vendorAttrName);
+		});	
+	})
+
+	// FIXME need warning for doc property mismatches between page and decor
+	// eg. charset, doc-mode, content-type, etc
+	return pseudoDoc;
+}
+
+function normalizeDocument(doc, baseURL) {
+	// insert <base href=baseURL> at top of <head>
+	var base = doc.createElement("base");
+	base.setAttribute("href", baseURL);
+	doc.head.insertBefore(base, doc.head.firstChild);
+	
+	function normalize(tag, attrName) { 
+		var vendorAttrName = vendorPrefix + "-" + attrName;
+		forEach($$(tag, doc), function(el) {
+			var val = el.getAttribute(vendorAttrName);
+			if (val && val.indexOf("#") != 0) el.setAttribute(vendorAttrName, resolveURL(val, doc)); // NOTE anchor hrefs aren't normalized
+		});
+	}
+	each(uriAttrs, normalize);
+
+	doc.head.removeChild(base);
+}
+
+var importDocument = document.importNode ? // NOTE returns a pseudoDoc
+function(srcDoc) {
+	var docEl = document.importNode(srcDoc.documentElement, true);
+	var doc = createDocument();
+	doc.appendChild(docEl);
+	polyfill(doc);
+	// WARN sometimes IE9 doesn't read the content of inserted <style>
+	forEach($$("style", doc), function(node) {
+		if (node.styleSheet && node.styleSheet.cssText == "") node.styleSheet.cssText = node.innerHTML;		
+	});
+	
+	return doc;
+} :
+function(srcDoc) {
+	var docEl = importNode(srcDoc.documentElement),
+	    docHead = importNode(srcDoc.head),
+		docBody = importNode(srcDoc.body);
+
+	docEl.appendChild(docHead);
+	for (var srcNode=srcDoc.head.firstChild; srcNode; srcNode=srcNode.nextSibling) {
+		if (srcNode.nodeType != 1) continue;
+		var node = importNode(srcNode);
+		if (node) docHead.appendChild(node);
+	}
+
+	docEl.appendChild(docBody);
+	docBody.innerHTML = srcDoc.body.innerHTML;
+
+	var doc = createDocument();
+	doc.appendChild(docEl);
+	polyfill(doc);
+	return doc;
+}
+
+var createDocument =
+document.implementation.createHTMLDocument && function() {
+	var doc = document.implementation.createHTMLDocument("");
+	doc.removeChild(doc.documentElement);
+	return doc;
+} ||
+document.createDocumentFragment().getElementById && function() { return document.createDocumentFragment(); } || // IE <= 8 
+function() { return document.cloneNode(false); } 
+
+var importNode = document.importNode ? // NOTE only for single nodes, especially elements in <head>
+function(srcNode) { 
+	return document.importNode(srcNode, false);
+} :
+function(srcNode) { // document.importNode() NOT available on IE < 9
+	if (srcNode.nodeType != 1) return;
+	var tag = tagName(srcNode);
+	var node = document.createElement(tag);
+	copyAttributes(node, srcNode);
+	switch(tag) {
+	case "title":
+		if (tagName(node) == "title" && node.innerHTML == "") node = null;
+		else node.innerText = srcNode.innerHTML;
+		break;
+	case "style":
+		var frag = document.createDocumentFragment();
+		frag.appendChild(node);
+		node.styleSheet.cssText = srcNode.styleSheet.cssText;
+		frag.removeChild(node);
+		break;
+	case "script":
+		node.text = srcNode.text;
+		break;
+	default: // meta, link, base have no content
+		// FIXME what to do with <base>?
+		break;
+	}
+	return node;
+}
+
+return parseHTML;
+
+})();
+
+
+var polyfill = function(doc) { // NOTE more stuff could be added here if *necessary*
+	if (!doc) doc = document;
+	if (!doc.head) doc.head = firstChild(doc.documentElement, "head");
+}
+
+var DOM = Meeko.DOM || (Meeko.DOM = {});
+extend(DOM, {
+	$id: $id, $$: $$, tagName: tagName, forSiblings: forSiblings, matchesElement: matchesElement, firstChild: firstChild,
+	replaceNode: replaceNode, scrollToId: scrollToId, addEvent: addEvent, removeEvent: removeEvent,
+	resolveURL: resolveURL, serverURL: serverURL, loadHTML: loadHTML, parseHTML: parseHTML, copyAttributes: copyAttributes,
+	polyfill: polyfill
+});
+
+
+polyfill();
 
 /*
  ### Get config options
@@ -469,13 +701,17 @@ var notify = function(phase, type, target, detail) {
 	if (listener) isolate(function() { listener(detail); }); // TODO isFunction(listener)
 }
 
-var start = decor.start = function() {
+extend(decor, {
+
+start: function() {
+	var decor = this;
 	var decorURL = getDecorURL(document);
 	if (!decorURL) return; // FIXME warning message
 
 	return queue([
+
 	function() {
-		return decorate(decorURL);
+		return decor.decorate(decorURL);
 	},
 	function() {
 		decor.contentURL = serverURL();
@@ -493,9 +729,8 @@ var start = decor.start = function() {
 	}
 		
 	]);
-}
+},
 
-extend(decor, {
 onClick: function(e) { // NOTE only pushState enabled browsers use this
 	// Before panning to the next page, have to work out if that is appropriate
 	if (e["meeko-decor"]) return; // a fake event
@@ -556,7 +791,7 @@ onHyperlink: function(target) { // return false to preventDefault
 
 onSiteLink: function(url) { // return false to preventDefault
 	// Now attempt to pan
-	navigate(url);
+	decor.navigate(url);
 	return false;
 },
 
@@ -566,7 +801,7 @@ onPopState: function(e) {
 	else e.stopPropagation();
 	// NOTE there is no default-action for popstate
 	var newURL = serverURL();
-	if (newURL != decor.contentURL) {
+	if (newURL != this.contentURL) {
 		scrollToId(); 
 		page(document.URL);
 		decor.contentURL = newURL;
@@ -574,12 +809,10 @@ onPopState: function(e) {
 	else {
 		scrollToId(location.hash && location.hash.substr(1));
 	}
-}
+},
 
-});
-
-
-var decorate = function(decorURL) {
+decorate: function(decorURL) {
+	var decor = this;
 	var doc, complete = false;
 	var contentStart, decorEnd;
 
@@ -590,34 +823,20 @@ var decorate = function(decorURL) {
 
 	function() {
 		var cb = Callback();
-		loadURL(decorURL, {
-			onSuccess: function(result) {
-				doc = result;
-				cb("complete");
-			},
-			onError: function(error) {
-				logger.error("loadURL fail for " + decorURL);
-				cb("error");
-			}
-		});
+		var loadCB = DOM.loadHTML(decorURL);
+		loadCB.listen("complete", function(dummy, result) { doc = result; cb("complete"); });
+		loadCB.listen("error", function() { logger.error("loadHTML fail for " + url); cb("error"); });
 		return cb;
 	},
 	function() {
 		// NOTE don't need to keep track of altDecorURL, since it has a 1-to-1 relationship with decorURL
 		// TODO but it would be nice to store more data
 		var altDecorURL = getDecorURL(doc, true);
-		if (!altDecorURL) return true; 
+		if (!altDecorURL) return true;
 		var cb = Callback();
-		loadURL(altDecorURL, {
-			onSuccess: function(result) {
-				doc = result;
-				cb("complete");
-			},
-			onError: function(error) {
-				logger.error("loadURL fail for " + altDecorURL);
-				cb("error");
-			}
-		});
+		var loadCB = DOM.loadHTML(altDecorURL);
+		loadCB.listen("complete", function(dummy, result) { doc = result; cb("complete"); });		
+		loadCB.listen("error", function() { logger.error("loadHTML fail for " + url); cb("error"); });
 		return cb;
 	},
 	function() {
@@ -673,9 +892,10 @@ var decorate = function(decorURL) {
 	}
 
 	]);
-}
+},
 
-var navigate = function(url) {
+navigate: function(url) {
+	var decor = this;
 	history.pushState({"meeko-decor": true }, null, url);
 	var cb = page(url);
 	cb.listen("error", function(msg) {
@@ -701,8 +921,10 @@ var navigate = function(url) {
 	});
 }
 
+});
+
 var page = function(url) {
-	var doc, ready = false, complete = false;
+	var doc, ready = false;
 
 	pageOut();
 	
@@ -712,15 +934,14 @@ var page = function(url) {
 
 	function() {
 		var cb = Callback();
-		loadURL(url, {
-			onSuccess: function(result) {
-				doc = decor.newDocument = result;
-				cb("complete");
-			},
-			onError: function(error) {
-				logger.error("loadURL fail for " + url);
-				cb("error");
-			}
+		var loadCB = DOM.loadHTML(url);
+		loadCB.listen("complete", function(dummy, result) {
+			doc = decor.newDocument = result;
+			cb("complete");
+		});
+		loadCB.listen("error", function() {
+			logger.error("loadHTML fail for " + url);
+			cb("error");
 		});
 		return cb;
 	},
@@ -920,208 +1141,6 @@ var enableScript = function(node) {
 	catch (error) { script.text = node.text; }
 
 	replaceNode(node, script);
-}
-
-var uriAttrs = {};
-forEach(words("link@href a@href script@src img@src iframe@src video@src audio@src source@src form@action input@formaction button@formaction"), function(text) {
-	var m = text.split("@"), tag = m[0], attrName = m[1];
-	uriAttrs[tag] = attrName;
-});
-
-var loadURL = function(url, opts) {
-	var xhr = window.XMLHttpRequest ?
-		new XMLHttpRequest() :
-		new ActiveXObject("Microsoft.XMLHTTP");
-	xhr.onreadystatechange = function() {
-		if (xhr.readyState != 4) return;
-		if (xhr.status != 200) opts.onError(xhr.status); // FIXME what should status be??
-		else parseHTML(xhr.responseText, url, opts);
-	}
-	xhr.open("GET", url, true);
-	xhr.send("");
-}
-
-var parseHTML = function(html, url, opts) {
-	// prevent resources (<img>, <link>, etc) from loading in parsing context
-	each(uriAttrs, function(tag, attrName) {
-		html = html.replace(RegExp("<" + tag + "\\b[^>]*>", "ig"), function(tagString) {
-			var vendorAttrName = vendorPrefix + "-" + attrName;
-			return tagString.replace(RegExp("\\b" + attrName + "=", "i"), vendorAttrName + "=");
-		});		
-	});
-	
-	// disable <script>
-	// TODO currently handles script @type=""|"text/javascript"
-	// What about "application/javascript", etc??
-	html = html.replace(/<script\b[^>]*>/ig, function(tag) {
-		if (/\btype=['"]?text\/javascript['"]?(?=\s|\>)/i.test(tag)) {
-			return tag.replace(/\btype=['"]?text\/javascript['"]?(?=\s|\>)/i, 'type="text/javascript?async"');
-		}
-		return tag.replace(/\>$/, ' type="text/javascript?async">');
-	});
-
-	var iframe = document.createElement("iframe");
-	    docHead = document.head;
-	iframe.name = "_decor";
-	docHead.insertBefore(iframe, docHead.firstChild);
-	var iframeDoc = iframe.contentWindow.document;
-
-	iframeDoc.open();
-	iframeDoc.write(html);
-	iframeDoc.close();
-
-	polyfill(iframeDoc);
-
-	// DISABLED removeExecutedScripts(htmlDocument); 
-	normalizeDocument(iframeDoc, url);
-
-	forEach($$("style", iframeDoc.body), function(node) { // TODO support <style scoped>
-		iframeDoc.head.appendChild(node);
-	});
-	
-	// NOTE surprisingly this keeps a reference to the iframe documentElement
-	// even after the iframe has been removed from the document.
-	// Tested on FF11, O11, latest Chrome and Webkit, IE6-9
-	var pseudoDoc = importDocument(iframeDoc);
-	docHead.removeChild(iframe);
-	
-	each(uriAttrs, function(tag, attrName) {
-		var vendorAttrName = vendorPrefix + "-" + attrName;
-		forEach($$(tag, pseudoDoc.documentElement), function(el) {
-			var val = el.getAttribute(vendorAttrName);
-			if (!val) return;
-			el.setAttribute(attrName, val);
-			el.removeAttribute(vendorAttrName);
-		});	
-	})
-
-	opts.onSuccess && opts.onSuccess(pseudoDoc);
-	// FIXME need warning for doc property mismatches between page and decor
-	// eg. charset, doc-mode, content-type, etc
-}
-
-function normalizeDocument(doc, baseURL) {
-	// insert <base href=baseURL> at top of <head>
-	var base = doc.createElement("base");
-	base.setAttribute("href", baseURL);
-	doc.head.insertBefore(base, doc.head.firstChild);
-	
-	function normalize(tag, attrName) { 
-		var vendorAttrName = vendorPrefix + "-" + attrName;
-		forEach($$(tag, doc), function(el) {
-			var val = el.getAttribute(vendorAttrName);
-			if (val && val.indexOf("#") != 0) el.setAttribute(vendorAttrName, resolveURL(val, doc)); // NOTE anchor hrefs aren't normalized
-		});
-	}
-	each(uriAttrs, normalize);
-
-	doc.head.removeChild(base);
-}
-
-var importDocument = document.importNode ? // NOTE returns a pseudoDoc
-function(srcDoc) {
-	var docEl = document.importNode(srcDoc.documentElement, true);
-	var doc = createDocument();
-	doc.appendChild(docEl);
-	polyfill(doc);
-	// WARN sometimes IE9 doesn't read the content of inserted <style>
-	forEach($$("style", doc), function(node) {
-		if (node.styleSheet && node.styleSheet.cssText == "") node.styleSheet.cssText = node.innerHTML;		
-	});
-	
-	return doc;
-} :
-function(srcDoc) {
-	var docEl = importNode(srcDoc.documentElement),
-	    docHead = importNode(srcDoc.head),
-		docBody = importNode(srcDoc.body);
-
-	docEl.appendChild(docHead);
-	for (var srcNode=srcDoc.head.firstChild; srcNode; srcNode=srcNode.nextSibling) {
-		if (srcNode.nodeType != 1) continue;
-		var node = importNode(srcNode);
-		if (node) docHead.appendChild(node);
-	}
-
-	docEl.appendChild(docBody);
-	docBody.innerHTML = srcDoc.body.innerHTML;
-
-	var doc = createDocument();
-	doc.appendChild(docEl);
-	polyfill(doc);
-	return doc;
-}
-
-var createDocument =
-document.implementation.createHTMLDocument && function() {
-	var doc = document.implementation.createHTMLDocument("");
-	doc.removeChild(doc.documentElement);
-	return doc;
-} ||
-document.createDocumentFragment().getElementById && function() { return document.createDocumentFragment(); } || // IE <= 8 
-function() { return document.cloneNode(false); } 
-
-var importNode = document.importNode ? // NOTE only for single nodes, especially elements in <head>
-function(srcNode) { 
-	return document.importNode(srcNode, false);
-} :
-function(srcNode) { // document.importNode() NOT available on IE < 9
-	if (srcNode.nodeType != 1) return;
-	var tag = tagName(srcNode);
-	var node = document.createElement(tag);
-	copyAttributes(node, srcNode);
-	switch(tag) {
-	case "title":
-		if (tagName(node) == "title" && node.innerHTML == "") node = null;
-		else node.innerText = srcNode.innerHTML;
-		break;
-	case "style":
-		var frag = document.createDocumentFragment();
-		frag.appendChild(node);
-		node.styleSheet.cssText = srcNode.styleSheet.cssText;
-		frag.removeChild(node);
-		break;
-	case "script":
-		node.text = srcNode.text;
-		break;
-	default: // meta, link, base have no content
-		// FIXME what to do with <base>?
-		break;
-	}
-	return node;
-}
-
-var copyAttributes = function(node, srcNode) { // implements srcNode.cloneNode(false)
-	var attrs = srcNode.attributes;
-	forEach(attrs, function(attr) {
-		if (!attr.specified) return;
-		node.setAttribute(attr.name, attr.value);
-	});
-	return node;
-}
-
-// NOTE resolveURL shouldn't be needed, or at least
-// el.setAttribute(attr, el[attr]) should suffice.
-// But IE doesn't return relative URLs for <link>, and
-// does funny things on anchors
-// TODO check all the uses of resolveURL for correctness and necessity
-var resolveURL = function(relURL, context) {
-	if (!context) context = document;
-	var div = context.createElement("div");
-	if (context != document) context.body.appendChild(div); // WARN assumes context.body exists
-	div.innerHTML = '<a href="'+ relURL + '"></a>';	
-	var href = div.firstChild.href;
-	if (div.parentNode) div.parentNode.removeChild(div);
-	return href;
-}
-
-// NOTE serverURL only needs to be valid on browsers that support pushState
-var serverURL = function(relURL) {
-	if (!relURL) relURL = document.URL;
-	var a = document.createElement("a");
-	a.href = relURL;
-	a.hash = null;
-	return a.href.replace(/#$/, ""); // NOTE work-around for Webkit
 }
 
 var readyStateLookup = {
