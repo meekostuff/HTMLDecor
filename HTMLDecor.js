@@ -136,30 +136,64 @@ return isolate;
 })();
 
 var Callback = function() {
-	var hooks = {}, called = {}, complete = false;
-	var cb = function(name) {
-		if (complete) throw("Attempt to trigger callback after complete");
-		called[name] = true;
-		complete = true;
-		var fn = hooks[name];
-		if (fn) {
-			var args = [].splice.call(arguments, 0);
-			isolate(function() { fn.apply(null, args); });
-		}
-	}
-	extend(cb, {
-		listen: function(name, fn) {
-			if (hooks[name]) throw "Max of one hook per callback.";
-			hooks[name] = fn;
-			if (called[name]) fn(name); // FIXME this doesn't retain data passed when the callback was called
-		},
-		isCallback: true
-	});
-	return cb;
+	this.isCallback = true;
+	this.called = false;
 }
+
+extend(Callback.prototype, {
+
+complete: function() {
+	if (this.called) throw "Callback has already been called";
+	this.called = true;
+	if (this.onComplete) this.onComplete.apply(this, arguments);
+},
+
+error: function() {
+	if (this.called) throw "Callback has already been called";
+	this.called = true;
+	if (this.onError) this.onError.apply(this, arguments);
+}
+
+});
 
 function isCallback(obj) {
 	return (obj && obj.isCallback);
+}
+
+var async = function(fn) {
+	var wrapper = function() {
+		var nParams = fn.length;
+		if (arguments.length > nParams) throw "Too many parameters in async call";
+		var inCB = arguments[nParams - 1], cb;
+		if (isCallback(inCB)) cb = inCB;
+		else switch (typeof inCB) {
+			case "undefined": case "null":
+				cb = new Callback();
+				break;
+			case "function":
+				cb = new Callback();
+				cb.onComplete = inCB;
+				break;
+			case "object":
+				if (inCB.onComplete) {
+					cb = new Callback();
+					cb.onComplete = inCB.onComplete;
+					cb.onError = inCB.onError;
+					break;
+				}
+				// else fall-thru to error
+			default:
+				throw "Invalid callback parameter in async call";
+				break;
+		}
+		var params = [].slice.call(arguments, 0);
+		params[nParams - 1] = cb;
+		var result = fn.apply(this, params);
+		if (result) delay(function() { cb.complete(result) });
+		return cb;
+	}
+	wrapper.isAsync = true;
+	return wrapper;
 }
 
 var wait = (function() {
@@ -174,11 +208,11 @@ function waitback() {
 		success = isolate(function() { done = hook(); });
 		if (!success) {
 			callbacks.splice(i,1);
-			waitCB("error");
+			waitCB.error();
 		}
 		else if (done) {
 			callbacks.splice(i,1);
-			waitCB("complete");
+			waitCB.complete();
 		}
 		else i++;
 	}
@@ -188,13 +222,11 @@ function waitback() {
 	}
 }
 
-function wait(fn, waitCB) {
-	if (!waitCB) waitCB = Callback();
+var wait = async(function(fn, waitCB) {
 	waitCB.hook = fn;
 	callbacks.push(waitCB);
 	if (!timerId) timerId = window.setInterval(waitback, config["polling-interval"]); // NOTE polling-interval is configured below
-	return waitCB;
-}
+});
 
 return wait;
 
@@ -204,30 +236,25 @@ var until = function(test, fn, untilCB) {
 	return wait(function() { fn(); return test(); }, untilCB);
 }
 
-var delay = function(fn, timeout, delayCB) {
-	if (!delayCB) delayCB = Callback();
+var delay = async(function(fn, timeout, delayCB) {
 	window.setTimeout(function() {
-		var cb;
-		var success = isolate(function() { cb = fn(delayCB); });
+		var result;
+		var success = isolate(function() { result = fn(delayCB); });
 		if (!success) {
-			delayCB("error");
+			delayCB.error();
 			return;
 		}
-		else if (isCallback(cb)) {
-			if (delayCB == cb) return; // callback is delegated
-			cb.listen("complete", delayCB);
-			cb.listen("error", delayCB);
+		else if (isCallback(result)) {
+			if (delayCB == result) return; // callback is delegated
+			result.onComplete = delayCB.onComplete;
+			result.onError = delayCB.onError;
 		}
-		else delayCB("complete");
+		else delayCB.complete(result);
 	}, timeout);
-	return delayCB;
-}
+});
 
-var queue = (function() {
-
-function queue(fnList, queueCB) {
+var queue = async(function(fnList, queueCB) {
 	var list = [];
-	if (!queueCB) queueCB = Callback(); 
 	forEach(fnList, function(fn) {
 		if (typeof fn != "function") throw "Non-function passed to queue()";
 		list.push(fn);
@@ -238,26 +265,24 @@ function queue(fnList, queueCB) {
 			var cb;
 			var success = isolate(function() { cb = fn(); });
 			if (!success) {
-				queueCB("error");
+				queueCB.error();
 				return;
 			}
 			if (isCallback(cb)) {
-				cb.listen("complete", queueback);
-				cb.listen("error", function() {
-					queueCB("error");
-				})
+				cb.onComplete = queueback;
+				cb.onError = function() { queueCB.error(); }
 				return;
 			}
 		}
-		queueCB("complete");
+		queueCB.complete();
 	}
 	queueback();
-	return queueCB;
-}
+});
 
-return queue;
-
-})();
+extend(Callback, {
+	isCallback: isCallback, async: async, delay: delay, wait: wait, until: until, queue: queue
+});
+Meeko.Callback = Callback;
 
 /*
  ### DOM utility functions
@@ -331,6 +356,15 @@ var copyAttributes = function(node, srcNode) { // implements srcNode.cloneNode(f
 	return node;
 }
 
+var createDocument =
+document.implementation.createHTMLDocument && function() {
+	var doc = document.implementation.createHTMLDocument("");
+	doc.removeChild(doc.documentElement);
+	return doc;
+} ||
+document.createDocumentFragment().getElementById && function() { return document.createDocumentFragment(); } || // IE <= 8 
+function() { return document.cloneNode(false); } 
+
 var scrollToId = function(id) {
 	if (id) {
 		var el = $id(id);
@@ -374,24 +408,22 @@ var serverURL = function(relURL) {
 	return a.href.replace(/#$/, ""); // NOTE work-around for Webkit
 }
 
-var loadHTML = function(url, cb) {
-	if (!cb) cb = Callback();
+var loadHTML = async(function(url, cb) {
 	var DOM = this;
 	var xhr = window.XMLHttpRequest ?
 		new XMLHttpRequest() :
 		new ActiveXObject("Microsoft.XMLHTTP");
 	xhr.onreadystatechange = function() {
 		if (xhr.readyState != 4) return;
-		if (xhr.status != 200) cb("error", xhr.status); // FIXME what should status be??
+		if (xhr.status != 200) cb.error(xhr.status); // FIXME what should status be??
 		else {
 			var doc = DOM.parseHTML(xhr.responseText, url);
-			cb("complete", doc);
+			cb.complete(doc);
 		}
 	}
 	xhr.open("GET", url, true);
 	xhr.send("");
-	return cb;
-}
+});
 
 var parseHTML = (function() {
 
@@ -442,7 +474,7 @@ function parseHTML(html, url) {
 	
 	var pseudoDoc = importDocument(iframeDoc);
 	docHead.removeChild(iframe);
-	
+
 	each(uriAttrs, function(tag, attrName) {
 		var vendorAttrName = vendorPrefix + "-" + attrName;
 		forEach($$(tag, pseudoDoc.documentElement), function(el) {
@@ -510,15 +542,6 @@ function(srcDoc) {
 	return doc;
 }
 
-var createDocument =
-document.implementation.createHTMLDocument && function() {
-	var doc = document.implementation.createHTMLDocument("");
-	doc.removeChild(doc.documentElement);
-	return doc;
-} ||
-document.createDocumentFragment().getElementById && function() { return document.createDocumentFragment(); } || // IE <= 8 
-function() { return document.cloneNode(false); } 
-
 var importNode = document.importNode ? // NOTE only for single nodes, especially elements in <head>
 function(srcNode) { 
 	return document.importNode(srcNode, false);
@@ -562,7 +585,7 @@ var polyfill = function(doc) { // NOTE more stuff could be added here if *necess
 var DOM = Meeko.DOM || (Meeko.DOM = {});
 extend(DOM, {
 	$id: $id, $$: $$, tagName: tagName, forSiblings: forSiblings, matchesElement: matchesElement, firstChild: firstChild,
-	replaceNode: replaceNode, scrollToId: scrollToId, addEvent: addEvent, removeEvent: removeEvent,
+	replaceNode: replaceNode, scrollToId: scrollToId, addEvent: addEvent, removeEvent: removeEvent, createDocument: createDocument,
 	resolveURL: resolveURL, serverURL: serverURL, loadHTML: loadHTML, parseHTML: parseHTML, copyAttributes: copyAttributes,
 	polyfill: polyfill
 });
@@ -707,7 +730,6 @@ start: function() {
 	var decor = this;
 	var decorURL = getDecorURL(document);
 	if (!decorURL) return; // FIXME warning message
-
 	return queue([
 
 	function() {
@@ -811,7 +833,7 @@ onPopState: function(e) {
 	}
 },
 
-decorate: function(decorURL) {
+decorate: async(function(decorURL, callback) {
 	var decor = this;
 	var doc, complete = false;
 	var contentStart, decorEnd;
@@ -819,26 +841,24 @@ decorate: function(decorURL) {
 	if (getDecorMeta()) throw "Cannot decorate a document that has already been decorated";
 	Anim.hide();
 
-	return queue([
+	queue([
 
-	function() {
-		var cb = Callback();
-		var loadCB = DOM.loadHTML(decorURL);
-		loadCB.listen("complete", function(dummy, result) { doc = result; cb("complete"); });
-		loadCB.listen("error", function() { logger.error("loadHTML fail for " + url); cb("error"); });
-		return cb;
-	},
-	function() {
+	async(function(cb) {
+		DOM.loadHTML(decorURL, {
+			onComplete: function(result) { doc = result; cb.complete(); },
+			onError: function() { logger.error("loadHTML fail for " + url); cb.error(); }
+		});
+	}),
+	async(function(cb) {
 		// NOTE don't need to keep track of altDecorURL, since it has a 1-to-1 relationship with decorURL
 		// TODO but it would be nice to store more data
 		var altDecorURL = getDecorURL(doc, true);
 		if (!altDecorURL) return true;
-		var cb = Callback();
-		var loadCB = DOM.loadHTML(altDecorURL);
-		loadCB.listen("complete", function(dummy, result) { doc = result; cb("complete"); });		
-		loadCB.listen("error", function() { logger.error("loadHTML fail for " + url); cb("error"); });
-		return cb;
-	},
+		var loadCB = DOM.loadHTML(altDecorURL, {
+			onComplete: function(result) { doc = result; cb.complete(); },
+			onError: function() { logger.error("loadHTML fail for " + url); cb.error(); }
+		});
+	}),
 	function() {
 		return wait(function() { return !!document.body; });
 	},
@@ -891,14 +911,15 @@ decorate: function(decorURL) {
 		scrollToId(location.hash && location.hash.substr(1));
 	}
 
-	]);
-},
+	], callback);
+}),
 
-navigate: function(url) {
+navigate: async(function(url, callback) {
 	var decor = this;
 	history.pushState({"meeko-decor": true }, null, url);
-	var cb = page(url);
-	cb.listen("error", function(msg) {
+	page(url, {
+		
+	onError: function(msg) {
 		/*
 		  Ideally we just use
 		      location.reload()
@@ -915,36 +936,34 @@ navigate: function(url) {
 		removeEvent(window, "unload", pageOut);
 		addEvent(window, "unload", noop); // Disable bfcache
 		location.replace(url);
+		callback.error(msg);
+	},
+	
+	onComplete: function(msg) {
+		decor.contentURL = serverURL();
+		callback.complete(msg);
+	}
+	
 	});
-	cb.listen("complete", function(msg) {
-		decor.contentURL = serverURL();		
-	});
-}
+})
 
 });
 
-var page = function(url) {
+var page = async(function(url, callback) {
 	var doc, ready = false;
 
 	pageOut();
 	
 	delay(function() { ready = true; }, paging.duration);
 
-	return queue([
+	queue([
 
-	function() {
-		var cb = Callback();
-		var loadCB = DOM.loadHTML(url);
-		loadCB.listen("complete", function(dummy, result) {
-			doc = decor.newDocument = result;
-			cb("complete");
+	async(function(cb) {
+		DOM.loadHTML(url, {
+			onComplete: function(result) { doc = decor.newDocument = result; cb.complete(); },
+			onError: function() { logger.error("loadHTML fail for " + url); cb.error(); }		
 		});
-		loadCB.listen("error", function() {
-			logger.error("loadHTML fail for " + url);
-			cb("error");
-		});
-		return cb;
-	},
+	}),
 	function() { return wait(function() { return ready; }); },
 	function() {
 		if (getDecorURL(document) == getDecorURL(doc)) scrollToId();
@@ -958,8 +977,8 @@ var page = function(url) {
 		decor.newDocument = null;
 	},
 	
-	]);	
-}
+	], callback);	
+});
 
 var pageOut = function() { // this is only called by window.onunload
 	// TODO this shares a lot of code with page()
@@ -995,8 +1014,7 @@ var pageIn = function() {
 	function() {
 		mergeHead(doc, false);
 	},
-	function() {
-		var cb = Callback();
+	async(function(cb) {
 		var nodeList = [];
 		var contentStart = doc.body.firstChild;
 		if (contentStart) placeContent(contentStart,
@@ -1006,12 +1024,11 @@ var pageIn = function() {
 				delay(function() {
 					notify("after", "nodeInserted", document.body, node);
 					nodeList.splice(indexOf(nodeList,node), 1);
-					if (!nodeList.length) cb("complete");
+					if (!nodeList.length) cb.complete();
 				});
 			}
 		);
-		return cb;
-	},
+	}),
 	function() {
 		scrollToId(location.hash && location.hash.substr(1));
 		notify("after", "pageIn", document);
