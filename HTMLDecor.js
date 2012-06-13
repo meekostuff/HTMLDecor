@@ -152,6 +152,12 @@ error: function() {
 	if (this.called) throw "Callback has already been called";
 	this.called = true;
 	if (this.onError) this.onError.apply(this, arguments);
+},
+
+abort: function() { // NOTE abort could trigger an error, but there is an expectation that whatever context calls abort will be handling that anyway
+	if (this.called) throw "Callback has already been called";
+	this.called = true;
+	if (this.onAbort) this.onAbort.apply(this, arguments); // TODO isolate
 }
 
 });
@@ -162,8 +168,8 @@ function isCallback(obj) {
 
 var async = function(fn) {
 	var wrapper = function() {
-		var nParams = fn.length;
-		if (arguments.length > nParams) throw "Too many parameters in async call";
+		var nParams = fn.length, nArgs = arguments.length;
+		if (nArgs > nParams) throw "Too many parameters in async call";
 		var inCB = arguments[nParams - 1], cb;
 		if (isCallback(inCB)) cb = inCB;
 		else switch (typeof inCB) {
@@ -226,6 +232,7 @@ var wait = async(function(fn, waitCB) {
 	waitCB.hook = fn;
 	callbacks.push(waitCB);
 	if (!timerId) timerId = window.setInterval(waitback, config["polling-interval"]); // NOTE polling-interval is configured below
+	waitCB.onAbort = function() { callbacks.splice(indexOf(callbacks, waitCB), 1); }
 });
 
 return wait;
@@ -237,7 +244,7 @@ var until = function(test, fn, untilCB) {
 }
 
 var delay = async(function(fn, timeout, delayCB) {
-	window.setTimeout(function() {
+	var timerId = window.setTimeout(function() {
 		var result;
 		var success = isolate(function() { result = fn(delayCB); });
 		if (!success) {
@@ -251,10 +258,11 @@ var delay = async(function(fn, timeout, delayCB) {
 		}
 		else delayCB.complete(result);
 	}, timeout);
+	delayCB.onAbort = function() { window.clearTimeout(timerId); }
 });
 
 var queue = async(function(fnList, queueCB) {
-	var list = [];
+	var list = [], innerCB;
 	forEach(fnList, function(fn) {
 		if (typeof fn != "function") throw "Non-function passed to queue()";
 		list.push(fn);
@@ -262,19 +270,22 @@ var queue = async(function(fnList, queueCB) {
 	var queueback = function() {
 		var fn;
 		while ((fn = list.shift())) {
-			var cb;
-			var success = isolate(function() { cb = fn(); });
+			var success = isolate(function() { innerCB = fn(); });
 			if (!success) {
 				queueCB.error();
 				return;
 			}
-			if (isCallback(cb)) {
-				cb.onComplete = queueback;
-				cb.onError = function() { queueCB.error(); }
+			if (isCallback(innerCB)) {
+				innerCB.onComplete = queueback;
+				innerCB.onError = function() { queueCB.error(); }
 				return;
 			}
 		}
 		queueCB.complete();
+	}
+	queueCB.onAbort = function() {
+		if (isCallback(innerCB)) innerCB.abort();
+		list = [];
 	}
 	queueback();
 });
@@ -737,7 +748,7 @@ start: function() {
 	},
 	function() {
 		decor.contentURL = serverURL();
-		addEvent(window, "unload", pageOut);
+		addEvent(window, "unload", decor.onUnload);
 		
 		if (!history.pushState) return;
 		
@@ -833,6 +844,10 @@ onPopState: function(e) {
 	}
 },
 
+onUnload: function(e) {
+	pageOut();
+},
+
 decorate: async(function(decorURL, callback) {
 	var decor = this;
 	var doc, complete = false;
@@ -919,6 +934,11 @@ navigate: async(function(url, callback) {
 	history.pushState({"meeko-decor": true }, null, url);
 	page(url, {
 		
+	onComplete: function(msg) {
+		decor.contentURL = serverURL();
+		callback.complete(msg);
+	},
+	
 	onError: function(msg) {
 		/*
 		  Ideally we just use
@@ -930,18 +950,13 @@ navigate: async(function(url, callback) {
 		      history.replaceState({}, null, "#");
 		      location.replace("");
 		  but Opera needs something more.
-		  The following solution works on all browsers test.
+		  The following solution works on all browsers tested.
 		*/
 		history.replaceState({}, null, decor.contentURL);
-		removeEvent(window, "unload", pageOut);
+		removeEvent(window, "unload", decor.onUnload);
 		addEvent(window, "unload", noop); // Disable bfcache
 		location.replace(url);
 		callback.error(msg);
-	},
-	
-	onComplete: function(msg) {
-		decor.contentURL = serverURL();
-		callback.complete(msg);
 	}
 	
 	});
@@ -952,7 +967,7 @@ navigate: async(function(url, callback) {
 var page = async(function(url, callback) {
 	var doc, ready = false;
 
-	pageOut();
+	var outCB = pageOut();
 	
 	delay(function() { ready = true; }, paging.duration);
 
@@ -960,7 +975,7 @@ var page = async(function(url, callback) {
 
 	async(function(cb) {
 		DOM.loadHTML(url, {
-			onComplete: function(result) { doc = decor.newDocument = result; cb.complete(); },
+			onComplete: function(result) { doc = result; if (!outCB.called) outCB.abort(); cb.complete(); },
 			onError: function() { logger.error("loadHTML fail for " + url); cb.error(); }		
 		});
 	}),
@@ -971,17 +986,13 @@ var page = async(function(url, callback) {
 	},
 	// we don't get to here if location.replace() was called
 	function() {
-		return pageIn();
-	},
-	function() {
-		decor.newDocument = null;
-	},
+		return pageIn(doc);
+	}
 	
 	], callback);	
 });
 
-var pageOut = function() { // this is only called by window.onunload
-	// TODO this shares a lot of code with page()
+var pageOut = async(function(cb) {
 	if (!getDecorMeta()) throw "Cannot page if the document has not been decorated";
 
 	notify("before", "pageOut", document);
@@ -989,23 +1000,20 @@ var pageOut = function() { // this is only called by window.onunload
 	each(decor.placeHolders, function(id, node) {
 		var target = $id(id);
 		notify("before", "nodeRemoved", document.body, target);
-		return;
 	});
 
-	delay(function() { // NOTE might never get to this point - browsing context may already have moved on
-		if (decor.newDocument) return;
+	delay(function() { // NOTE external context can abort this delayed call with cb.abort();
 		each(decor.placeHolders, function(id, node) {
 			var target = $id(id);
 			replaceNode(target, node);
 			notify("after", "nodeRemoved", document.body, target);
 		});
 		notify("after", "pageOut", document);
-	}, paging.duration);	
-}
+	}, paging.duration, cb);
+});
 
-var pageIn = function() {
-	var doc = decor.newDocument;
-	return queue([
+var pageIn = async(function(doc, cb) {
+	queue([
 
 	function() {
 		notify("before", "pageIn", document, doc);
@@ -1033,10 +1041,9 @@ var pageIn = function() {
 		scrollToId(location.hash && location.hash.substr(1));
 		notify("after", "pageIn", document);
 	}
-	
-	
-	]);
-}
+
+	], cb);
+});
 
 
 function mergeHead(doc, isDecor) {
