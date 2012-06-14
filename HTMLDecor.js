@@ -79,6 +79,7 @@ var each = function(object, fn) {
 
 var extend = function(dest, src) {
 	each(src, function(key, val) { dest[key] = val; });
+	return dest;
 }
 
 if (!Meeko.stuff) Meeko.stuff = {}
@@ -834,9 +835,12 @@ onPopState: function(e) {
 	else e.stopPropagation();
 	// NOTE there is no default-action for popstate
 	var newURL = serverURL();
-	if (newURL != this.contentURL) {
-		scrollToId(); 
-		page(document.URL);
+	if (newURL != decor.contentURL) {
+		scrollToId();
+		var loader = async(function(cb) {
+			decor.options.load(document.URL, cb)
+		});
+		page(loader);
 		decor.contentURL = newURL;
 	}
 	else {
@@ -931,8 +935,19 @@ decorate: async(function(decorURL, callback) {
 
 navigate: async(function(url, callback) {
 	var decor = this;
-	history.pushState({"meeko-decor": true }, null, url);
-	page(url, {
+	var options = extend({}, decor.options);
+	if (typeof url == "object") {
+		extend(options, url);
+		url = options.url;
+	}
+	var modifier = options.replace ? "replaceState" : "pushState";
+	history[modifier]({"meeko-decor": true }, null, url);
+	
+	var loader = async(function(cb) {
+		options.load(url, cb);
+	});
+	
+	page(loader, {
 		
 	onComplete: function(msg) {
 		decor.contentURL = serverURL();
@@ -960,24 +975,32 @@ navigate: async(function(url, callback) {
 	}
 	
 	});
-})
+}),
+
+options: {
+	load: async(function(url, cb) { DOM.loadHTML(url, cb); }),
+	replace: false
+}
 
 });
 
-var page = async(function(url, callback) {
+var page = async(function(loader, callback) {
 	var doc, ready = false;
 
 	var outCB = pageOut();
-	
 	delay(function() { ready = true; }, paging.duration);
 
 	queue([
 
 	async(function(cb) {
-		DOM.loadHTML(url, {
+		if (typeof loader == "function") loader({
 			onComplete: function(result) { doc = result; if (!outCB.called) outCB.abort(); cb.complete(); },
 			onError: function() { logger.error("loadHTML fail for " + url); cb.error(); }		
 		});
+		else {
+			doc = loader;
+			return true;
+		}
 	}),
 	function() { return wait(function() { return ready; }); },
 	function() {
