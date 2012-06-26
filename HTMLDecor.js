@@ -427,11 +427,11 @@ var loadHTML = async(function(url, cb) {
 		new ActiveXObject("Microsoft.XMLHTTP");
 	xhr.onreadystatechange = function() {
 		if (xhr.readyState != 4) return;
-		if (xhr.status != 200) cb.error(xhr.status); // FIXME what should status be??
-		else {
+		delay(function() { // Use delay to stop the readystatechange event interrupting other event handlers (on IE). 
+			if (xhr.status != 200) cb.error(xhr.status); // FIXME what should status be??
 			var doc = DOM.parseHTML(xhr.responseText, url);
 			cb.complete(doc);
-		}
+		});
 	}
 	xhr.open("GET", url, true);
 	xhr.send("");
@@ -464,7 +464,6 @@ function parseHTML(html, url) {
 		}
 		return tag.replace(/\>$/, ' type="text/javascript?async">');
 	});
-
 	var iframe = document.createElement("iframe");
 	    docHead = document.head;
 	iframe.name = "_decor";
