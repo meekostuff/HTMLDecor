@@ -704,38 +704,6 @@ extend(decor, {
 	"hidden-timeout": 0
 });
 
-/*
- Paging handlers are either a function, or an object with `before` and / or `after` listeners. 
- This means that before and after listeners are registered as a pair, which is desirable. 
-*/
-var paging = {
-	duration: 0,
-	nodeRemoved: { before: hide, after: show },
-	nodeInserted: { before: hide, after: show },
-	pageOut: { before: noop, after: noop },
-	pageIn: { before: noop, after: noop }
-}
-decor.configurePaging = function(conf) {
-	extend(paging, conf); // TODO option checking
-}
-
-function hide(node) { node.setAttribute("hidden", "hidden"); }
-function show(node) { node.removeAttribute("hidden"); }
-function noop() {}
-
-var notify = function(phase, type, target, detail) {
-	var handler = paging[type];
-	if (!handler) return;
-	if ((type == "nodeRemoved" || type == "nodeInserted") && target != document.body) return; // ignoring mutations in head
-	var listener;
-	if (handler[phase]) listener = handler[phase];
-	else listener =
-		(type == "nodeRemoved" || type == "pageOut") ?
-			(phase == "before") ? handler : null :
-			(phase == "after") ? handler : null;
-	if (listener) isolate(function() { listener(detail); }); // TODO isFunction(listener)
-}
-
 extend(decor, {
 
 start: function() {
@@ -863,7 +831,7 @@ decorate: async(function(decorURL, callback) {
 	queue([
 
 	async(function(cb) {
-		DOM.loadHTML(decorURL, {
+		DOM.loadHTML(decorURL, { // FIXME this should use options.load or options.loadDecor
 			onComplete: function(result) { doc = result; cb.complete(); },
 			onError: function() { logger.error("loadHTML fail for " + url); cb.error(); }
 		});
@@ -933,16 +901,15 @@ decorate: async(function(decorURL, callback) {
 	], callback);
 }),
 
-navigate: async(function(url, callback) {
-	var decor = this;
+navigate: async(function(config, callback) {
+	var decor = this, url;
 	var options = extend({}, decor.options);
-	if (typeof url == "object") {
-		extend(options, url);
+	if (typeof config == "object") {
+		extend(options, config);
+		if (config.pager) setPaging(config.pager);
 		url = options.url;
 	}
-	var modifier = options.replace ? "replaceState" : "pushState";
-	history[modifier]({"meeko-decor": true }, null, url);
-	
+	else url = config;
 	var loader = async(function(cb) {
 		options.load(url, cb);
 	});
@@ -950,6 +917,7 @@ navigate: async(function(url, callback) {
 	page(loader, {
 		
 	onComplete: function(msg) {
+		resetPaging();
 		decor.contentURL = serverURL();
 		callback.complete(msg);
 	},
@@ -975,6 +943,12 @@ navigate: async(function(url, callback) {
 	}
 	
 	});
+	
+	// Change document.URL
+	// This happens after the page load has initiated and after the pageOut.before handler
+	// TODO 
+	var modifier = options.replace ? "replaceState" : "pushState";
+	history[modifier]({"meeko-decor": true }, null, url);	
 }),
 
 options: {
@@ -983,6 +957,51 @@ options: {
 }
 
 });
+
+/*
+ Paging handlers are either a function, or an object with `before` and / or `after` listeners. 
+ This means that before and after listeners are registered as a pair, which is desirable.
+ FIXME pageOut and pageIn handlers should receive oldURL, newURL
+*/
+var pager = decor.pager = {};
+var paging = pager.options = {
+	duration: 0,
+	nodeRemoved: { before: hide, after: show },
+	nodeInserted: { before: hide, after: show },
+	pageOut: { before: noop, after: noop },
+	pageIn: { before: noop, after: noop }
+}
+decor.configurePaging = function(conf) {
+	extend(paging, conf); // TODO option checking
+}
+function setPaging(config) {
+	pager.defaultOptions = extend({}, paging);
+	extend(paging, config);
+}
+function resetPaging() {
+	if (pager.defaultOptions) {
+		paging = pager.defaultOptions;
+		delete pager.defaultOptions;
+	}
+}
+
+
+function hide(node) { node.setAttribute("hidden", "hidden"); }
+function show(node) { node.removeAttribute("hidden"); }
+function noop() {}
+
+var notify = function(phase, type, target, detail) {
+	var handler = paging[type];
+	if (!handler) return;
+	if ((type == "nodeRemoved" || type == "nodeInserted") && target != document.body) return; // ignoring mutations in head
+	var listener;
+	if (handler[phase]) listener = handler[phase];
+	else listener =
+		(type == "nodeRemoved" || type == "pageOut") ?
+			(phase == "before") ? handler : null :
+			(phase == "after") ? handler : null;
+	if (typeof listener == "function") isolate(function() { listener(detail); }); // TODO isFunction(listener)
+}
 
 var page = async(function(loader, callback) {
 	var doc, ready = false;
