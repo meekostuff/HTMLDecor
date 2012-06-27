@@ -1328,6 +1328,7 @@ function _unhide() {
 	// NOTE on IE sometimes content stays hidden although 
 	// the stylesheet has been removed.
 	// The following forces the content to be revealed
+	document.body.style.visibility = "hidden";
 	delay(function() { document.body.style.visibility = ""; }, config["polling-interval"]);
 }
 
