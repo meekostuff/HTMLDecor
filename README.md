@@ -63,7 +63,7 @@ The `<head>` may also contain fallback stylesheets, which have `@title="nodecor"
 		.page { border: 2px solid green; }
 		</style>
 		<style title="nodecor">
-		/* this style only applies if scripting is disabled or the decor doesn't load */
+		/\* this style only applies if scripting is disabled or the decor doesn't load \*/
 		#page-main { background-color: red; }
 		</style>
 	</head>
@@ -241,7 +241,7 @@ To enable author supplied animation of page transitions, HTMLDecor provides the 
 	function hide(node) { node.setAttribute("hidden", "hidden"); }
 	function show(node) { node.removeAttribute("hidden"); }
 	function noop() {}
-	function preprocess(doc) { /* `doc` is the DOM of the next page which can be preprocessed before merged */ }
+	function preprocess(doc) { /\* `doc` is the DOM of the next page which can be preprocessed before merged \*/ }
 
 This is actually the default configuration so there's no need to repeat these settings.
 The method can be called at anytime. Key / value pairs in the passed configuration object overwrite the matching internal setting. 
@@ -253,14 +253,14 @@ A simple way to achieve a fade-out / fade-in effect on page transition is to use
 	});
 	</script>
 	<style>
-	#main { /* assuming #main is the page-specific content */
+	#main { /\* assuming #main is the page-specific content \*/
 		-webkit-transition: opacity 0.5s linear;
 		-moz-transition: opacity 0.5s linear;
 		-ms-transition: opacity 0.5s linear;
 		-o-transition: opacity 0.5s linear;
 		transition: opacity 0.5s linear;
 	}
-	#main[hidden] {
+	#main\[hidden\] {
 		display: block;
 		visibility: visible;
 		opacity: 0;
@@ -277,6 +277,27 @@ If a new page takes longer than one second to load, the user may wonder if the l
 In this case a waiting indicator is typically used to reassure the user that the page is still loading.
 HTMLDecor provides a simple way to do this - when the `duration` has expired (and the next page still hasn't loaded)
 the decor document is used as the waiting page. 
+
+### Manual handling
+
+You can stop HTMLDecor handling hyperlink clicks by calling `event.preventDefault()` in a click handler, e.g.
+
+	document.onclick = function(event) { event.preventDefault(); }
+	
+You can also request HTMLDecor to navigate to a new URL by the following: 
+
+	Meeko.decor.navigate(newURL)
+	
+or
+
+	Meeko.decor.navigate(options)
+
+where `options` is a javascript object with the following settings:
+	
+- `url` - the URL to navigate to. Required. 
+- `replace` - defines whether to use `replaceState` (**true**) or `pushState` (**false**). Default is **false**. 
+- `load` - an asynchronous function which over-rides the internal loading of a url. 
+
 
 `<script>` handling
 -------------------
