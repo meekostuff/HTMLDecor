@@ -512,10 +512,20 @@ function parseHTML(html, url) {
 }
 
 function normalizeDocument(doc, baseURL) {
-	// insert <base href=baseURL> at top of <head>
-	var base = doc.createElement("base");
-	base.setAttribute("href", baseURL);
-	doc.head.insertBefore(base, doc.head.firstChild);
+	// TODO not really sure how to handle <base href="..."> already in doc.
+	// For now just honor them if present (and remove them after normalization)
+	var base;
+	every ($$("base", doc), function(node) {
+		if (!node.getAttribute("href")) return true; // continue
+		base = node;
+		return false; // break
+	});
+	if (!base) { // if there isn't already a <base> ...
+		// insert <base href=baseURL> at top of <head>
+		var base = doc.createElement("base");
+		base.setAttribute("href", baseURL);
+		doc.head.insertBefore(base, doc.head.firstChild);
+	}
 	
 	function normalize(tag, attrName) { 
 		var vendorAttrName = vendorPrefix + "-" + attrName;
@@ -526,7 +536,11 @@ function normalizeDocument(doc, baseURL) {
 	}
 	each(uriAttrs, normalize);
 
-	doc.head.removeChild(base);
+	// now we can remove all <base>. In fact, we have to - we don't want them copied into the page
+	forEach($$("base", doc), function(node) {
+		if (!node.getAttribute("href")) return;
+		node.parentNode.removeChild(node);
+	});
 }
 
 var importDocument = document.importNode ? // NOTE returns a pseudoDoc
