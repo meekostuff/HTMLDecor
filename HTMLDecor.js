@@ -82,9 +82,19 @@ var extend = function(dest, src) {
 	return dest;
 }
 
+var parseJSON = JSON.parse ?
+function(text) {
+	try { return JSON.parse(text); }
+	catch (error) { return; }
+} :
+function(text) {
+	try { return ( Function('return ( ' + text + ' );') )(); }
+	catch (error) { return; }
+}
+
 if (!Meeko.stuff) Meeko.stuff = {}
 extend(Meeko.stuff, {
-	uc: uc, lc: lc, last: last, indexOf: indexOf, forEach: forEach, every: every, words: words, each: each, extend: extend
+	uc: uc, lc: lc, last: last, indexOf: indexOf, forEach: forEach, every: every, words: words, each: each, extend: extend, parseJSON: parseJSON
 });
 
 /*
@@ -613,16 +623,23 @@ var script = last($$("script")); // WARN this wouldn't be valid if script is dyn
 var getOptions = function() {
 	var search = location.search,
 		options = {}; 
-	if (search) search.substr(1).replace(/(?:^|&)([^&=]+)=?([^&]*)/g, function(m, key, val) { if (m) options[key] = val; });
+	if (search) search.substr(1).replace(/(?:^|&)([^&=]+)=?([^&]*)/g, function(m, key, val) { if (m) options[key] = decodeURIComponent(val); });
 	return options;
 }
 var urlQuery = getOptions();
 
 var dataSources = [];
-dataSources.push( function(name) { return urlQuery[vendorPrefix+"-"+name]; } );
-if (window.sessionStorage) dataSources.push( function(name) { return sessionStorage.getItem(vendorPrefix+"-"+name); });
-if (window.localStorage) dataSources.push( function(name) { return localStorage.getItem(vendorPrefix+"-"+name); });
-dataSources.push(function(name) { return script.getAttribute("data-" + name.replace(modulePrefix+"-", "")); });
+var queryConfig = parseJSON(urlQuery[vendorPrefix+'-config']);
+if (queryConfig) dataSources.push( function(name) { return queryConfig[name]; } );
+if (window.sessionStorage) {
+	var sessionConfig = parseJSON(sessionStorage.getItem(vendorPrefix + "-config"));
+	if (sessionConfig) dataSources.push( function(name) { return sessionConfig[name]; } );
+}
+if (window.localStorage) {
+	var localConfig = parseJSON(localStorage.getItem(vendorPrefix + "-config"));
+	if (localConfig) dataSources.push( function(name) { return localConfig[name]; } );
+}
+if (Meeko.config) dataSources.push( function(name) { return Meeko.config[name]; } )
 
 var getData = function(name, type) {
 	var data = null;
