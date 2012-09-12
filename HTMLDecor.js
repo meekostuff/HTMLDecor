@@ -861,7 +861,7 @@ decorate: async(function(decorURL, callback) {
 	queue([
 
 	async(function(cb) {
-		DOM.loadHTML(decorURL, { // FIXME this should use options.load or options.loadDecor
+		decor.load(decorURL, { // FIXME this should use options.load or options.loadDecor
 			onComplete: function(result) { doc = result; cb.complete(); },
 			onError: function() { logger.error("loadHTML fail for " + url); cb.error(); }
 		});
@@ -871,7 +871,7 @@ decorate: async(function(decorURL, callback) {
 		// TODO but it would be nice to store more data
 		var altDecorURL = getDecorURL(doc, true);
 		if (!altDecorURL) return true;
-		var loadCB = DOM.loadHTML(altDecorURL, {
+		decor.load(altDecorURL, {
 			onComplete: function(result) { doc = result; cb.complete(); },
 			onError: function() { logger.error("loadHTML fail for " + url); cb.error(); }
 		});
@@ -929,6 +929,10 @@ decorate: async(function(decorURL, callback) {
 	}
 
 	], callback);
+}),
+
+load: async(function(url, callback) {
+	DOM.loadHTML(url, callback);
 }),
 
 navigate: async(function(config, callback) {
