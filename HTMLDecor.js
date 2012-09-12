@@ -470,9 +470,9 @@ function parseHTML(html, url) {
 	// What about "application/javascript", etc??
 	html = html.replace(/<script\b[^>]*>/ig, function(tag) {
 		if (/\btype=['"]?text\/javascript['"]?(?=\s|\>)/i.test(tag)) {
-			return tag.replace(/\btype=['"]?text\/javascript['"]?(?=\s|\>)/i, 'type="text/javascript?async"');
+			return tag.replace(/\btype=['"]?text\/javascript['"]?(?=\s|\>)/i, 'type="text/javascript?disabled"');
 		}
-		return tag.replace(/\>$/, ' type="text/javascript?async">');
+		return tag.replace(/\>$/, ' type="text/javascript?disabled">');
 	});
 	var iframe = document.createElement("iframe");
 	    docHead = document.head;
@@ -1232,7 +1232,7 @@ var removeExecutedScripts = function(doc) {
 }
 
 var enableScript = function(node) {
-	if (!/^text\/javascript\?async$/i.test(node.type)) return;
+	if (!/^text\/javascript\?disabled$/i.test(node.type)) return;
 	var script = document.createElement("script");
 	copyAttributes(script, node);
 	script.type = "text/javascript";
