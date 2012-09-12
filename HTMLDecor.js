@@ -1168,6 +1168,7 @@ function mergeHead(doc, isDecor) {
 		}
 		if (isDecor) dstHead.insertBefore(srcNode, marker);
 		else dstHead.appendChild(srcNode);
+		if (tagName(srcNode) == "link") srcNode.href = srcNode.getAttribute("href"); // Otherwise <link title="..." /> stylesheets don't work on Chrome
 	});
 	// allow scripts to run
 	forEach($$("script", dstHead), enableScript); // FIXME this breaks if a script inserts other scripts
