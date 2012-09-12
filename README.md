@@ -413,7 +413,7 @@ The configuration options may also be useful for debugging.
 Configuration
 -------------
 
-**WARNING** the method of configuration is almost certain to change in a future release.
+**WARNING** the method of configuration is not stable and likely to change in a future release.
 
 You probably don't want to change the default configuration, but if you find the need, here's how.
 
@@ -427,22 +427,26 @@ HTMLDecor has the following config options (default values in **bold**).
 HTMLDecor reads config options immediately after the script loads.
 Sources for configuration options are detailed below. 
 
-### From data-* attributes
-Options can be preset using data-attributes of the script which loads HTMLDecor, like this
+### From `Meeko.config` 
+Options can be **preset** by script, like this
 
-    <script src="/path/to/HTMLDecor.js" data-log-level="debug"></script>
-	
-Any options which are prefixed with `decor-` need the prefix removed when written as a data-attribute, for example 
-
-    <script src="/path/to/HTMLDecor.js" data-hidden-timeout="1000"></script>
-	
+    <script>
+	var Meeko = window.Meeko || (window.Meeko = {});
+	Meeko.config = {
+		"log-level": "info"
+	}	
+	</script>
+		
 Boolean options, such as `decor-autostart`, can have any of these boolean-like values: true/false, yes/no, on/off, 1/0
-
-    <script src="/path/to/HTMLDecor.js" data-autostart="no"></script>
-
 Typically the only important options are `decor-autostart` and `decor-hidden-timeout`, for example 
 
-    <script src="/path/to/HTMLDecor.js" data-autostart="no" data-hidden-timeout="1000"></script>
+    <script>
+	var Meeko = window.Meeko || (window.Meeko = {});
+	Meeko.config = {
+		"decor-autostart": "no",
+		"decor-hidden-timeout": 1000
+	}	
+	</script>
 
 This tells HTMLDecor not to start automatically, and when a manual start is requested to
 hide the page until all decor-resources are loaded *or*
@@ -456,19 +460,18 @@ especially as you may have to change them back after you've found the problem.
 For this reason HTMLDecor reads `sessionStorage` and `localStorage` at startup, looking for config options.
 `sessionStorage` options override those found in `localStorage`, which in turn override those in data-attributes.
 
-Config options must be prefixed with `meeko-`. Thus the following would prevent `autostart` and turn on `debug` logging.
+Config options are read from JSON stored in the `meeko-config` key. Thus the following would prevent `autostart` and turn on `debug` logging.
 
-	sessionStorage.setItem('meeko-decor-autostart', 'no');
-	sessionStorage.setItem('meeko-log-level', 'debug');
+	sessionStorage.setItem('meeko-config', JSON.stringify({ "decor-autostart": "no", "log-level": "debug" }) );
 
 _Note_ that the page would require a refresh after these settings were made.
 
 ### From the page URL query options
 `localStorage` and `sessionStorage` are not available on all browsers (particularly IE6 and IE7).
-HTMLDecor looks in the query part of the page URL for config options.
-Config options must be prefixed with `meeko-`. Thus the following would prevent `autostart` and turn on `debug` logging.
+HTMLDecor looks in the query part of the page URL for JSON in the `meeko-config` option.
+Thus the following would prevent `autostart` and turn on `debug` logging.
 
-	http://example.org/index.html?meeko-decor-autostart=no&meeko-log-level=debug
+	http://example.org/index.html?meeko-config={"decor-autostart":"no","log-level":"debug"}
 	
 URL query options override all other settings. 
 
