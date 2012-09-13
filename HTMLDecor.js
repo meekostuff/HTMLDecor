@@ -486,7 +486,6 @@ function parseHTML(html, url) {
 
 	polyfill(iframeDoc);
 
-	// DISABLED removeExecutedScripts(htmlDocument); 
 	normalizeDocument(iframeDoc, url);
 
 	forEach($$("style", iframeDoc.body), function(node) { // TODO support <style scoped>
@@ -1231,6 +1230,36 @@ var removeExecutedScripts = function(doc) {
 	});
 }
 
+var enableScript = (function() {
+	
+var scriptQueue = [], pending = false, blockingScript;
+
+var queueScript = function(script, node) {
+	scriptQueue.push({ script: script, node: node });
+	if (blockingScript) return;
+	processScriptQueue();
+}
+
+var processScriptQueue = function() {
+	if (pending) return;
+	delay(_processScriptQueue);
+	pending = true;
+}
+
+var _processScriptQueue = function() {
+	pending = false;
+	blockingScript = null;
+	while (!blockingScript && scriptQueue.length) {
+		var spec = scriptQueue.shift(), script = spec.script, node = spec.node;
+		if (script.src && !script.getAttribute("async")) {
+			blockingScript = spec;
+			addEvent(script, "load", processScriptQueue);
+			addEvent(script, "error", processScriptQueue);
+		}
+		replaceNode(node, script);
+	}
+}
+
 var enableScript = function(node) {
 	if (!/^text\/javascript\?disabled$/i.test(node.type)) return;
 	var script = document.createElement("script");
@@ -1240,9 +1269,13 @@ var enableScript = function(node) {
 	// FIXME is this comprehensive?
 	try { script.innerHTML = node.innerHTML; }
 	catch (error) { script.text = node.text; }
-
-	replaceNode(node, script);
+	
+	queueScript(script, node);
 }
+
+return enableScript;
+
+})();
 
 var readyStateLookup = {
 	"uninitialized": false,

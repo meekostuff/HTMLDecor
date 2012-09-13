@@ -305,8 +305,12 @@ where `options` is a javascript object with the following settings:
 - Scripts in the page are not handled by HTMLDecor - they execute at the expected time in the browser's script handling.
 The page does not need and SHOULD NOT have scripts - they SHOULD all be part of the decor. 
 
-- All scripts which are not in the initial page (that is, decor content or panned page content) are executed via dynamic script insertion.
-Thus inline scripts are executed immediately, and downloaded scripts are executed asynchronously.
+- All scripts which are not in the initial page (that is, decor content or panned page content) are executed via dynamic script insertion, 
+but behave **like** scripts that are part of the page content. Page content is not blocked, but earlier scripts block later scripts 
+unless the earlier script has the `src` and `async` attributes. 
+
+    `<script src="..." async></script>`
+
 This dynamic script insertion is referred to as **enabling** in the following rules. 
 
 - Scripts in the `<head>` of the decor are **enabled** AFTER all the content in the `<head>` of the decor is MERGED WITH the page.
@@ -316,9 +320,7 @@ but BEFORE the page content is MERGED WITH the decor.
 
 - When panning occurs, scripts in the `<head>` of the next page are **enabled** AFTER all the content in the `<head>` of the next page is MERGED WITH the page. 
 Scripts in the `<body>` of the next page are **enabled** AFTER the content in the `<body>` of the next page is MERGED WITH the page.
-You do not need and you SHOULD NOT have scripts in the next page.
-
-**WARNING** Execution order of downloaded scripts will not necessarily be the same as their source order. 
+You do not need and SHOULD NOT have scripts in any page (other than the decor document). 
 
 Alternate Decor
 ---------------
