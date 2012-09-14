@@ -82,7 +82,7 @@ var extend = function(dest, src) {
 	return dest;
 }
 
-var parseJSON = JSON.parse ?
+var parseJSON = (window.JSON && JSON.parse) ?
 function(text) {
 	try { return JSON.parse(text); }
 	catch (error) { return; }
