@@ -895,7 +895,7 @@ decorate: async(function(decorURL, callback) {
 		decor_insertBody(doc);
 		decorEnd = document.createTextNode("");
 		document.body.insertBefore(decorEnd, contentStart);
-		notify("before", "pageIn", document);
+		notify("before", "pageIn", document); // TODO perhaps this should be stalled until scriptsDone (or a config option)
 	},
 	function() {
 		return until(
@@ -921,7 +921,7 @@ decorate: async(function(decorURL, callback) {
 			}
 		);
 	},
-	function() { return wait(function() { return complete; }); },
+	function() { return wait(function() { return complete && scriptQueue.isEmpty(); }); }, // TODO perhaps this should only be waiting on contentDone
 	function() {
 		notify("after", "pageIn", document);
 		scrollToId(location.hash && location.hash.substr(1));
@@ -1088,6 +1088,7 @@ var pageOut = async(function(cb) {
 });
 
 var pageIn = async(function(doc, cb) {
+	
 	queue([
 
 	function() {
@@ -1112,6 +1113,7 @@ var pageIn = async(function(doc, cb) {
 			}
 		);
 	}),
+	function() { return wait(function() { return scriptQueue.isEmpty(); }); },
 	function() {
 		scrollToId(location.hash && location.hash.substr(1));
 		notify("after", "pageIn", document);
@@ -1170,7 +1172,7 @@ function mergeHead(doc, isDecor) {
 		if (tagName(srcNode) == "link") srcNode.href = srcNode.getAttribute("href"); // Otherwise <link title="..." /> stylesheets don't work on Chrome
 	});
 	// allow scripts to run
-	forEach($$("script", dstHead), enableScript); // FIXME this breaks if a script inserts other scripts
+	forEach($$("script", dstHead), function(script) { scriptQueue.push(script); }); // FIXME this breaks if a script inserts other scripts
 }
 
 function page_preprocess(doc) {
@@ -1218,8 +1220,8 @@ function decor_insertBody(doc) {
 
 	forSiblings ("before", content, function(node) {
 		if (node.nodeType !== 1) return;
-		if ("script" === tagName(node)) enableScript(node);
-		else forEach($$("script", node), enableScript);
+		if ("script" === tagName(node)) scriptQueue.push(node);
+		else forEach($$("script", node), function(script) { scriptQueue.push(script); });
 	});
 }
 
@@ -1230,37 +1232,37 @@ var removeExecutedScripts = function(doc) {
 	});
 }
 
-var enableScript = (function() {
+var scriptQueue = new function() {
 	
-var scriptQueue = [], pending = false, blockingScript;
+var queue = [], pending = false, blockingScript, onClose;
 
 var queueScript = function(script, node) {
-	scriptQueue.push({ script: script, node: node });
+	queue.push({ script: script, node: node });
 	if (blockingScript) return;
-	processScriptQueue();
+	processQueue();
 }
 
-var processScriptQueue = function() {
+var processQueue = function() {
 	if (pending) return;
-	delay(_processScriptQueue);
+	delay(_processQueue);
 	pending = true;
 }
 
-var _processScriptQueue = function() {
+var _processQueue = function() {
 	pending = false;
 	blockingScript = null;
-	while (!blockingScript && scriptQueue.length) {
-		var spec = scriptQueue.shift(), script = spec.script, node = spec.node;
+	while (!blockingScript && queue.length > 0) {
+		var spec = queue.shift(), script = spec.script, node = spec.node;
 		if (script.src && !script.getAttribute("async")) {
 			blockingScript = spec;
-			addEvent(script, "load", processScriptQueue);
-			addEvent(script, "error", processScriptQueue);
+			addEvent(script, "load", processQueue);
+			addEvent(script, "error", processQueue);
 		}
 		replaceNode(node, script);
 	}
 }
 
-var enableScript = function(node) {
+this.push = function(node) {
 	if (!/^text\/javascript\?disabled$/i.test(node.type)) return;
 	var script = document.createElement("script");
 	copyAttributes(script, node);
@@ -1273,9 +1275,11 @@ var enableScript = function(node) {
 	queueScript(script, node);
 }
 
-return enableScript;
+this.isEmpty = function() {
+	return (queue.length <= 0 && !blockingScript);
+}
 
-})();
+}
 
 var readyStateLookup = {
 	"uninitialized": false,
