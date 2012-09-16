@@ -888,14 +888,15 @@ decorate: async(function(decorURL, callback) {
 	/* Now merge decor into page */
 	function() {
 		mergeHead(doc, true);
-		Anim.unhide(); // can unhide page now that decor declared stylesheets have been added
 	},
+	function() { return wait(function() { return scriptQueue.isEmpty(); }); }, 
 	function() {
+		Anim.unhide(); // can unhide page now that decor declared stylesheets have been added
 		contentStart = document.body.firstChild;
 		decor_insertBody(doc);
 		decorEnd = document.createTextNode("");
 		document.body.insertBefore(decorEnd, contentStart);
-		notify("before", "pageIn", document); // TODO perhaps this should be stalled until scriptsDone (or a config option)
+		notify("before", "pageIn", document); // TODO perhaps this should be stalled until scriptQueue.isEmpty() (or a config option)
 	},
 	function() {
 		return until(
@@ -921,7 +922,7 @@ decorate: async(function(decorURL, callback) {
 			}
 		);
 	},
-	function() { return wait(function() { return complete && scriptQueue.isEmpty(); }); }, // TODO perhaps this should only be waiting on contentDone
+	function() { return wait(function() { return complete && scriptQueue.isEmpty(); }); },
 	function() {
 		notify("after", "pageIn", document);
 		scrollToId(location.hash && location.hash.substr(1));
