@@ -49,12 +49,12 @@ var document = window.document;
 var uc = function(str) { return str.toUpperCase(); }
 var lc = function(str) { return str.toLowerCase(); }
 
-var last = function(a) { return a[a.length - 1]; }
-var indexOf = ([].indexOf) ?
-function(a, item) { return a.indexOf(item); } :
-function(a, item) {
-	for (var n=a.length, i=0; i<n; i++) if (a[i] == item) return i;
-	return -1;
+var remove = function(a, item) {
+	for (var n=a.length, i=0; i<n; i++) {
+		if (a[i] !== item) continue;
+		a.splice(i, 1);
+		return;
+	}	
 }
 var forEach = ([].forEach) ? 
 function(a, fn, context) { return [].forEach.call(a, fn, context); } :
@@ -94,7 +94,7 @@ function(text) {
 
 if (!Meeko.stuff) Meeko.stuff = {}
 extend(Meeko.stuff, {
-	uc: uc, lc: lc, last: last, indexOf: indexOf, forEach: forEach, every: every, words: words, each: each, extend: extend, parseJSON: parseJSON
+	uc: uc, lc: lc, forEach: forEach, every: every, words: words, each: each, extend: extend, parseJSON: parseJSON
 });
 
 /*
@@ -243,7 +243,7 @@ var wait = async(function(fn, waitCB) {
 	waitCB.hook = fn;
 	callbacks.push(waitCB);
 	if (!timerId) timerId = window.setInterval(waitback, config["polling-interval"]); // NOTE polling-interval is configured below
-	waitCB.onAbort = function() { callbacks.splice(indexOf(callbacks, waitCB), 1); }
+	waitCB.onAbort = function() { remove(callbacks, waitCB); }
 });
 
 return wait;
@@ -631,8 +631,6 @@ polyfill();
  ### Get config options
 */
 
-var script = last($$("script")); // WARN this wouldn't be valid if script is dynamically inserted
-
 var getOptions = function() {
 	var search = location.search,
 		options = {}; 
@@ -914,7 +912,7 @@ decorate: async(function(decorURL, callback) {
 						nodeList.push(node.id);
 						delay(function() {
 							notify("after", "nodeInserted", document.body, node);
-							nodeList.splice(indexOf(nodeList, node.id), 1);
+							remove(nodeList, node.id);
 							if (!nodeList.length) complete = true;
 						});
 					}
@@ -1108,7 +1106,7 @@ var pageIn = async(function(doc, cb) {
 				nodeList.push(node);
 				delay(function() {
 					notify("after", "nodeInserted", document.body, node);
-					nodeList.splice(indexOf(nodeList,node), 1);
+					remove(nodeList, node);
 					if (!nodeList.length) cb.complete();
 				});
 			}
@@ -1223,13 +1221,6 @@ function decor_insertBody(doc) {
 		if (node.nodeType !== 1) return;
 		if ("script" === tagName(node)) scriptQueue.push(node);
 		else forEach($$("script", node), function(script) { scriptQueue.push(script); });
-	});
-}
-
-var removeExecutedScripts = function(doc) {
-	forEach($$("script", doc), function(node) {
-		if (node.type && !/^text\/javascript$/i.test(node.type)) return;
-		node.parentNode.removeChild(node);
 	});
 }
 
