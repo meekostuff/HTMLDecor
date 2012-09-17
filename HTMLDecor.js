@@ -9,7 +9,7 @@
 
 // TODO substantial error handling and notification needs to be added
 // Also more isolation.
-// <link rel="canonical" />
+// <link rel="meeko-base" />
 
 // FIXME Is javascript even supported for different media devices? 
 // e.g. will <link rel="meeko-decor" media="print" /> even work?
@@ -56,11 +56,11 @@ var remove = function(a, item) {
 		return;
 	}	
 }
-var forEach = ([].forEach) ? 
+var forEach = ([].forEach) ?  // TODO is this feature detection worth-while?
 function(a, fn, context) { return [].forEach.call(a, fn, context); } :
 function(a, fn, context) { for (var n=a.length, i=0; i<n; i++) fn.call(context, a[i], i, a); }
 
-var every = ([].every) ? 
+var every = ([].every) ?  // TODO is this feature detection worth-while?
 function(a, fn, context) { return [].every.call(a, fn, context); } :
 function(a, fn, context) { 
 	for (var n=a.length, i=0; i<n; i++) {
@@ -71,7 +71,15 @@ function(a, fn, context) {
 
 var words = function(text) { return text.split(/\s+/); }
 
-var each = function(object, fn) {
+var each = (Object.keys) ? // TODO is this feature detection worth-while?
+function(object, fn) {
+	var keys = Object.keys(object);
+	for (var n=keys.length, i=0; i<n; i++) {
+		var key = keys[i];
+		fn(key, object[key]);
+	}
+} : 
+function(object, fn) {
 	for (slot in object) {
 		if (object.hasOwnProperty && object.hasOwnProperty(slot)) fn(slot, object[slot]);
 	}
