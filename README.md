@@ -1,11 +1,12 @@
 HTMLDecor
 =========
 
-> Why should you use the server to merge your real page content 
-> with your banner, navbars, ads, page-layout and stylesheets? 
-> Put all that site decor in its own page 
-> and let HTMLDecor merge them in the browser. 
-> You'll cut the download time of every page,
+> HTMLDecor **truly** separates content from presentation.
+> With CSS you can change the styling of a whole site with one stylesheet.
+> With HTMLDecor you can change everything -
+> banner, navbars, ads, page-layout and stylesheets.
+> Not only is it simple to setup and maintain, 
+> you'll cut the download time of every page,
 > plus "pushState assisted navigation" comes for free.
 
 HTMLDecor is a Javascript page template engine which runs in the browser.
