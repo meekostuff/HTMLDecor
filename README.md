@@ -1,7 +1,7 @@
 HTMLDecor
 =========
 
-> HTMLDecor **truly** separates content from presentation.
+> HTMLDecor means **full** separation of content from presentation.
 > With CSS you can change the styling of a whole site with one stylesheet.
 > With HTMLDecor you can change everything -
 > banner, navbars, ads, page-layout and stylesheets.
