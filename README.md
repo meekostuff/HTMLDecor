@@ -23,13 +23,13 @@ When someone viewing your page clicks on a link to another page that uses the sa
 then HTMLDecor updates the real content
 and `history.pushState()` is used to update the browser URL. 
 
-HTMLDecor.js is less than 7kB when minified and gzipped.
+HTMLDecor.js is less than 10kB when minified and gzipped.
 You can even access HTMLDecor.js from a CDN at
-http://dist.meekostuff.net/HTMLDecor/1.3-stable/HTMLDecor.js
+http://dist.meekostuff.net/HTMLDecor/1.4-stable/HTMLDecor.js
 
 To see this in action visit my [blog](http://meekostuff.net/blog/) where I am dog-fooding this script.
 Make sure you view the page source and check that it is just raw content.
-The ad, navbar and contact popup are all in the [site-decor page](http://meekostuff.net/blog/decor.html). 
+The navbar and contact popup are all in the [site-decor page](http://meekostuff.net/blog/decor.html). 
 
 For more info on the concept of HTMLDecor and its affinity with pushState assisted navigation, read  
 
