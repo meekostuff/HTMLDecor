@@ -59,7 +59,7 @@ The `<head>` may also contain fallback stylesheets, which have `@title="nodecor"
 		<!-- create a link to the decor page. All attributes are needed -->
 		<link rel="meeko-decor" type="text/html" href="decor.html" />
 		<!-- and source the HTMLDecor script -->
-		<script src="http://dist.meekostuff.net/HTMLDecor/1.3-stable/HTMLDecor.js"></script>
+		<script src="http://dist.meekostuff.net/HTMLDecor/1.4-stable/HTMLDecor.js"></script>
 		<style>
 		.page { border: 2px solid green; }
 		</style>
@@ -163,9 +163,9 @@ Installation
 
 The easiest way to use HTMLDecor is via the CDN. Simply include the following line in the `<head>` of your page:
 
-		<script src="http://dist.meekostuff.net/HTMLDecor/1.3-stable/HTMLDecor.js"></script>
+		<script src="http://dist.meekostuff.net/HTMLDecor/1.4-stable/HTMLDecor.js"></script>
 		
-Alternatively you can [download HTMLDecor.js](http://dist.meekostuff.net/HTMLDecor/1.3-stable/HTMLDecor.js)
+Alternatively you can [download HTMLDecor.js](http://dist.meekostuff.net/HTMLDecor/1.4-stable/HTMLDecor.js)
 and install it on your server. 
 
 How it works
