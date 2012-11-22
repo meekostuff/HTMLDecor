@@ -772,6 +772,7 @@ onClick: function(e) { // NOTE only pushState enabled browsers use this
 	// Before panning to the next page, have to work out if that is appropriate
 	if (e["meeko-decor"]) return; // a fake event
 	if (e.button != 0) return; // FIXME what is the value for button in IE's W3C events model??
+	if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return; // FIXME do these always trigger modified click behavior??
 	// Find closest <a> to e.target
 	for (var target=e.target; target!=document.body; target=target.parentNode) if (tagName(target) == "a") break;
 	if (tagName(target) != "a") return; // only handling hyperlink clicks
