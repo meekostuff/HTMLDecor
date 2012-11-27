@@ -457,16 +457,17 @@ var loadHTML = async(function(url, cb) {
 
 var parseHTML = (function() {
 
-var uriAttrs = {};
-forEach(words("link@href a@href script@src img@src iframe@src video@src audio@src source@src form@action input@formaction button@formaction"), function(text) {
+var srcAttrs = {}, hrefAttrs = {};
+forEach(words("link@<href script@<src img@<src iframe@<src video@<src audio@<src source@<src a@href area@href q@cite blockquote@cite ins@cite del@cite form@action input@formaction button@formaction"), function(text) {
 	var m = text.split("@"), tag = m[0], attrName = m[1];
-	uriAttrs[tag] = attrName;
+	if (attrName.charAt(0) == '<') srcAttrs[tag] = attrName.substr(1);
+	else hrefAttrs[tag] = attrName;
 });
-	
+
 function parseHTML(html, url) {
 	
 	// prevent resources (<img>, <link>, etc) from loading in parsing context, by renaming @src, @href to @meeko-src, @meeko-href
-	each(uriAttrs, function(tag, attrName) {
+	each(srcAttrs, function(tag, attrName) {
 		html = html.replace(RegExp("<" + tag + "\\b[^>]*>", "ig"), function(tagString) {
 			var vendorAttrName = vendorPrefix + "-" + attrName;
 			return tagString.replace(RegExp("\\b" + attrName + "=", "i"), vendorAttrName + "=");
@@ -503,7 +504,7 @@ function parseHTML(html, url) {
 	var pseudoDoc = importDocument(iframeDoc);
 	docHead.removeChild(iframe);
 
-	each(uriAttrs, function(tag, attrName) {
+	each(srcAttrs, function(tag, attrName) {
 		var vendorAttrName = vendorPrefix + "-" + attrName;
 		forEach($$(tag, pseudoDoc.documentElement), function(el) {
 			var val = el.getAttribute(vendorAttrName);
@@ -535,13 +536,17 @@ function normalizeDocument(doc, baseURL) {
 	}
 	
 	function normalize(tag, attrName) { 
-		var vendorAttrName = vendorPrefix + "-" + attrName;
 		forEach($$(tag, doc), function(el) {
-			var val = el.getAttribute(vendorAttrName);
-			if (val && val.indexOf("#") != 0) el.setAttribute(vendorAttrName, resolveURL(val, doc)); // NOTE anchor hrefs aren't normalized
+			var val = el.getAttribute(attrName);
+			if (!val) return;
+			var mod = val.charAt(0);
+			if ('#' == mod) return; // NOTE anchor hrefs aren't normalized
+			if ('?' == mod) return; // NOTE query hrefs aren't normalized
+			el.setAttribute(attrName, resolveURL(val, doc)); 
 		});
 	}
-	each(uriAttrs, normalize);
+	each(hrefAttrs, normalize);
+	each(srcAttrs, function(tag, attrName) { normalize(tag, vendorPrefix + "-" + attrName) });
 
 	// now we can remove all <base>. In fact, we have to - we don't want them copied into the page
 	forEach($$("base", doc), function(node) {
@@ -779,7 +784,7 @@ onClick: function(e) { // NOTE only pushState enabled browsers use this
 	var href = target.getAttribute("href");
 	if (!href) return;
 
-	// stop the real click event propagating...
+	// stop the real click event propagating... FIXME is there a way to detect defaultPrevented without faking events??
 	if (e.stopImmediatePropagation) e.stopImmediatePropagation();
 	else e.stopPropagation();
 
