@@ -90,6 +90,10 @@ var extend = function(dest, src) {
 	return dest;
 }
 
+var trim = ''.trim ?
+function(str) { return str.trim(); } :
+function(str) { return str.replace(/^\s*/, '').replace(/\s*$/, ''); }
+
 var parseJSON = (window.JSON && JSON.parse) ?
 function(text) {
 	try { return JSON.parse(text); }
@@ -102,7 +106,7 @@ function(text) {
 
 if (!Meeko.stuff) Meeko.stuff = {}
 extend(Meeko.stuff, {
-	uc: uc, lc: lc, forEach: forEach, every: every, words: words, each: each, extend: extend, parseJSON: parseJSON
+	uc: uc, lc: lc, forEach: forEach, every: every, words: words, each: each, extend: extend, trim: trim, parseJSON: parseJSON
 });
 
 /*
@@ -414,19 +418,66 @@ var removeEvent =
 	document.detachEvent && function(node, event, fn) { return node.detachEvent("on" + event, fn); } ||
 	function(node, event, fn) { if (node["on" + event] == fn) node["on" + event] = null; }
 
-// NOTE resolveURL shouldn't be needed, or at least
-// el.setAttribute(attr, el[attr]) should suffice.
-// But IE doesn't return relative URLs for <link>, and
-// does funny things on anchors
-// TODO check all the uses of resolveURL for correctness and necessity
+var URI = (function() {
+
+var URI = function(str) {
+	if (!(this instanceof URI)) return new URI(str);
+	this.parse(str);
+}
+
+var keys = ["source","protocol","host","hostname","port","pathname","search","hash"];
+var parser = /^([^:\/?#]+:)?(?:\/\/(([^:\/?#]*)(?::(\d*))?))?([^?#]*)?(\?[^#]*)?(#.*)?$/;
+
+URI.prototype.parse = function parse(str) {
+	str = trim(str);
+	var	m = parser.exec(str);
+
+	for (var n=keys.length, i=0; i<n; i++) this[keys[i]] = m[i] || '';
+	this.href = str;
+	this.supportsResolve = /http:|https:|ftp:|file:/.test(this.protocol);
+	if (!this.supportsResolve) return;
+	if (this.pathname == '') this.pathname = '/';
+	this.nopathname = this.protocol + (this.supportsResolve ? '//' : '') + this.host;
+	this.basepath = this.pathname.replace(/[^\/]*$/,'');
+	this.base = this.nopathname + this.basepath;
+	this.nosearch = this.nopathname + this.pathname;
+	this.nohash = this.nosearch + this.search;
+	this.href = this.nohash + this.hash;
+};
+
+URI.prototype.resolve = function resolve(relURL) {
+	relURL = trim(relURL);
+	if (!this.supportsResolve) return relURL;
+	var substr1 = relURL.charAt(0), substr2 = relURL.substr(0,2);
+	var absURL =
+		/^[a-zA-Z0-9-]+:/.test(relURL) ? relURL :
+		substr2 == '//' ? this.protocol + relURL :
+		substr1 == '/' ? this.nopathname + relURL :
+		substr1 == '?' ? this.nosearch + relURL :
+		substr1 == '#' ? this.nohash + relURL :
+		substr1 != '.' ? this.base + relURL :
+		substr2 == './' ? this.base + relURL.replace('./', '') :
+		(function() {
+			var myRel = relURL;
+			var myDir = this.basepath;
+			while (myRel.substr(0,3) == '../') {
+				myRel = myRel.replace('../', '');
+				myDir = myDir.replace(/[^\/]+\/$/, '');
+			}
+			return this.nopathname + myDir + myRel;
+		}).call(this);
+	return absURL;
+}
+
+
+return URI;
+
+})();
+	
 var resolveURL = function(relURL, context) {
 	if (!context) context = document;
-	var div = context.createElement("div");
-	if (context != document) context.body.appendChild(div); // WARN assumes context.body exists
-	div.innerHTML = '<a href="'+ relURL + '"></a>';	
-	var href = div.firstChild.href;
-	if (div.parentNode) div.parentNode.removeChild(div);
-	return href;
+	var uri = URI(document.URL);
+	return uri.resolve(relURL);
 }
 
 // NOTE serverURL only needs to be valid on browsers that support pushState
@@ -467,12 +518,14 @@ forEach(words("link@<href script@<src img@<src iframe@<src video@<src audio@<src
 function parseHTML(html, url) {
 	
 	// prevent resources (<img>, <link>, etc) from loading in parsing context, by renaming @src, @href to @meeko-src, @meeko-href
-	each(srcAttrs, function(tag, attrName) {
+	var disableURIs = function(tag, attrName) {
+		var vendorAttrName = vendorPrefix + "-" + attrName;
 		html = html.replace(RegExp("<" + tag + "\\b[^>]*>", "ig"), function(tagString) {
-			var vendorAttrName = vendorPrefix + "-" + attrName;
 			return tagString.replace(RegExp("\\b" + attrName + "=", "i"), vendorAttrName + "=");
 		});
-	});
+	}
+	each(hrefAttrs, disableURIs);
+	each(srcAttrs, disableURIs);
 	
 	// disable <script>
 	// TODO currently handles script @type=""|"text/javascript"
@@ -493,10 +546,24 @@ function parseHTML(html, url) {
 	iframeDoc.write(html);
 	iframeDoc.close();
 
+
 	polyfill(iframeDoc);
 
-	normalizeDocument(iframeDoc, url);
-
+	var baseURL = url;
+	var baseURI = URI(baseURL);
+	
+	// TODO not really sure how to handle <base href="..."> already in doc.
+	// For now just honor them if present
+	var base;
+	forEach ($$("base", iframeDoc.head), function(node) {
+		if (!node.getAttribute("href")) return;
+		base = iframeDoc.head.removeChild(node);
+	});
+	if (base) {
+		baseURL = baseURI.resolve(base.getAttribute('href'));
+		baseURI = URI(baseURL);
+	}
+	
 	forEach($$("style", iframeDoc.body), function(node) { // TODO support <style scoped>
 		iframeDoc.head.appendChild(node);
 	});
@@ -504,55 +571,27 @@ function parseHTML(html, url) {
 	var pseudoDoc = importDocument(iframeDoc);
 	docHead.removeChild(iframe);
 
-	each(srcAttrs, function(tag, attrName) {
+	function enableURIs(tag, attrName) { 
 		var vendorAttrName = vendorPrefix + "-" + attrName;
-		forEach($$(tag, pseudoDoc.documentElement), function(el) {
-			var val = el.getAttribute(vendorAttrName);
-			if (!val) return;
-			el.setAttribute(attrName, val);
+		forEach($$(tag, pseudoDoc), function(el) {
+			var relURL = el.getAttribute(vendorAttrName);
+			if (relURL == null) return;
 			el.removeAttribute(vendorAttrName);
-		});	
-	})
+			var mod = relURL.charAt(0);
+			var absURL =
+				('' == mod) ? relURL : // empty, but not null
+				('#' == mod) ? relURL : // NOTE anchor hrefs aren't normalized
+				('?' == mod) ? relURL : // NOTE query hrefs aren't normalized
+				baseURI.resolve(relURL);
+			el.setAttribute(attrName, absURL);
+		});
+	}
+	each(hrefAttrs, enableURIs);
+	each(srcAttrs, enableURIs);
 
 	// FIXME need warning for doc property mismatches between page and decor
 	// eg. charset, doc-mode, content-type, etc
 	return pseudoDoc;
-}
-
-function normalizeDocument(doc, baseURL) {
-	// TODO not really sure how to handle <base href="..."> already in doc.
-	// For now just honor them if present (and remove them after normalization)
-	var base;
-	every ($$("base", doc), function(node) {
-		if (!node.getAttribute("href")) return true; // continue
-		base = node;
-		return false; // break
-	});
-	if (!base) { // if there isn't already a <base> ...
-		// insert <base href=baseURL> at top of <head>
-		var base = doc.createElement("base");
-		base.setAttribute("href", baseURL);
-		doc.head.insertBefore(base, doc.head.firstChild);
-	}
-	
-	function normalize(tag, attrName) { 
-		forEach($$(tag, doc), function(el) {
-			var val = el.getAttribute(attrName);
-			if (!val) return;
-			var mod = val.charAt(0);
-			if ('#' == mod) return; // NOTE anchor hrefs aren't normalized
-			if ('?' == mod) return; // NOTE query hrefs aren't normalized
-			el.setAttribute(attrName, resolveURL(val, doc)); 
-		});
-	}
-	each(hrefAttrs, normalize);
-	each(srcAttrs, function(tag, attrName) { normalize(tag, vendorPrefix + "-" + attrName) });
-
-	// now we can remove all <base>. In fact, we have to - we don't want them copied into the page
-	forEach($$("base", doc), function(node) {
-		if (!node.getAttribute("href")) return;
-		node.parentNode.removeChild(node);
-	});
 }
 
 var importDocument = document.importNode ? // NOTE returns a pseudoDoc
@@ -586,7 +625,7 @@ function(srcDoc) {
 	 * WARN on IE6 `element.innerHTML = ...` will drop all leading <script>'s
 	 * Work-around this by prepending some benign element to the src <body>
 	 * and removing it from the dest <body> after the copy is done
-	 * /
+	 */
 	var srcBody = srcDoc.body;
 	srcBody.insertBefore(srcDoc.createElement('wbr'), srcBody.firstChild);
 	docBody.innerHTML = srcDoc.body.innerHTML; 
@@ -642,7 +681,7 @@ var DOM = Meeko.DOM || (Meeko.DOM = {});
 extend(DOM, {
 	$id: $id, $$: $$, tagName: tagName, forSiblings: forSiblings, matchesElement: matchesElement, firstChild: firstChild,
 	replaceNode: replaceNode, scrollToId: scrollToId, addEvent: addEvent, removeEvent: removeEvent, createDocument: createDocument,
-	resolveURL: resolveURL, serverURL: serverURL, loadHTML: loadHTML, parseHTML: parseHTML, copyAttributes: copyAttributes,
+	URI: URI, resolveURL: resolveURL, serverURL: serverURL, loadHTML: loadHTML, parseHTML: parseHTML, copyAttributes: copyAttributes,
 	polyfill: polyfill
 });
 
