@@ -581,7 +581,16 @@ function(srcDoc) {
 	}
 
 	docEl.appendChild(docBody);
-	docBody.innerHTML = srcDoc.body.innerHTML;
+	
+	/*
+	 * WARN on IE6 `element.innerHTML = ...` will drop all leading <script>'s
+	 * Work-around this by prepending some benign element to the src <body>
+	 * and removing it from the dest <body> after the copy is done
+	 * /
+	var srcBody = srcDoc.body;
+	srcBody.insertBefore(srcDoc.createElement('wbr'), srcBody.firstChild);
+	docBody.innerHTML = srcDoc.body.innerHTML; 
+	docBody.removeChild(docBody.firstChild); // TODO assert firstChild.tagName == 'wbr'
 
 	var doc = createDocument();
 	doc.appendChild(docEl);
