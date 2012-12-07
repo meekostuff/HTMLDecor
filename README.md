@@ -46,12 +46,11 @@ If you have any questions or comments, don't hesitate to contact the author via
 Quick Start
 -----------
 
-Create a HTML document (page.html) with some page specific content in the `<body>`.
-If there are page specific scripts, styles or meta-data they should go in the `<head>`. 
+Create a HTML document (page.html) with some page specific content -
+elements that are children of `<body>` and have `@id`. 
+Any page specific scripts, styles or meta-data should go in `<head>`. 
 The `<body>` may also contain fallback content, which is
-content that would only be displayed when scripting is disabled
-and will be removed during HTMLDecor processing.
-The `<head>` may also contain fallback stylesheets, which have `@title="nodecor"`. 
+only displayed if HTMLDecor is NOT enabled.
 
     <!DOCTYPE html>
 	<html>
@@ -60,12 +59,9 @@ The `<head>` may also contain fallback stylesheets, which have `@title="nodecor"
 		<link rel="meeko-decor" type="text/html" href="decor.html" />
 		<!-- and source the HTMLDecor script -->
 		<script src="http://dist.meekostuff.net/HTMLDecor/1.4-stable/HTMLDecor.js"></script>
+		<!-- page specific style -->
 		<style>
-		.page { border: 2px solid green; }
-		</style>
-		<style title="nodecor">
-		/\* this style only applies if scripting is disabled or the decor doesn't load \*/
-		#page-main { background-color: red; }
+		.styled-from-page { border: 2px dashed green; }
 		</style>
 	</head>
 	<body>
@@ -73,13 +69,13 @@ The `<head>` may also contain fallback stylesheets, which have `@title="nodecor"
 		This irrelevant content will be removed from the page
 		</div>
 		
-		<div id="page-main">
+		<div id="page-main"><!-- Page specific content, identified by @id -->
 		#page-main
-			<div class="page">
-			This content is styled by the page stylesheet
-			</div>
-			<div class="decor">
+			<div class="styled-from-decor">
 			This content is styled by the decor stylesheet
+			</div>	
+			<div class="styled-from-page">
+			This content is styled by the page stylesheet
 			</div>	
 		</div>
 		
@@ -97,7 +93,7 @@ will appear as the final page without the page specific content.
 	<html>
 	<head>
 		<style>
-		.decor { border: 2px solid blue; }
+		.styled-from-decor { border: 2px solid blue; }
 		</style>
 	</head>
 	<body>
@@ -124,14 +120,15 @@ When page.html is loaded into the browser, HTMLDecor.js will merge decor.html in
 	<html>
 	<head>
 		<style>
-		.decor { border: 2px solid blue; }
+		.styled-from-decor { border: 2px solid blue; }
 		</style>
 		<!-- create a link to the decor page -->
 		<link rel="meeko-decor" type="text/html" href="decor.html" />
 		<!-- and source the HTMLDecor script -->
 		<script src="/path/to/HTMLDecor.js"></script>
+		<!-- page specific style -->
 		<style>
-		.page { border: 2px solid green; }
+		.styled-from-page { border: 2px dashed green; }
 		</style>
 	</head>
 	<body>
@@ -143,11 +140,11 @@ When page.html is loaded into the browser, HTMLDecor.js will merge decor.html in
 			#main in decor
 			<div id="page-main">
 			#page-main
-				<div class="page">
-				This content is styled by the page stylesheet
-				</div>
-				<div class="decor">
+				<div class="styled-from-decor">
 				This content is styled by the decor stylesheet
+				</div>	
+				<div class="styled-from-page">
+				This content is styled by the page stylesheet
 				</div>	
 			</div>
 		</div>
@@ -184,6 +181,50 @@ from the `<head>` of the decor page into the `<head>` of the content page.
 8. When all linked stylesheets for the document have loaded, set the visibility of the page to "visible".
 This step may occur at any time during or after step 7.
 
+
+Fallbacks
+---------
+
+Sometimes HTMLDecor will not be able to apply the decor document to the page.
+This can occur because
+
+- Javascript is disabled
+- the HTMLDecor script failed to download
+- HTMLDecor is configured to NOT autorun
+- the decor document failed to download
+
+In this scenario you would like the page to have some basic styling and auxiliary content -
+something that can be dispensed with when HTMLDecor runs.
+
+### Stylesheets
+
+Any `<link rel="stylesheet">` or `<style>` elements that have `@title="nodecor"`
+will be removed from the page before the decor document is applied, e.g.
+
+	<style title="nodecor">body { max-width: 72ex; }</style>
+
+### Auxiliary content
+
+Children of `<body>` which have no `@id`,
+or which have `@id` that cannot be found in the decor document
+will be removed from the page before the decor is applied, e.g.
+
+	<body>
+		<div>
+		This irrelevant content will be DEFINITELY REMOVED from the page
+		because it has no @id
+		</div>
+		
+		<div id="irrelevant">
+		This content will be REMOVED from the page
+		assuming the decor has no element with matching @id
+		</div>
+
+		<div id="main">
+		This content will be RETAINED in the page
+		assuming the decor has an element with matching @id
+		</div>
+	</body>	
 
 PushState Assisted Navigation
 -----------------------------
@@ -242,7 +283,7 @@ To enable author supplied animation of page transitions, HTMLDecor provides the 
 	function hide(node) { node.setAttribute("hidden", "hidden"); }
 	function show(node) { node.removeAttribute("hidden"); }
 	function noop() {}
-	function preprocess(doc) { /\* `doc` is the DOM of the next page which can be preprocessed before merged \*/ }
+	function preprocess(doc) { /* `doc` is the DOM of the next page which can be preprocessed before merged */ }
 
 This is actually the default configuration so there's no need to repeat these settings.
 The method can be called at anytime. Key / value pairs in the passed configuration object overwrite the matching internal setting. 
@@ -254,14 +295,14 @@ A simple way to achieve a fade-out / fade-in effect on page transition is to use
 	});
 	</script>
 	<style>
-	#main { /\* assuming #main is the page-specific content \*/
+	#main { /* assuming #main is the page-specific content */
 		-webkit-transition: opacity 0.5s linear;
 		-moz-transition: opacity 0.5s linear;
 		-ms-transition: opacity 0.5s linear;
 		-o-transition: opacity 0.5s linear;
 		transition: opacity 0.5s linear;
 	}
-	#main\[hidden\] {
+	#main[hidden] {
 		display: block;
 		visibility: visible;
 		opacity: 0;
