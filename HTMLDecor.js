@@ -35,8 +35,8 @@ var defaults = { // NOTE defaults also define the type of the associated config 
 	"polling-interval": 50
 }
 
-var vendorPrefix = "meeko"; // NOTE added as prefix for url-options, and *Storage
-var modulePrefix = "decor"; // NOTE removed as prefix for data-* attributes
+var vendorPrefix = "meeko";
+var modulePrefix = "decor";
 
 var Meeko = window.Meeko || (window.Meeko = {});
 
@@ -473,21 +473,6 @@ URI.prototype.resolve = function resolve(relURL) {
 return URI;
 
 })();
-	
-var resolveURL = function(relURL, context) {
-	if (!context) context = document;
-	var uri = URI(document.URL);
-	return uri.resolve(relURL);
-}
-
-// NOTE serverURL only needs to be valid on browsers that support pushState
-var serverURL = function(relURL) {
-	if (!relURL) relURL = document.URL;
-	var a = document.createElement("a");
-	a.href = relURL;
-	a.hash = null;
-	return a.href.replace(/#$/, ""); // NOTE work-around for Webkit
-}
 
 var loadHTML = async(function(url, cb) {
 	var DOM = this;
@@ -549,8 +534,7 @@ function parseHTML(html, url) {
 
 	polyfill(iframeDoc);
 
-	var baseURL = url;
-	var baseURI = URI(baseURL);
+	var baseURI = URI(url);
 	
 	// TODO not really sure how to handle <base href="..."> already in doc.
 	// For now just honor them if present
@@ -559,10 +543,7 @@ function parseHTML(html, url) {
 		if (!node.getAttribute("href")) return;
 		base = iframeDoc.head.removeChild(node);
 	});
-	if (base) {
-		baseURL = baseURI.resolve(base.getAttribute('href'));
-		baseURI = URI(baseURL);
-	}
+	if (base) baseURI = URI(baseURI.resolve(base.getAttribute('href')));
 	
 	forEach($$("style", iframeDoc.body), function(node) { // TODO support <style scoped>
 		iframeDoc.head.appendChild(node);
@@ -681,7 +662,7 @@ var DOM = Meeko.DOM || (Meeko.DOM = {});
 extend(DOM, {
 	$id: $id, $$: $$, tagName: tagName, forSiblings: forSiblings, matchesElement: matchesElement, firstChild: firstChild,
 	replaceNode: replaceNode, scrollToId: scrollToId, addEvent: addEvent, removeEvent: removeEvent, createDocument: createDocument,
-	URI: URI, resolveURL: resolveURL, serverURL: serverURL, loadHTML: loadHTML, parseHTML: parseHTML, copyAttributes: copyAttributes,
+	URI: URI, loadHTML: loadHTML, parseHTML: parseHTML, copyAttributes: copyAttributes,
 	polyfill: polyfill
 });
 
@@ -804,7 +785,7 @@ start: function() {
 		return decor.decorate(decorURL);
 	},
 	function() {
-		decor.contentURL = serverURL();
+		decor.contentURL = URI(document.URL).nohash;
 		addEvent(window, "unload", decor.onUnload);
 		
 		if (!history.pushState) return;
@@ -866,18 +847,19 @@ onClick: function(e) { // NOTE only pushState enabled browsers use this
 
 onHyperlink: function(target) { // return false to preventDefault
 	if (target.target) return;
-	var url = resolveURL(target.getAttribute("href")); // TODO probably don't need resolveURL on browsers that support pushState
-	if (url.indexOf(location.protocol + "//" + location.host + "/") != 0) return; // and external urls
+	var baseURI = URI(document.URL);
+	var uri = URI(baseURI.resolve(target.getAttribute("href")));
+	if (uri.nopathname != baseURI.nopathname) return; // and external urls
 	
 	// by this point HTMLDecor wants to prevent the browser default
 	// TODO Need to handle anchor links. The following just replicates browser behavior
-	if (url.indexOf(serverURL() + "#") == 0) {
-		history.pushState({"meeko-decor": true}, null, url);
+	if (uri.nohash == baseURI.nohash) {
+		history.pushState({"meeko-decor": true}, null, uri.href);
 		scrollToId(target.hash.substr(1));
 		return false;
 	}
 
-	return decor.onSiteLink(url);
+	return decor.onSiteLink(uri.href); // TODO should this pass an absPath rather than absURL??
 },
 
 onSiteLink: function(url) { // return false to preventDefault
@@ -891,7 +873,7 @@ onPopState: function(e) {
 	if (e.stopImmediatePropagation) e.stopImmediatePropagation();
 	else e.stopPropagation();
 	// NOTE there is no default-action for popstate
-	var newURL = serverURL();
+	var newURL = URI(document.URL).nohash;
 	if (newURL != decor.contentURL) {
 		scrollToId();
 		var loader = async(function(cb) {
@@ -1012,7 +994,7 @@ navigate: async(function(config, callback) {
 		
 	onComplete: function(msg) {
 		resetPaging();
-		decor.contentURL = serverURL();
+		decor.contentURL = URI(document.URL).nohash;
 		callback.complete(msg);
 	},
 	
@@ -1185,6 +1167,7 @@ var pageIn = async(function(doc, cb) {
 
 
 function mergeHead(doc, isDecor) {
+	var baseURI = URI(document.URL);
 	var dstHead = document.head;
 	var marker = getDecorMeta();
 	if (!marker) throw "No meeko-decor marker found. ";
@@ -1201,7 +1184,7 @@ function mergeHead(doc, isDecor) {
 		switch(tagName(node)) {
 		case "script":
 			if (every($$("script", dstHead), function(el) {
-				return resolveURL(el.src) != node.src;
+				return baseURI.resolve(el.src) != node.src; // FIXME @src should already be resolved to absURL
 			})) return;
 			break;
 		default: return;
@@ -1360,8 +1343,9 @@ return domContentLoaded;
 function getDecorURL(doc, inDecor) {
 	var link = getDecorLink(doc, inDecor);
 	if (!link) return null; // FIXME warning message
-	var decorURL = resolveURL(link.getAttribute("href"));
-	return decorURL;
+	var href = link.getAttribute("href");
+	if (inDecor) return href;
+	return URI(document.URL).resolve(href); // FIXME href should already be absolute
 }
 
 function getDecorLink(doc, inDecor) {
