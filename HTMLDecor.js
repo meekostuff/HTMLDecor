@@ -92,7 +92,7 @@ var extend = function(dest, src) {
 
 var trim = ''.trim ?
 function(str) { return str.trim(); } :
-function(str) { return str.replace(/^\s*/, '').replace(/\s*$/, ''); }
+function(str) { return str.replace(/^\s+/, '').replace(/\s+$/, ''); }
 
 var parseJSON = (window.JSON && JSON.parse) ?
 function(text) {
@@ -491,14 +491,14 @@ var loadHTML = async(function(url, cb) {
 	xhr.send("");
 });
 
-var parseHTML = (function() {
-
 var srcAttrs = {}, hrefAttrs = {};
 forEach(words("link@<href script@<src img@<src iframe@<src video@<src audio@<src source@<src a@href area@href q@cite blockquote@cite ins@cite del@cite form@action input@formaction button@formaction"), function(text) {
 	var m = text.split("@"), tag = m[0], attrName = m[1];
 	if (attrName.charAt(0) == '<') srcAttrs[tag] = attrName.substr(1);
 	else hrefAttrs[tag] = attrName;
 });
+
+var parseHTML = (function() {
 
 function parseHTML(html, url) {
 	
@@ -965,6 +965,41 @@ decorate: async(function(decorURL, callback) {
 		);
 	},
 	function() { return wait(function() { return complete && scriptQueue.isEmpty(); }); },
+	function() { // NOTE resolve URIs in landing page
+		var baseURI = URI(document.URL);
+		function resolve(el, attrName) {
+			var relURL = el.getAttribute(attrName);
+			if (relURL == null) return;
+			var mod = relURL.charAt(0);
+			var absURL =
+				('' == mod) ? relURL : // empty, but not null
+				('#' == mod) ? relURL : // NOTE anchor hrefs aren't normalized
+				('?' == mod) ? relURL : // NOTE query hrefs aren't normalized
+				baseURI.resolve(relURL);
+			el.setAttribute(attrName, absURL);
+		}
+		
+		function resolveAll(root, tag, attr) {
+			forEach($$(tag, root), function(el) { resolve(el, attr); });
+		}
+		
+		function resolveTree(root, inHead) {
+			var tag = tagName(root);
+			if (tag in hrefAttrs) resolve(root, hrefAttrs[tag]);
+			if (tag in srcAttrs) resolve(root, srcAttrs[tag]);
+			if (inHead) return;
+			each(hrefAttrs, function(tag, attr) { resolveAll(root, tag, attr); });
+			each(srcAttrs, function(tag, attr) { resolveAll(root, tag, attr); });
+		}
+		
+		forSiblings("starting", getDecorLink(), function(node) {
+			resolveTree(node, true);
+		});
+		forEach(decor.placeHolders, function(node) {
+			var tree = $(node.id);
+			resolveTree(tree, false);
+		});
+	},
 	function() {
 		notify("after", "pageIn", document);
 		scrollToId(location.hash && location.hash.substr(1));
