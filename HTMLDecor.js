@@ -966,16 +966,13 @@ decorate: async(function(decorURL, callback) {
 	},
 	function() { return wait(function() { return complete && scriptQueue.isEmpty(); }); },
 	function() { // NOTE resolve URIs in landing page
+		// TODO could be merged with code in parseHTML
 		var baseURI = URI(document.URL);
 		function resolve(el, attrName) {
 			var relURL = el.getAttribute(attrName);
 			if (relURL == null) return;
 			var mod = relURL.charAt(0);
-			var absURL =
-				('' == mod) ? relURL : // empty, but not null
-				('#' == mod) ? relURL : // NOTE anchor hrefs aren't normalized
-				('?' == mod) ? relURL : // NOTE query hrefs aren't normalized
-				baseURI.resolve(relURL);
+			var absURL = baseURI.resolve(relURL);
 			el.setAttribute(attrName, absURL);
 		}
 		
@@ -992,7 +989,7 @@ decorate: async(function(decorURL, callback) {
 			each(srcAttrs, function(tag, attr) { resolveAll(root, tag, attr); });
 		}
 		
-		forSiblings("starting", getDecorLink(), function(node) {
+		forSiblings("after", getDecorMeta(), function(node) {
 			resolveTree(node, true);
 		});
 		forEach(decor.placeHolders, function(node) {
