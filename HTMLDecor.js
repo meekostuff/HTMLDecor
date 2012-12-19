@@ -1241,6 +1241,7 @@ function mergeHead(doc, isDecor) {
 			break;
 		case "meta": // FIXME no duplicates, warn on clash
 			if (srcNode.httpEquiv) return;
+			if (/^\s*viewport\s*$/i.test(srcNode.name)) return; // FIXME Opera mobile was crashing. What to do??
 			break;
 		case "style": 
 			break;
