@@ -684,14 +684,18 @@ var urlQuery = getOptions();
 var dataSources = [];
 var queryConfig = parseJSON(urlQuery[vendorPrefix+'-config']);
 if (queryConfig) dataSources.push( function(name) { return queryConfig[name]; } );
-if (window.sessionStorage) {
-	var sessionConfig = parseJSON(sessionStorage.getItem(vendorPrefix + "-config"));
-	if (sessionConfig) dataSources.push( function(name) { return sessionConfig[name]; } );
-}
-if (window.localStorage) {
-	var localConfig = parseJSON(localStorage.getItem(vendorPrefix + "-config"));
-	if (localConfig) dataSources.push( function(name) { return localConfig[name]; } );
-}
+
+try { // NOTE initial testing on IE10 showed attempting to get localStorage throws an access error
+	if (window.sessionStorage) {
+		var sessionConfig = parseJSON(sessionStorage.getItem(vendorPrefix + "-config"));
+		if (sessionConfig) dataSources.push( function(name) { return sessionConfig[name]; } );
+	}
+	if (window.localStorage) {
+		var localConfig = parseJSON(localStorage.getItem(vendorPrefix + "-config"));
+		if (localConfig) dataSources.push( function(name) { return localConfig[name]; } );
+	}
+} catch(error) {}
+
 if (Meeko.config) dataSources.push( function(name) { return Meeko.config[name]; } )
 
 var getData = function(name, type) {
