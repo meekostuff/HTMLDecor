@@ -973,12 +973,19 @@ decorate: async(function(decorURL, callback) {
 	function() { // NOTE resolve URIs in landing page
 		// TODO could be merged with code in parseHTML
 		var baseURI = URI(document.URL);
-		function resolve(el, attrName) {
+		function _resolve(el, attrName) {
 			var relURL = el.getAttribute(attrName);
 			if (relURL == null) return;
-			var mod = relURL.charAt(0);
 			var absURL = baseURI.resolve(relURL);
 			el.setAttribute(attrName, absURL);
+		}
+		
+		function resolve(el, attrName) {
+			if (tagName(el) != 'script') return _resolve(el, attrName);		
+			var scriptType = el.type;
+			el.type = scriptType + '?disabled';
+			_resolve(el, attrName);
+			el.type = scriptType;
 		}
 		
 		function resolveAll(root, tag, attr) {
