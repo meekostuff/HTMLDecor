@@ -381,6 +381,32 @@ var replaceNode = function(current, next) {
 	return current;
 }
 
+var composeNode = function(srcNode) { // document.importNode() NOT available on IE < 9
+	if (srcNode.nodeType != 1) return;
+	var tag = tagName(srcNode);
+	var node = document.createElement(tag);
+	copyAttributes(node, srcNode);
+	switch(tag) {
+	case "title":
+		if (tagName(node) == "title" && node.innerHTML == "") node = null;
+		else node.innerText = srcNode.innerHTML;
+		break;
+	case "style":
+		var frag = document.createDocumentFragment();
+		frag.appendChild(node);
+		node.styleSheet.cssText = srcNode.styleSheet.cssText;
+		frag.removeChild(node);
+		break;
+	case "script":
+		node.text = srcNode.text;
+		break;
+	default: // meta, link, base have no content
+		// FIXME what to do with <base>?
+		break;
+	}
+	return node;
+}
+
 var copyAttributes = function(node, srcNode) { // implements srcNode.cloneNode(false)
 	var attrs = srcNode.attributes;
 	forEach(attrs, function(attr) {
@@ -622,36 +648,11 @@ var importNode = document.importNode ? // NOTE only for single nodes, especially
 function(srcNode) { 
 	return document.importNode(srcNode, false);
 } :
-function(srcNode) { // document.importNode() NOT available on IE < 9
-	if (srcNode.nodeType != 1) return;
-	var tag = tagName(srcNode);
-	var node = document.createElement(tag);
-	copyAttributes(node, srcNode);
-	switch(tag) {
-	case "title":
-		if (tagName(node) == "title" && node.innerHTML == "") node = null;
-		else node.innerText = srcNode.innerHTML;
-		break;
-	case "style":
-		var frag = document.createDocumentFragment();
-		frag.appendChild(node);
-		node.styleSheet.cssText = srcNode.styleSheet.cssText;
-		frag.removeChild(node);
-		break;
-	case "script":
-		node.text = srcNode.text;
-		break;
-	default: // meta, link, base have no content
-		// FIXME what to do with <base>?
-		break;
-	}
-	return node;
-}
+composeNode; 
 
 return parseHTML;
 
 })();
-
 
 var polyfill = function(doc) { // NOTE more stuff could be added here if *necessary*
 	if (!doc) doc = document;
@@ -1241,7 +1242,7 @@ function mergeHead(doc, isDecor) {
 			break;
 		case "meta": // FIXME no duplicates, warn on clash
 			if (srcNode.httpEquiv) return;
-			if (/^\s*viewport\s*$/i.test(srcNode.name)) return; // FIXME Opera mobile was crashing. What to do??
+			if (/^\s*viewport\s*$/i.test(srcNode.name)) srcNode = composeNode(srcNode); // TODO Opera mobile was crashing. Is there another way to fix this?
 			break;
 		case "style": 
 			break;
