@@ -768,12 +768,11 @@ this.LOG_LEVEL = this.LOG_WARN; // DEFAULT
 var log_index = logger["LOG_" + uc(config["log-level"])];
 if (log_index != null) logger.LOG_LEVEL = log_index;
 
-var decor = Meeko.decor || (Meeko.decor = new function() {
 
-var decor = this;
+var decor = Meeko.decor = {};
+var panner = Meeko.panner = {};
 
 extend(decor, {
-	contentURL: "",
 	placeHolders: {},
 	"hidden-timeout": 0
 });
@@ -781,7 +780,6 @@ extend(decor, {
 extend(decor, {
 
 start: function() {
-	var decor = this;
 	var decorURL = getDecorURL(document);
 	if (!decorURL) return; // FIXME warning message
 	return queue([
@@ -790,8 +788,8 @@ start: function() {
 		return decor.decorate(decorURL);
 	},
 	function() {
-		decor.contentURL = URI(document.URL).nohash;
-		addEvent(window, "unload", decor.onUnload);
+		panner.contentURL = URI(document.URL).nohash;
+		addEvent(window, "unload", panner.onUnload);
 		
 		if (!history.pushState) return;
 		
@@ -800,104 +798,14 @@ start: function() {
 			history.replaceState({"meeko-decor": true }, null);
 		}, true);
 		// NOTE fortuitously all the browsers that support pushState() also support addEventListener() and dispatchEvent()
-		window.addEventListener("click", decor.onClick, true);
-		window.addEventListener("popstate", decor.onPopState, true);
+		window.addEventListener("click", panner.onClick, true);
+		window.addEventListener("popstate", panner.onPopState, true);
 	}
 		
 	]);
 },
 
-onClick: function(e) { // NOTE only pushState enabled browsers use this
-	// Before panning to the next page, have to work out if that is appropriate
-	if (e["meeko-decor"]) return; // a fake event
-	if (e.button != 0) return; // FIXME what is the value for button in IE's W3C events model??
-	if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return; // FIXME do these always trigger modified click behavior??
-	// Find closest <a> to e.target
-	for (var target=e.target; target!=document.body; target=target.parentNode) if (tagName(target) == "a") break;
-	if (tagName(target) != "a") return; // only handling hyperlink clicks
-	var href = target.getAttribute("href");
-	if (!href) return;
-
-	// stop the real click event propagating... FIXME is there a way to detect defaultPrevented without faking events??
-	if (e.stopImmediatePropagation) e.stopImmediatePropagation();
-	else e.stopPropagation();
-
-	// and dispatch a fake click event
-	var fakeEvent = document.createEvent("MouseEvent");
-	fakeEvent.initMouseEvent("click", e.bubbles, e.cancelable, e.view, e.detail,
-			e.screenX, e.screenY, e.clientX, e.clientY,
-			e.ctrlKey, e.altKey, e.shiftKey, e.metaKey,
-			e.button, e.relatedTarget);
-	fakeEvent["meeko-decor"] = true;
-	
-	// NOTE the fake event MUST have the default prevented, so provide a way to discover if another script requested it
-	var defaultPrevented = false; 
-	function preventDefault(event) { if (event.defaultPrevented) defaultPrevented = true; event.preventDefault(); }
-	fakeEvent._stopPropagation = fakeEvent.stopPropagation;
-	fakeEvent.stopPropagation = function() { preventDefault(this); this._stopPropagation(); }
-	fakeEvent._stopImmediatePropagation = fakeEvent.stopImmediatePropagation;
-	fakeEvent.stopImmediatePropagation = function() { preventDefault(this); this._stopImmediatePropagation(); }
-	window.addEventListener("click", preventDefault, false);
-	e.target.dispatchEvent(fakeEvent); 
-	window.removeEventListener("click", preventDefault, false);
-	
-	if (defaultPrevented) { // other scripts want to disable HTMLDecor. FIXME is this a good idea?
-		e.preventDefault();
-		return;
-	}
-	
-	var acceptDefault = decor.onHyperlink(target);
-	if (acceptDefault == false) e.preventDefault();
-},
-
-onHyperlink: function(target) { // return false to preventDefault
-	if (target.target) return;
-	var baseURI = URI(document.URL);
-	var uri = URI(baseURI.resolve(target.getAttribute("href")));
-	if (uri.nopathname != baseURI.nopathname) return; // and external urls
-	
-	// by this point HTMLDecor wants to prevent the browser default
-	// TODO Need to handle anchor links. The following just replicates browser behavior
-	if (uri.nohash == baseURI.nohash) {
-		history.pushState({"meeko-decor": true}, null, uri.href);
-		scrollToId(target.hash.substr(1));
-		return false;
-	}
-
-	return decor.onSiteLink(uri.href); // TODO should this pass an absPath rather than absURL??
-},
-
-onSiteLink: function(url) { // return false to preventDefault
-	// Now attempt to pan
-	decor.navigate(url);
-	return false;
-},
-
-onPopState: function(e) {
-	if (!e.state || !e.state["meeko-decor"]) return;
-	if (e.stopImmediatePropagation) e.stopImmediatePropagation();
-	else e.stopPropagation();
-	// NOTE there is no default-action for popstate
-	var newURL = URI(document.URL).nohash;
-	if (newURL != decor.contentURL) {
-		scrollToId();
-		var loader = async(function(cb) {
-			decor.options.load(document.URL, cb)
-		});
-		page(loader);
-		decor.contentURL = newURL;
-	}
-	else {
-		scrollToId(location.hash && location.hash.substr(1));
-	}
-},
-
-onUnload: function(e) {
-	pageOut();
-},
-
 decorate: async(function(decorURL, callback) {
-	var decor = this;
 	var doc, complete = false;
 	var contentStart, decorEnd;
 
@@ -1021,9 +929,108 @@ load: async(function(url, callback) {
 	DOM.loadHTML(url, callback);
 }),
 
+options: {
+	load: async(function(url, cb) { DOM.loadHTML(url, cb); })
+}
+
+});
+
+extend(panner, {
+
+contentURL: "",
+
+onClick: function(e) { // NOTE only pushState enabled browsers use this
+	// Before panning to the next page, have to work out if that is appropriate
+	if (e["meeko-decor"]) return; // a fake event
+	if (e.button != 0) return; // FIXME what is the value for button in IE's W3C events model??
+	if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return; // FIXME do these always trigger modified click behavior??
+	// Find closest <a> to e.target
+	for (var target=e.target; target!=document.body; target=target.parentNode) if (tagName(target) == "a") break;
+	if (tagName(target) != "a") return; // only handling hyperlink clicks
+	var href = target.getAttribute("href");
+	if (!href) return;
+
+	// stop the real click event propagating... FIXME is there a way to detect defaultPrevented without faking events??
+	if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+	else e.stopPropagation();
+
+	// and dispatch a fake click event
+	var fakeEvent = document.createEvent("MouseEvent");
+	fakeEvent.initMouseEvent("click", e.bubbles, e.cancelable, e.view, e.detail,
+			e.screenX, e.screenY, e.clientX, e.clientY,
+			e.ctrlKey, e.altKey, e.shiftKey, e.metaKey,
+			e.button, e.relatedTarget);
+	fakeEvent["meeko-decor"] = true;
+	
+	// NOTE the fake event MUST have the default prevented, so provide a way to discover if another script requested it
+	var defaultPrevented = false; 
+	function preventDefault(event) { if (event.defaultPrevented) defaultPrevented = true; event.preventDefault(); }
+	fakeEvent._stopPropagation = fakeEvent.stopPropagation;
+	fakeEvent.stopPropagation = function() { preventDefault(this); this._stopPropagation(); }
+	fakeEvent._stopImmediatePropagation = fakeEvent.stopImmediatePropagation;
+	fakeEvent.stopImmediatePropagation = function() { preventDefault(this); this._stopImmediatePropagation(); }
+	window.addEventListener("click", preventDefault, false);
+	e.target.dispatchEvent(fakeEvent); 
+	window.removeEventListener("click", preventDefault, false);
+	
+	if (defaultPrevented) { // other scripts want to disable HTMLDecor. FIXME is this a good idea?
+		e.preventDefault();
+		return;
+	}
+	
+	var acceptDefault = panner.onHyperlink(target);
+	if (acceptDefault == false) e.preventDefault();
+},
+
+onHyperlink: function(target) { // return false to preventDefault
+	if (target.target) return;
+	var baseURI = URI(document.URL);
+	var uri = URI(baseURI.resolve(target.getAttribute("href")));
+	if (uri.nopathname != baseURI.nopathname) return; // and external urls
+	
+	// by this point HTMLDecor wants to prevent the browser default
+	// TODO Need to handle anchor links. The following just replicates browser behavior
+	if (uri.nohash == baseURI.nohash) {
+		history.pushState({"meeko-decor": true}, null, uri.href);
+		scrollToId(target.hash.substr(1));
+		return false;
+	}
+
+	return panner.onSiteLink(uri.href); // TODO should this pass an absPath rather than absURL??
+},
+
+onSiteLink: function(url) { // return false to preventDefault
+	// Now attempt to pan
+	panner.navigate(url);
+	return false;
+},
+
+onPopState: function(e) {
+	if (!e.state || !e.state["meeko-decor"]) return;
+	if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+	else e.stopPropagation();
+	// NOTE there is no default-action for popstate
+	var newURL = URI(document.URL).nohash;
+	if (newURL != panner.contentURL) {
+		scrollToId();
+		var loader = async(function(cb) {
+			panner.options.load(document.URL, cb)
+		});
+		page(loader);
+		panner.contentURL = newURL;
+	}
+	else {
+		scrollToId(location.hash && location.hash.substr(1));
+	}
+},
+
+onUnload: function(e) {
+	pageOut();
+},
+
 navigate: async(function(config, callback) {
-	var decor = this, url;
-	var options = extend({}, decor.options);
+	var url;
+	var options = extend({}, panner.options);
 	if (typeof config == "object") {
 		extend(options, config);
 		if (config.pager) setPaging(config.pager);
@@ -1038,7 +1045,7 @@ navigate: async(function(config, callback) {
 		
 	onComplete: function(msg) {
 		resetPaging();
-		decor.contentURL = URI(document.URL).nohash;
+		panner.contentURL = URI(document.URL).nohash;
 		callback.complete(msg);
 	},
 	
@@ -1055,8 +1062,8 @@ navigate: async(function(config, callback) {
 		  but Opera needs something more.
 		  The following solution works on all browsers tested.
 		*/
-		history.replaceState({}, null, decor.contentURL);
-		removeEvent(window, "unload", decor.onUnload);
+		history.replaceState({}, null, panner.contentURL);
+		removeEvent(window, "unload", panner.onUnload);
 		addEvent(window, "unload", noop); // Disable bfcache
 		location.replace(url);
 		callback.error(msg);
@@ -1071,10 +1078,9 @@ navigate: async(function(config, callback) {
 	history[modifier]({"meeko-decor": true }, null, url);	
 }),
 
-options: {
-	load: async(function(url, cb) { DOM.loadHTML(url, cb); }),
-	replace: false
-}
+load: async(function(url, callback) {
+	DOM.loadHTML(url, callback);
+}),
 
 });
 
@@ -1083,25 +1089,26 @@ options: {
  This means that before and after listeners are registered as a pair, which is desirable.
  FIXME pageOut and pageIn handlers should receive oldURL, newURL
 */
-var pager = decor.pager = {};
-var paging = pager.options = {
+var paging = panner.options = {
+	load: async(function(url, cb) { DOM.loadHTML(url, cb); }),
+	replace: false,
 	duration: 0,
 	nodeRemoved: { before: hide, after: show },
 	nodeInserted: { before: hide, after: show },
 	pageOut: { before: noop, after: noop },
 	pageIn: { before: noop, after: noop }
 }
-decor.configurePaging = function(conf) {
+panner.configurePaging = function(conf) {
 	extend(paging, conf); // TODO option checking
 }
 function setPaging(config) {
-	pager.defaultOptions = extend({}, paging);
+	panner.defaultOptions = extend({}, paging);
 	extend(paging, config);
 }
 function resetPaging() {
-	if (pager.defaultOptions) {
-		paging = pager.defaultOptions;
-		delete pager.defaultOptions;
+	if (panner.defaultOptions) {
+		paging = panner.defaultOptions;
+		delete panner.defaultOptions;
 	}
 }
 
@@ -1528,7 +1535,7 @@ return {
 
 })();
 
-}); // end decor defn
+// end decor defn
 
 decor["theme"] = config["decor-theme"];
 decor["hidden-timeout"] = config["decor-hidden-timeout"];

@@ -25,7 +25,7 @@ and `history.pushState()` is used to update the browser URL.
 
 HTMLDecor.js is less than 10kB when minified and gzipped.
 You can even access HTMLDecor.js from a CDN at
-http://dist.meekostuff.net/HTMLDecor/1.4-stable/HTMLDecor.js
+http://dist.meekostuff.net/HTMLDecor/2.0-stable/HTMLDecor.js
 
 To see this in action visit my [blog](http://meekostuff.net/blog/) where I am dog-fooding this script.
 Make sure you view the page source and check that it is just raw content.
@@ -40,7 +40,7 @@ For more info on the concept of HTMLDecor and its affinity with pushState assist
 More features are in the [road-map](https://github.com/shogun70/HTMLDecor/wiki/Road-map).
 
 If you have any questions or comments, don't hesitate to contact the author via
-[web](http://meekostuff.net/), [email](mailto:shogun70@gmail.com) or [twitter](http://twitter.com/#!/meekostuff). 
+[web](http://meekostuff.net/), [email](mailto:shogun70@gmail.com) or [twitter](http://twitter.com/meekostuff). 
 
 
 Quick Start
@@ -58,7 +58,7 @@ only displayed if HTMLDecor is NOT enabled.
 		<!-- create a link to the decor page. All attributes are needed -->
 		<link rel="meeko-decor" type="text/html" href="decor.html" />
 		<!-- and source the HTMLDecor script -->
-		<script src="http://dist.meekostuff.net/HTMLDecor/1.4-stable/HTMLDecor.js"></script>
+		<script src="http://dist.meekostuff.net/HTMLDecor/2.0-stable/HTMLDecor.js"></script>
 		<!-- page specific style -->
 		<style>
 		.styled-from-page { border: 2px dashed green; }
@@ -160,9 +160,9 @@ Installation
 
 The easiest way to use HTMLDecor is via the CDN. Simply include the following line in the `<head>` of your page:
 
-		<script src="http://dist.meekostuff.net/HTMLDecor/1.4-stable/HTMLDecor.js"></script>
+		<script src="http://dist.meekostuff.net/HTMLDecor/2.0-stable/HTMLDecor.js"></script>
 		
-Alternatively you can [download HTMLDecor.js](http://dist.meekostuff.net/HTMLDecor/1.4-stable/HTMLDecor.js)
+Alternatively you can [download HTMLDecor.js](http://dist.meekostuff.net/HTMLDecor/2.0-stable/HTMLDecor.js)
 and install it on your server. 
 
 How it works
@@ -260,7 +260,7 @@ So, assuming caching is configured, the only thing that needs to be fetched from
 
 To enable author supplied animation of page transitions, HTMLDecor provides the `Meeko.decor.configurePaging()` method. You could use it like
 
-	Meeko.decor.configurePaging({
+	Meeko.panner.configurePaging({
 		duration: 0, // minimum time (ms) between paging start and end
 		nodeRemoved: {
 			before: hide, // handler for before a content node leaves the page. Called at start of transition.
@@ -290,7 +290,7 @@ The method can be called at anytime. Key / value pairs in the passed configurati
 A simple way to achieve a fade-out / fade-in effect on page transition is to use the following in the decor document.
 
 	<script>
-	Meeko.decor.configurePaging({
+	Meeko.panner.configurePaging({
 		duration: 500
 	});
 	</script>
@@ -328,11 +328,11 @@ You can stop HTMLDecor handling hyperlink clicks by calling `event.preventDefaul
 	
 You can also request HTMLDecor to navigate to a new URL by the following: 
 
-	Meeko.decor.navigate(newURL)
+	Meeko.panner.navigate(newURL)
 	
 or
 
-	Meeko.decor.navigate(options)
+	Meeko.panner.navigate(options)
 
 where `options` is a javascript object with the following settings:
 	
@@ -531,9 +531,6 @@ TODO
 will probably be wrong when imported into the page. 
 - investigate the use of [HTML in XMLHttpRequest](https://developer.mozilla.org/en/HTML_in_XMLHttpRequest) in place of an iframe. 
 - delayed loading (or user-triggered loading) of sections of the page
-- configuration might be better using JSON
-- configuration by data-options on the HTMLDecor `<script>` might be better as a `<meta>`
-- an alternative for pan-triggering hyperlinks might be to use `@target="_self"`;
 - `<link rel="meeko-decor" data-assert="capability_check()" ... />` for more flexibility in specifying decor document
 - HTMLDecor equivalents of `showModalDialog()` and `showModelessDialog()` using iframes and with theming option
 
