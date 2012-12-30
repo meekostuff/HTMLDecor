@@ -258,9 +258,9 @@ So, assuming caching is configured, the only thing that needs to be fetched from
 
 **WARNING** this is an experimental feature and the API call at least is quite likely to change. 
 
-To enable author supplied animation of page transitions, HTMLDecor provides the `Meeko.decor.configurePaging()` method. You could use it like
+To enable author supplied animation of page transitions, HTMLDecor provides the `Meeko.panner.config()` method. You could use it like
 
-	Meeko.panner.configurePaging({
+	Meeko.panner.config({
 		duration: 0, // minimum time (ms) between paging start and end
 		nodeRemoved: {
 			before: hide, // handler for before a content node leaves the page. Called at start of transition.
@@ -290,7 +290,7 @@ The method can be called at anytime. Key / value pairs in the passed configurati
 A simple way to achieve a fade-out / fade-in effect on page transition is to use the following in the decor document.
 
 	<script>
-	Meeko.panner.configurePaging({
+	Meeko.panner.config({
 		duration: 500
 	});
 	</script>
@@ -471,12 +471,12 @@ HTMLDecor has the following config options (default values in **bold**).
 HTMLDecor reads config options immediately after the script loads.
 Sources for configuration options are detailed below. 
 
-### From `Meeko.config` 
+### From `Meeko.options` 
 Options can be **preset** by script, like this
 
     <script>
 	var Meeko = window.Meeko || (window.Meeko = {});
-	Meeko.config = {
+	Meeko.options = {
 		"log-level": "info"
 	}	
 	</script>
@@ -486,7 +486,7 @@ Typically the only important options are `decor-autostart` and `decor-hidden-tim
 
     <script>
 	var Meeko = window.Meeko || (window.Meeko = {});
-	Meeko.config = {
+	Meeko.options = {
 		"decor-autostart": "no",
 		"decor-hidden-timeout": 1000
 	}	
@@ -504,18 +504,18 @@ especially as you may have to change them back after you've found the problem.
 For this reason HTMLDecor reads `sessionStorage` and `localStorage` at startup, looking for config options.
 `sessionStorage` options override those found in `localStorage`, which in turn override those in data-attributes.
 
-Config options are read from JSON stored in the `meeko-config` key. Thus the following would prevent `autostart` and turn on `debug` logging.
+Config options are read from JSON stored in the `meeko-options` key. Thus the following would prevent `autostart` and turn on `debug` logging.
 
-	sessionStorage.setItem('meeko-config', JSON.stringify({ "decor-autostart": "no", "log-level": "debug" }) );
+	sessionStorage.setItem('meeko-options', JSON.stringify({ "decor-autostart": "no", "log-level": "debug" }) );
 
 _Note_ that the page would require a refresh after these settings were made.
 
 ### From the page URL query options
 `localStorage` and `sessionStorage` are not available on all browsers (particularly IE6 and IE7).
-HTMLDecor looks in the query part of the page URL for JSON in the `meeko-config` option.
+HTMLDecor looks in the query part of the page URL for JSON in the `meeko-options` option.
 Thus the following would prevent `autostart` and turn on `debug` logging.
 
-	http://example.org/index.html?meeko-config={"decor-autostart":"no","log-level":"debug"}
+	http://example.org/index.html?meeko-options={"decor-autostart":"no","log-level":"debug"}
 	
 URL query options override all other settings. 
 

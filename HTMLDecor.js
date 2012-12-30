@@ -36,7 +36,6 @@ var defaults = { // NOTE defaults also define the type of the associated config 
 }
 
 var vendorPrefix = "meeko";
-var modulePrefix = "decor";
 
 var Meeko = window.Meeko || (window.Meeko = {});
 
@@ -86,6 +85,11 @@ function(object, fn) {
 }
 
 var extend = function(dest, src) {
+	each(src, function(key, val) { if (dest[key] == null) dest[key] = val; });
+	return dest;
+}
+
+var config = function(dest, src) {
 	each(src, function(key, val) { dest[key] = val; });
 	return dest;
 }
@@ -254,7 +258,7 @@ function waitback() {
 var wait = async(function(fn, waitCB) {
 	waitCB.hook = fn;
 	callbacks.push(waitCB);
-	if (!timerId) timerId = window.setInterval(waitback, config["polling-interval"]); // NOTE polling-interval is configured below
+	if (!timerId) timerId = window.setInterval(waitback, globalOptions["polling-interval"]); // NOTE polling-interval is configured below
 	waitCB.onAbort = function() { remove(callbacks, waitCB); }
 });
 
@@ -671,33 +675,33 @@ extend(DOM, {
 polyfill();
 
 /*
- ### Get config options
+ ### Get options
 */
 
-var getOptions = function() {
+var dataSources = [];
+
+var urlParams = (function() {
 	var search = location.search,
 		options = {}; 
 	if (search) search.substr(1).replace(/(?:^|&)([^&=]+)=?([^&]*)/g, function(m, key, val) { if (m) options[key] = decodeURIComponent(val); });
 	return options;
-}
-var urlQuery = getOptions();
+})();
 
-var dataSources = [];
-var queryConfig = parseJSON(urlQuery[vendorPrefix+'-config']);
-if (queryConfig) dataSources.push( function(name) { return queryConfig[name]; } );
+var urlOptions = parseJSON(urlParams[vendorPrefix+'-options']);
+if (urlOptions) dataSources.push( function(name) { return urlOptions[name]; } );
 
 try { // NOTE initial testing on IE10 showed attempting to get localStorage throws an access error
 	if (window.sessionStorage) {
-		var sessionConfig = parseJSON(sessionStorage.getItem(vendorPrefix + "-config"));
-		if (sessionConfig) dataSources.push( function(name) { return sessionConfig[name]; } );
+		var sessionOptions = parseJSON(sessionStorage.getItem(vendorPrefix + "-options"));
+		if (sessionOptions) dataSources.push( function(name) { return sessionOptions[name]; } );
 	}
 	if (window.localStorage) {
-		var localConfig = parseJSON(localStorage.getItem(vendorPrefix + "-config"));
-		if (localConfig) dataSources.push( function(name) { return localConfig[name]; } );
+		var localOptions = parseJSON(localStorage.getItem(vendorPrefix + "-options"));
+		if (localOptions) dataSources.push( function(name) { return localOptions[name]; } );
 	}
 } catch(error) {}
 
-if (Meeko.config) dataSources.push( function(name) { return Meeko.config[name]; } )
+if (Meeko.options) dataSources.push( function(name) { return Meeko.options[name]; } )
 
 var getData = function(name, type) {
 	var data = null;
@@ -722,17 +726,15 @@ var getData = function(name, type) {
 	return data;
 }
 
-var getConfig = function() {
-	var config = {};
+var globalOptions = (function() {
+	var options = {};
 	for (var name in defaults) {
-		var def = config[name] = defaults[name];
+		var def = options[name] = defaults[name];
 		var val = getData(name, typeof def);
-		if (val != null) config[name] = val;
+		if (val != null) options[name] = val;
 	}
-	return config;
-}
-
-var config = getConfig();
+	return options;
+})();
 
 var logger = Meeko.logger || (Meeko.logger = new function() {
 
@@ -765,12 +767,17 @@ this.LOG_LEVEL = this.LOG_WARN; // DEFAULT
 
 }); // end logger defn
 
-var log_index = logger["LOG_" + uc(config["log-level"])];
+var log_index = logger["LOG_" + uc(globalOptions["log-level"])];
 if (log_index != null) logger.LOG_LEVEL = log_index;
 
 
 var decor = Meeko.decor = {};
+decor.config = function(options) {
+	config(this.options, options);
+}
+
 var panner = Meeko.panner = {};
+panner.config = decor.config;
 
 extend(decor, {
 	placeHolders: {},
@@ -1028,17 +1035,17 @@ onUnload: function(e) {
 	pageOut();
 },
 
-navigate: async(function(config, callback) {
+navigate: async(function(options, callback) {
 	var url;
-	var options = extend({}, panner.options);
-	if (typeof config == "object") {
-		extend(options, config);
-		if (config.pager) setPaging(config.pager);
+	var mergedOpts = config({}, panner.options);
+	if (typeof options == "object") {
+		config(mergedOpts, options);
+		setPaging(mergedOpts);
 		url = options.url;
 	}
-	else url = config;
+	else url = options;
 	var loader = async(function(cb) {
-		options.load(url, cb);
+		panner.options.load(url, cb);
 	});
 	
 	page(loader, {
@@ -1073,14 +1080,14 @@ navigate: async(function(config, callback) {
 	
 	// Change document.URL
 	// This happens after the page load has initiated and after the pageOut.before handler
-	// TODO 
-	var modifier = options.replace ? "replaceState" : "pushState";
+	// TODO
+	var modifier = panner.options.replace ? "replaceState" : "pushState";
 	history[modifier]({"meeko-decor": true }, null, url);	
 }),
 
 load: async(function(url, callback) {
 	DOM.loadHTML(url, callback);
-}),
+})
 
 });
 
@@ -1089,7 +1096,7 @@ load: async(function(url, callback) {
  This means that before and after listeners are registered as a pair, which is desirable.
  FIXME pageOut and pageIn handlers should receive oldURL, newURL
 */
-var paging = panner.options = {
+panner.options = {
 	load: async(function(url, cb) { DOM.loadHTML(url, cb); }),
 	replace: false,
 	duration: 0,
@@ -1098,16 +1105,13 @@ var paging = panner.options = {
 	pageOut: { before: noop, after: noop },
 	pageIn: { before: noop, after: noop }
 }
-panner.configurePaging = function(conf) {
-	extend(paging, conf); // TODO option checking
-}
-function setPaging(config) {
-	panner.defaultOptions = extend({}, paging);
-	extend(paging, config);
+function setPaging(options) {
+	panner.defaultOptions = config({}, panner.options);
+	config(panner.options, options);
 }
 function resetPaging() {
 	if (panner.defaultOptions) {
-		paging = panner.defaultOptions;
+		panner.options = panner.defaultOptions;
 		delete panner.defaultOptions;
 	}
 }
@@ -1118,7 +1122,7 @@ function show(node) { node.removeAttribute("hidden"); }
 function noop() {}
 
 var notify = function(phase, type, target, detail) {
-	var handler = paging[type];
+	var handler = panner.options[type];
 	if (!handler) return;
 	if ((type == "nodeRemoved" || type == "nodeInserted") && target != document.body) return; // ignoring mutations in head
 	var listener;
@@ -1134,7 +1138,7 @@ var page = async(function(loader, callback) {
 	var doc, ready = false;
 
 	var outCB = pageOut();
-	delay(function() { ready = true; }, paging.duration);
+	delay(function() { ready = true; }, panner.options.duration);
 
 	queue([
 
@@ -1178,7 +1182,7 @@ var pageOut = async(function(cb) {
 			notify("after", "nodeRemoved", document.body, target);
 		});
 		notify("after", "pageOut", document);
-	}, paging.duration, cb);
+	}, panner.options.duration, cb);
 });
 
 var pageIn = async(function(doc, cb) {
@@ -1492,7 +1496,7 @@ function _unhide() {
 	// the stylesheet has been removed.
 	// The following forces the content to be revealed
 	document.body.style.visibility = "hidden";
-	delay(function() { document.body.style.visibility = ""; }, config["polling-interval"]);
+	delay(function() { document.body.style.visibility = ""; }, globalOptions["polling-interval"]);
 }
 
 /* 
@@ -1537,9 +1541,9 @@ return {
 
 // end decor defn
 
-decor["theme"] = config["decor-theme"];
-decor["hidden-timeout"] = config["decor-hidden-timeout"];
-if (config["decor-autostart"]) decor.start();
+decor["theme"] = globalOptions["decor-theme"];
+decor["hidden-timeout"] = globalOptions["decor-hidden-timeout"];
+if (globalOptions["decor-autostart"]) decor.start();
 
 })();
 
