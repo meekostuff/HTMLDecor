@@ -822,7 +822,7 @@ decorate: async(function(decorURL, callback) {
 	queue([
 
 	async(function(cb) {
-		decor.load(decorURL, { // FIXME this should use options.load or options.loadDecor
+		decor.options.load(decorURL, { // FIXME this should use options.load or options.loadDecor
 			onComplete: function(result) { doc = result; cb.complete(); },
 			onError: function() { logger.error("loadHTML fail for " + url); cb.error(); }
 		});
@@ -832,7 +832,7 @@ decorate: async(function(decorURL, callback) {
 		// TODO but it would be nice to store more data
 		var altDecorURL = getDecorURL(doc, true);
 		if (!altDecorURL) return true;
-		decor.load(altDecorURL, {
+		decor.options.load(altDecorURL, {
 			onComplete: function(result) { doc = result; cb.complete(); },
 			onError: function() { logger.error("loadHTML fail for " + url); cb.error(); }
 		});
@@ -930,17 +930,14 @@ decorate: async(function(decorURL, callback) {
 	}
 
 	], callback);
-}),
+})
 
-load: async(function(url, callback) {
-	DOM.loadHTML(url, callback);
-}),
+});
 
-options: {
+decor.options = {
 	load: async(function(url, cb) { DOM.loadHTML(url, cb); })
 }
 
-});
 
 extend(panner, {
 
@@ -1083,10 +1080,6 @@ navigate: async(function(options, callback) {
 	// TODO
 	var modifier = panner.options.replace ? "replaceState" : "pushState";
 	history[modifier]({"meeko-decor": true }, null, url);	
-}),
-
-load: async(function(url, callback) {
-	DOM.loadHTML(url, callback);
 })
 
 });
