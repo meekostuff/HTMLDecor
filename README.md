@@ -326,19 +326,13 @@ You can stop HTMLDecor handling hyperlink clicks by calling `event.preventDefaul
 
 	document.onclick = function(event) { event.preventDefault(); }
 	
-You can also request HTMLDecor to navigate to a new URL by the following: 
+You can also request HTMLDecor to navigate manually to a new URL by the following: 
 
-	Meeko.panner.navigate(newURL)
+	Meeko.panner.assign(newURL)
 	
-or
+or with `history.replaceState()` behavior: 
 
-	Meeko.panner.navigate(options)
-
-where `options` is a javascript object with the following settings:
-	
-- `url` - the URL to navigate to. Required. 
-- `replace` - defines whether to use `replaceState` (**true**) or `pushState` (**false**). Default is **false**. 
-- `load` - an asynchronous function which over-rides the internal loading of a url. 
+	Meeko.panner.replace(newURL)
 
 
 `<script>` handling

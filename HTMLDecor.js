@@ -1005,7 +1005,7 @@ onHyperlink: function(target) { // return false to preventDefault
 
 onSiteLink: function(url) { // return false to preventDefault
 	// Now attempt to pan
-	panner.navigate(url);
+	panner.assign(url);
 	return false;
 },
 
@@ -1032,15 +1032,22 @@ onUnload: function(e) {
 	pageOut();
 },
 
+assign: function(url, callback) {
+	return panner.navigate({
+		url: url,
+		replace: false
+	});
+},
+
+replace: function(url, callback) {
+	return panner.navigate({
+		url: url,
+		replace: true
+	});
+},
+
 navigate: async(function(options, callback) {
-	var url;
-	var mergedOpts = config({}, panner.options);
-	if (typeof options == "object") {
-		config(mergedOpts, options);
-		setPaging(mergedOpts);
-		url = options.url;
-	}
-	else url = options;
+	var url = options.url;
 	var loader = async(function(cb) {
 		panner.options.load(url, cb);
 	});
@@ -1048,7 +1055,6 @@ navigate: async(function(options, callback) {
 	page(loader, {
 		
 	onComplete: function(msg) {
-		resetPaging();
 		panner.contentURL = URI(document.URL).nohash;
 		callback.complete(msg);
 	},
@@ -1078,7 +1084,7 @@ navigate: async(function(options, callback) {
 	// Change document.URL
 	// This happens after the page load has initiated and after the pageOut.before handler
 	// TODO
-	var modifier = panner.options.replace ? "replaceState" : "pushState";
+	var modifier = options.replace ? "replaceState" : "pushState";
 	history[modifier]({"meeko-decor": true }, null, url);	
 })
 
@@ -1091,24 +1097,12 @@ navigate: async(function(options, callback) {
 */
 panner.options = {
 	load: async(function(url, cb) { DOM.loadHTML(url, cb); }),
-	replace: false,
 	duration: 0,
 	nodeRemoved: { before: hide, after: show },
 	nodeInserted: { before: hide, after: show },
 	pageOut: { before: noop, after: noop },
 	pageIn: { before: noop, after: noop }
 }
-function setPaging(options) {
-	panner.defaultOptions = config({}, panner.options);
-	config(panner.options, options);
-}
-function resetPaging() {
-	if (panner.defaultOptions) {
-		panner.options = panner.defaultOptions;
-		delete panner.defaultOptions;
-	}
-}
-
 
 function hide(node) { node.setAttribute("hidden", "hidden"); }
 function show(node) { node.removeAttribute("hidden"); }
