@@ -1,5 +1,5 @@
 /*!
- * Copyright 2009-2012 Sean Hogan (http://meekostuff.net/)
+ * Copyright 2009-2013 Sean Hogan (http://meekostuff.net/)
  * Mozilla Public License v2.0 (http://mozilla.org/MPL/2.0/)
  */
 
@@ -21,17 +21,9 @@ var XMLHttpRequest = window.XMLHttpRequest;
 
 (function() {
 
-// NOTE if HTMLDecor is included in a decor document then abort 
-if (window.name == "_decor") return; 
-
-// or if "nodecor" is one of the search options
-if (/(^\?|&)nodecor($|&)/.test(location.search)) return; // WARN deprecated
-
 var defaults = { // NOTE defaults also define the type of the associated config option
 	"log-level": "warn",
-	"decor-autostart": true,
 	"decor-theme": "",
-	"decor-hidden-timeout": 3000,
 	"polling-interval": 50
 }
 
@@ -163,7 +155,7 @@ return isolate;
 })();
 
 var Callback = function() {
-	this.isCallback = true;
+	this.isAsync = true;
 	this.called = false;
 }
 
@@ -189,8 +181,8 @@ abort: function() { // NOTE abort could trigger an error, but there is an expect
 
 });
 
-function isCallback(obj) {
-	return (obj && obj.isCallback);
+function isAsync(obj) {
+	return (obj && obj.isAsync);
 }
 
 var async = function(fn) {
@@ -198,7 +190,7 @@ var async = function(fn) {
 		var nParams = fn.length, nArgs = arguments.length;
 		if (nArgs > nParams) throw "Too many parameters in async call";
 		var inCB = arguments[nParams - 1], cb;
-		if (isCallback(inCB)) cb = inCB;
+		if (isAsync(inCB)) cb = inCB;
 		else switch (typeof inCB) {
 			case "undefined": case "null":
 				cb = new Callback();
@@ -258,7 +250,7 @@ function waitback() {
 var wait = async(function(fn, waitCB) {
 	waitCB.hook = fn;
 	callbacks.push(waitCB);
-	if (!timerId) timerId = window.setInterval(waitback, globalOptions["polling-interval"]); // NOTE polling-interval is configured below
+	if (!timerId) timerId = window.setInterval(waitback, async.pollingInterval); // NOTE polling-interval is configured below
 	waitCB.onAbort = function() { remove(callbacks, waitCB); }
 });
 
@@ -278,7 +270,7 @@ var delay = async(function(fn, timeout, delayCB) {
 			delayCB.error();
 			return;
 		}
-		else if (isCallback(result)) {
+		else if (isAsync(result)) {
 			if (delayCB == result) return; // callback is delegated
 			result.onComplete = delayCB.onComplete;
 			result.onError = delayCB.onError;
@@ -302,7 +294,7 @@ var queue = async(function(fnList, queueCB) {
 				queueCB.error();
 				return;
 			}
-			if (isCallback(innerCB)) {
+			if (isAsync(innerCB)) {
 				innerCB.onComplete = queueback;
 				innerCB.onError = function() { queueCB.error(); }
 				return;
@@ -311,16 +303,18 @@ var queue = async(function(fnList, queueCB) {
 		queueCB.complete();
 	}
 	queueCB.onAbort = function() {
-		if (isCallback(innerCB)) innerCB.abort();
+		if (isAsync(innerCB)) innerCB.abort();
 		list = [];
 	}
 	queueback();
 });
 
-extend(Callback, {
-	isCallback: isCallback, async: async, delay: delay, wait: wait, until: until, queue: queue
+async.pollingInterval = defaults['polling-interval'];
+
+extend(async, {
+	isAsync: isAsync, Callback: Callback, delay: delay, wait: wait, until: until, queue: queue
 });
-Meeko.Callback = Callback;
+Meeko.async = async;
 
 /*
  ### DOM utility functions
@@ -648,7 +642,8 @@ function(srcDoc) {
 	return doc;
 }
 
-var importNode = document.importNode ? // NOTE only for single nodes, especially elements in <head>
+// FIXME should be called importSingleNode or something
+var importNode = document.importNode ? // NOTE only for single nodes, especially elements in <head>. 
 function(srcNode) { 
 	return document.importNode(srcNode, false);
 } :
@@ -657,6 +652,40 @@ composeNode;
 return parseHTML;
 
 })();
+
+
+/* 
+NOTE:  for more details on how checkStyleSheets() works cross-browser see 
+http://aaronheckmann.blogspot.com/2010/01/writing-jquery-plugin-manager-part-1.html
+TODO: does this still work when there are errors loading stylesheets??
+*/
+var checkStyleSheets = function() {
+	// check that every <link rel="stylesheet" type="text/css" /> 
+	// has loaded
+	return every($$("link"), function(node) {
+		if (!node.rel || !/^stylesheet$/i.test(node.rel)) return true;
+		if (node.type && !/^text\/css$/i.test(node.type)) return true;
+		if (node.disabled) return true;
+		
+		// handle IE
+		if (node.readyState) return readyStateLookup[node.readyState];
+
+		var sheet = node.sheet || node.styleSheet;
+
+		// handle webkit
+		if (!sheet) return false;
+
+		try {
+			// Firefox should throw if not loaded or cross-domain
+			var rules = sheet.rules || sheet.cssRules;
+			return true;
+		} 
+		catch (error) {
+			// handle Firefox cross-domain
+			return (error.name == "NS_ERROR_DOM_SECURITY_ERR");
+		} 
+	});
+}
 
 var polyfill = function(doc) { // NOTE more stuff could be added here if *necessary*
 	if (!doc) doc = document;
@@ -674,101 +703,22 @@ extend(DOM, {
 
 polyfill();
 
-/*
- ### Get options
-*/
-
-var dataSources = [];
-
-var urlParams = (function() {
-	var search = location.search,
-		options = {}; 
-	if (search) search.substr(1).replace(/(?:^|&)([^&=]+)=?([^&]*)/g, function(m, key, val) { if (m) options[key] = decodeURIComponent(val); });
-	return options;
-})();
-
-var urlOptions = parseJSON(urlParams[vendorPrefix+'-options']);
-if (urlOptions) dataSources.push( function(name) { return urlOptions[name]; } );
-
-try { // NOTE initial testing on IE10 showed attempting to get localStorage throws an access error
-	if (window.sessionStorage) {
-		var sessionOptions = parseJSON(sessionStorage.getItem(vendorPrefix + "-options"));
-		if (sessionOptions) dataSources.push( function(name) { return sessionOptions[name]; } );
-	}
-	if (window.localStorage) {
-		var localOptions = parseJSON(localStorage.getItem(vendorPrefix + "-options"));
-		if (localOptions) dataSources.push( function(name) { return localOptions[name]; } );
-	}
-} catch(error) {}
-
-if (Meeko.options) dataSources.push( function(name) { return Meeko.options[name]; } )
-
-var getData = function(name, type) {
-	var data = null;
-	every(dataSources, function(fn) {
-		var val = fn(name);
-		if (val == null) return true;
-		if (val == "") return true; // TODO log warning "Empty config option"
-		switch (type) {
-		case "string": data = val; break;
-		case "number":
-			if (!isNaN(val)) data = 1 * val;
-			// TODO else logger.warn("incorrect config option " + val + " for " + name); 
-			break;
-		case "boolean":
-			if (/^(yes|on|true|1)$/i.test(val)) data = true;
-			else if (/^(no|off|false|0)$/i.test(val)) data = false;
-			// TODO else logger.warn("incorrect config option " + val + " for " + name); 
-			break;
-		}
-		return (data == null); 
-	});
-	return data;
-}
-
-var globalOptions = (function() {
-	var options = {};
-	for (var name in defaults) {
-		var def = options[name] = defaults[name];
-		var val = getData(name, typeof def);
-		if (val != null) options[name] = val;
-	}
-	return options;
-})();
-
 var logger = Meeko.logger || (Meeko.logger = new function() {
 
-var levels = words("NONE ERROR WARN INFO DEBUG");
+var levels = this.levels = words("none error warn info debug");
 
 forEach(levels, function(name, num) {
 	
-this["LOG_"+name] = num;
-this[lc(name)] = function() { this._log({ level: num, message: arguments }); }
+levels[name] = num;
+this[name] = !window.console && function() {} ||
+	console[name] && function() { if (num <= this.LOG_LEVEL) console[name].apply(console, arguments); } ||
+	function() { if (num <= this.LOG_LEVEL) console.log.apply(console, arguments); }
 
 }, this);
 
-this._log = function(data) { 
-	if (data.level > this.LOG_LEVEL) return;
-	data.timeStamp = +(new Date);
-        data.message = [].join.call(data.message, " ");
-        if (this.write) this.write(data);
-}
-
-this.startTime = +(new Date), padding = "      ";
-
-this.write = (window.console) && function(data) { 
-	var offset = padding + (data.timeStamp - this.startTime), 
-		first = offset.length-padding.length-1,
-		offset = offset.substring(first);
-	console.log(offset+"ms " + levels[data.level]+": " + data.message); 
-}
-
-this.LOG_LEVEL = this.LOG_WARN; // DEFAULT
+this.LOG_LEVEL = levels[defaults['log-level']]; // DEFAULT
 
 }); // end logger defn
-
-var log_index = logger["LOG_" + uc(globalOptions["log-level"])];
-if (log_index != null) logger.LOG_LEVEL = log_index;
 
 
 var decor = Meeko.decor = {};
@@ -817,12 +767,11 @@ decorate: async(function(decorURL, callback) {
 	var contentStart, decorEnd;
 
 	if (getDecorMeta()) throw "Cannot decorate a document that has already been decorated";
-	Anim.hide();
 
 	queue([
 
 	async(function(cb) {
-		decor.options.load(decorURL, { // FIXME this should use options.load or options.loadDecor
+		decor.options.load(decorURL, {
 			onComplete: function(result) { doc = result; cb.complete(); },
 			onError: function() { logger.error("loadHTML fail for " + url); cb.error(); }
 		});
@@ -853,7 +802,6 @@ decorate: async(function(decorURL, callback) {
 	},
 	function() { return wait(function() { return scriptQueue.isEmpty(); }); }, 
 	function() {
-		Anim.unhide(); // can unhide page now that decor declared stylesheets have been added
 		contentStart = document.body.firstChild;
 		decor_insertBody(doc);
 		decorEnd = document.createTextNode("");
@@ -1447,90 +1395,7 @@ function getDecorMeta(doc) {
 	return meta;
 }
 
-var Anim = (function() {
-	
-var fragment = document.createDocumentFragment();
-var style = document.createElement("style");
-fragment.appendChild(style); // NOTE on IE this realizes style.styleSheet 
-
-// NOTE hide the page until the decor is ready
-if (style.styleSheet) style.styleSheet.cssText = "body { visibility: hidden; }";
-else style.textContent = "body { visibility: hidden; }";
-var hidden = false;
-var unhiding = true;
-function hide() {
-	var timeout = decor["hidden-timeout"];
-	if (timeout <= 0) return;
-	document.head.insertBefore(style, document.head.firstChild);
-	hidden = true;
-	unhiding = false;
-	delay(_unhide, timeout);
-}
-function unhide() {
-	if (unhiding) return;
-	unhiding = true;
-	return queue([
-		function() { return wait(function() { return checkStyleSheets(); }) },
-		_unhide
-	]);
-}
-
-function _unhide() {
-	if (!hidden) return;
-	hidden = false;
-	document.head.removeChild(style);
-	// NOTE on IE sometimes content stays hidden although 
-	// the stylesheet has been removed.
-	// The following forces the content to be revealed
-	document.body.style.visibility = "hidden";
-	delay(function() { document.body.style.visibility = ""; }, globalOptions["polling-interval"]);
-}
-
-/* 
-NOTE:  for more details on how checkStyleSheets() works cross-browser see 
-http://aaronheckmann.blogspot.com/2010/01/writing-jquery-plugin-manager-part-1.html
-TODO: does this still work when there are errors loading stylesheets??
-*/
-var checkStyleSheets = decor.checkStyleSheets = function() {
-	// check that every <link rel="stylesheet" type="text/css" /> 
-	// has loaded
-	return every($$("link"), function(node) {
-		if (!node.rel || !/^stylesheet$/i.test(node.rel)) return true;
-		if (node.type && !/^text\/css$/i.test(node.type)) return true;
-		if (node.disabled) return true;
-		
-		// handle IE
-		if (node.readyState) return readyStateLookup[node.readyState];
-
-		var sheet = node.sheet || node.styleSheet;
-
-		// handle webkit
-		if (!sheet) return false;
-
-		try {
-			// Firefox should throw if not loaded or cross-domain
-			var rules = sheet.rules || sheet.cssRules;
-			return true;
-		} 
-		catch (error) {
-			// handle Firefox cross-domain
-			return (error.name == "NS_ERROR_DOM_SECURITY_ERR");
-		} 
-	});
-}
-
-return {
-	hide: hide,
-	unhide: unhide
-}
-
-})();
-
 // end decor defn
-
-decor["theme"] = globalOptions["decor-theme"];
-decor["hidden-timeout"] = globalOptions["decor-hidden-timeout"];
-if (globalOptions["decor-autostart"]) decor.start();
 
 })();
 

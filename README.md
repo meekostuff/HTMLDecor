@@ -24,7 +24,7 @@ then HTMLDecor updates the real content
 and `history.pushState()` is used to update the browser URL. 
 
 HTMLDecor.js is less than 10kB when minified and gzipped.
-You can even access HTMLDecor.js from a CDN at
+FIXME: You can even access HTMLDecor.js from a CDN at
 http://dist.meekostuff.net/HTMLDecor/2.0-stable/HTMLDecor.js
 
 To see this in action visit my [blog](http://meekostuff.net/blog/) where I am dog-fooding this script.
@@ -58,7 +58,7 @@ only displayed if HTMLDecor is NOT enabled.
 		<!-- create a link to the decor page. All attributes are needed -->
 		<link rel="meeko-decor" type="text/html" href="decor.html" />
 		<!-- and source the HTMLDecor script -->
-		<script src="http://dist.meekostuff.net/HTMLDecor/2.0-stable/HTMLDecor.js"></script>
+		<script src="http://dist.meekostuff.net/HTMLDecor/2.0-stable/boot.js"></script>
 		<!-- page specific style -->
 		<style>
 		.styled-from-page { border: 2px dashed green; }
@@ -114,7 +114,7 @@ will appear as the final page without the page specific content.
 	</body>
 	</html>
 
-When page.html is loaded into the browser, HTMLDecor.js will merge decor.html into it, resulting in a DOM tree like this:
+When page.html is loaded into the browser, HTMLDecor will merge decor.html into it, resulting in a DOM tree like this:
 
 	<!DOCTYPE html>
 	<html>
@@ -125,7 +125,7 @@ When page.html is loaded into the browser, HTMLDecor.js will merge decor.html in
 		<!-- create a link to the decor page -->
 		<link rel="meeko-decor" type="text/html" href="decor.html" />
 		<!-- and source the HTMLDecor script -->
-		<script src="/path/to/HTMLDecor.js"></script>
+		<script src="http://dist.meekostuff.net/HTMLDecor/2.0-stable/boot.js"></script>
 		<!-- page specific style -->
 		<style>
 		.styled-from-page { border: 2px dashed green; }
@@ -158,11 +158,11 @@ When page.html is loaded into the browser, HTMLDecor.js will merge decor.html in
 Installation
 ------------
 
-The easiest way to use HTMLDecor is via the CDN. Simply include the following line in the `<head>` of your page:
+FIXME: The easiest way to use HTMLDecor is via the CDN. Simply include the following line in the `<head>` of your page:
 
 		<script src="http://dist.meekostuff.net/HTMLDecor/2.0-stable/HTMLDecor.js"></script>
 		
-Alternatively you can [download HTMLDecor.js](http://dist.meekostuff.net/HTMLDecor/2.0-stable/HTMLDecor.js)
+FIXME: Alternatively you can [download HTMLDecor.js](http://dist.meekostuff.net/HTMLDecor/2.0-stable/HTMLDecor.js)
 and install it on your server. 
 
 How it works
