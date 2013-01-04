@@ -226,7 +226,7 @@ var start = function() {
 	if (globalOptions["decor-autostart"]) decor.start();
 }
 
-loadScript(htmldecor_script, start);
+loadScript(htmldecor_script, start, Blinders.show);
 //	loadScript('/config.js', oncomplete, oncomplete);
 
 })();
