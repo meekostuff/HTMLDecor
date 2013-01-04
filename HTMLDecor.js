@@ -525,7 +525,7 @@ forEach(words("link@<href script@<src img@<src iframe@<src video@<src audio@<src
 var parseHTML = (function() {
 
 function parseHTML(html, url) {
-	
+	// TODO disabling URIs would be faster if done with one regexp replace()
 	// prevent resources (<img>, <link>, etc) from loading in parsing context, by renaming @src, @href to @meeko-src, @meeko-href
 	var disableURIs = function(tag, attrName) {
 		var vendorAttrName = vendorPrefix + "-" + attrName;
@@ -730,11 +730,8 @@ var panner = Meeko.panner = {};
 panner.config = decor.config;
 
 extend(decor, {
-	placeHolders: {},
-	"hidden-timeout": 0
-});
 
-extend(decor, {
+placeHolders: {},
 
 start: function() {
 	var decorURL = getDecorURL(document);
@@ -765,6 +762,7 @@ start: function() {
 decorate: async(function(decorURL, callback) {
 	var doc, complete = false;
 	var contentStart, decorEnd;
+	var decorReady = false;
 
 	if (getDecorMeta()) throw "Cannot decorate a document that has already been decorated";
 
@@ -798,12 +796,15 @@ decorate: async(function(decorURL, callback) {
 	
 	/* Now merge decor into page */
 	function() {
+		decor_notify("before", "decorIn", document);
 		mergeHead(doc, true);
 	},
 	function() { return wait(function() { return scriptQueue.isEmpty(); }); }, 
 	function() {
 		contentStart = document.body.firstChild;
 		decor_insertBody(doc);
+		decor_notify("after", "decorIn", document);
+		wait(function() { return checkStyleSheets(); }, function() { decorReady = true; decor_notify("after", "decorReady", document); });
 		decorEnd = document.createTextNode("");
 		document.body.insertBefore(decorEnd, contentStart);
 		notify("before", "pageIn", document); // TODO perhaps this should be stalled until scriptQueue.isEmpty() (or a config option)
@@ -875,16 +876,13 @@ decorate: async(function(decorURL, callback) {
 	function() {
 		notify("after", "pageIn", document);
 		scrollToId(location.hash && location.hash.substr(1));
-	}
+	},
+	function() { return wait(function() { return decorReady; }); }
 
 	], callback);
 })
 
 });
-
-decor.options = {
-	load: async(function(url, cb) { DOM.loadHTML(url, cb); })
-}
 
 
 extend(panner, {
@@ -1043,6 +1041,17 @@ navigate: async(function(options, callback) {
  This means that before and after listeners are registered as a pair, which is desirable.
  FIXME pageOut and pageIn handlers should receive oldURL, newURL
 */
+function hide(node) { node.setAttribute("hidden", "hidden"); }
+function show(node) { node.removeAttribute("hidden"); }
+function noop() {}
+
+decor.options = {
+	load: async(function(url, cb) { DOM.loadHTML(url, cb); }),
+	decorIn: { before: noop, after: noop },
+	decorReady: noop, // TODO should this be decorIn:complete ??
+	decorOut: { before: noop, after: noop } // TODO
+}
+
 panner.options = {
 	load: async(function(url, cb) { DOM.loadHTML(url, cb); }),
 	duration: 0,
@@ -1052,9 +1061,17 @@ panner.options = {
 	pageIn: { before: noop, after: noop }
 }
 
-function hide(node) { node.setAttribute("hidden", "hidden"); }
-function show(node) { node.removeAttribute("hidden"); }
-function noop() {}
+var decor_notify = function(phase, type, target, detail) {
+	var handler = decor.options[type];
+	if (!handler) return;
+	var listener;
+	if (handler[phase]) listener = handler[phase];
+	else listener =
+		(type == "decorOut") ?
+			(phase == "before") ? handler : null :
+			(phase == "after") ? handler : null;
+	if (typeof listener == "function") isolate(function() { listener(detail); }); // TODO isFunction(listener)
+}
 
 var notify = function(phase, type, target, detail) {
 	var handler = panner.options[type];

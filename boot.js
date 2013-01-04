@@ -221,6 +221,7 @@ var start = function() {
 	var async = Meeko.async;
 	async.pollingInterval = globalOptions["polling-interval"];
 	var decor = Meeko.decor;
+	decor.config({ decorReady: Blinders.show });
 	decor["theme"] = globalOptions["decor-theme"];
 	if (globalOptions["decor-autostart"]) decor.start();
 }
