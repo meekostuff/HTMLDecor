@@ -58,7 +58,7 @@ only displayed if HTMLDecor is NOT enabled.
 		<!-- create a link to the decor page. All attributes are needed -->
 		<link rel="meeko-decor" type="text/html" href="decor.html" />
 		<!-- and source the HTMLDecor script -->
-		<script src="http://dist.meekostuff.net/HTMLDecor/2.0-stable/boot.js"></script>
+		<script src="http://dist.meekostuff.net/HTMLDecor/2.0-stable/HTMLDecor.js"></script>
 		<!-- page specific style -->
 		<style>
 		.styled-from-page { border: 2px dashed green; }
@@ -125,7 +125,7 @@ When page.html is loaded into the browser, HTMLDecor will merge decor.html into 
 		<!-- create a link to the decor page -->
 		<link rel="meeko-decor" type="text/html" href="decor.html" />
 		<!-- and source the HTMLDecor script -->
-		<script src="http://dist.meekostuff.net/HTMLDecor/2.0-stable/boot.js"></script>
+		<script src="http://dist.meekostuff.net/HTMLDecor/2.0-stable/HTMLDecor.js"></script>
 		<!-- page specific style -->
 		<style>
 		.styled-from-page { border: 2px dashed green; }

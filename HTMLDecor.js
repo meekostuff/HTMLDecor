@@ -24,7 +24,8 @@ var XMLHttpRequest = window.XMLHttpRequest;
 var defaults = { // NOTE defaults also define the type of the associated config option
 	"log-level": "warn",
 	"decor-theme": "",
-	"polling-interval": 50
+	"polling-interval": 50,
+	"decor-autostart": true
 }
 
 var vendorPrefix = "meeko";
@@ -731,9 +732,12 @@ panner.config = decor.config;
 
 extend(decor, {
 
+started: false,
 placeHolders: {},
 
 start: function() {
+	if (decor.started) throw "Already started";
+	decor.started = true;
 	var decorURL = getDecorURL(document);
 	if (!decorURL) return; // FIXME warning message
 	return queue([
@@ -771,7 +775,7 @@ decorate: async(function(decorURL, callback) {
 	async(function(cb) {
 		decor.options.load(decorURL, {
 			onComplete: function(result) { doc = result; cb.complete(); },
-			onError: function() { logger.error("loadHTML fail for " + url); cb.error(); }
+			onError: function() { logger.error("loadHTML fail for " + url); cb.error(); } // FIXME need decorError notification / handling
 		});
 	}),
 	async(function(cb) {
@@ -1046,19 +1050,20 @@ function show(node) { node.removeAttribute("hidden"); }
 function noop() {}
 
 decor.options = {
-	load: async(function(url, cb) { DOM.loadHTML(url, cb); }),
+	theme: defaults['decor-theme'],
 	decorIn: { before: noop, after: noop },
 	decorReady: noop, // TODO should this be decorIn:complete ??
-	decorOut: { before: noop, after: noop } // TODO
+	decorOut: { before: noop, after: noop }, // TODO
+	load: async(function(url, cb) { DOM.loadHTML(url, cb); })
 }
 
 panner.options = {
-	load: async(function(url, cb) { DOM.loadHTML(url, cb); }),
 	duration: 0,
 	nodeRemoved: { before: hide, after: show },
 	nodeInserted: { before: hide, after: show },
 	pageOut: { before: noop, after: noop },
-	pageIn: { before: noop, after: noop }
+	pageIn: { before: noop, after: noop },
+	load: async(function(url, cb) { DOM.loadHTML(url, cb); })
 }
 
 var decor_notify = function(phase, type, target, detail) {
@@ -1300,7 +1305,7 @@ var _processQueue = function() {
 		var spec = queue.shift(), script = spec.script, node = spec.node;
 		if (script.src && !script.getAttribute("async")) {
 			blockingScript = spec;
-			addEvent(script, "load", processQueue);
+			addEvent(script, "load", processQueue); // FIXME need onreadystatechange in IE
 			addEvent(script, "error", processQueue);
 		}
 		replaceNode(node, script);
@@ -1361,7 +1366,7 @@ function getDecorLink(doc, inDecor) {
 	var frameTheme, userTheme;
 	if (window.frameElement) frameTheme = window.frameElement.getAttribute("data-theme");
 	// FIXME should userTheme come from the config??
-	userTheme = decor["theme"]; 
+	userTheme = decor.options.theme; 
 	var matchingLinks = [];
 	var link, specificity = 0;
 	forEach($$("link", doc.head), function(el) {
@@ -1413,6 +1418,53 @@ function getDecorMeta(doc) {
 }
 
 // end decor defn
+
+var Viewport = (function() {
+
+var head = document.getElementsByTagName("head")[0];
+var fragment = document.createDocumentFragment();
+var style = document.createElement("style");
+fragment.appendChild(style); // NOTE on IE this realizes style.styleSheet 
+
+// NOTE hide the page until the decor is ready
+if (style.styleSheet) style.styleSheet.cssText = "body { visibility: hidden; }";
+else style.textContent = "body { visibility: hidden; }";
+
+function hide() {
+	head.insertBefore(style, document.head.firstChild);
+}
+
+function unhide() {
+	if (style.parentNode != head) return;
+	document.head.removeChild(style);
+	// NOTE on IE sometimes content stays hidden although 
+	// the stylesheet has been removed.
+	// The following forces the content to be revealed
+	document.body.style.visibility = "hidden";
+	delay(function() { document.body.style.visibility = ""; });
+}
+
+return {
+	hide: hide,
+	unhide: unhide
+}
+
+})();
+
+decor.autostart = defaults['decor-autostart'];
+Viewport.hide();
+decor.config({
+	decorReady: Viewport.unhide	
+});
+decor.preventAutostart = function() {
+	decor.autostart = false;
+	Viewport.unhide();
+}
+
+wait(function() { return !!document.body; }, function() {
+	if (!decor.autostart) return;
+	decor.start();
+});
 
 })();
 

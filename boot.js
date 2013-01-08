@@ -113,7 +113,7 @@ this.LOG_LEVEL = levels.warn; // DEFAULT
 
 }); // end logger defn
 
-var Blinders = (function() {
+var Viewport = (function() {
 
 var head = document.getElementsByTagName("head")[0];
 var fragment = document.createDocumentFragment();
@@ -128,7 +128,7 @@ function hide() {
 	head.insertBefore(style, document.head.firstChild);
 }
 
-function show() {
+function unhide() {
 	if (style.parentNode != head) return;
 	document.head.removeChild(style);
 	// NOTE on IE sometimes content stays hidden although 
@@ -140,7 +140,7 @@ function show() {
 
 return {
 	hide: hide,
-	show: show
+	unhide: unhide
 }
 
 })();
@@ -210,8 +210,8 @@ var globalOptions = (function() {
 
 var timeout = globalOptions["decor-hidden-timeout"];
 if (timeout > 0) {
-	Blinders.hide();
-	delay(Blinders.show, timeout);
+	Viewport.hide();
+	delay(Viewport.unhide, timeout);
 }
 
 var log_index = logger.levels[globalOptions["log-level"]];
@@ -221,12 +221,14 @@ var start = function() {
 	var async = Meeko.async;
 	async.pollingInterval = globalOptions["polling-interval"];
 	var decor = Meeko.decor;
-	decor.config({ decorReady: Blinders.show });
+	decor.preventAutostart();
+	decor.config({ decorReady: Viewport.unhide });
 	decor["theme"] = globalOptions["decor-theme"];
 	if (globalOptions["decor-autostart"]) decor.start();
+	else 
 }
 
-loadScript(htmldecor_script, start, Blinders.show);
+loadScript(htmldecor_script, start, Viewport.unhide);
 //	loadScript('/config.js', oncomplete, oncomplete);
 
 })();
