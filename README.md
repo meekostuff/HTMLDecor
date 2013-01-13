@@ -9,7 +9,7 @@ HTMLDecor
 > you'll cut the download time of every page,
 > plus "pushState assisted navigation" comes for free.
 
-HTMLDecor is a Javascript page template engine which runs in the browser.
+HTMLDecor is a Javascript page decoration engine which runs in the browser.
 It allows your site to deliver real page content first (and fast).
 Your site decor can be placed in its own page and merged in the browser instead of on the server. 
 

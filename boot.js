@@ -5,18 +5,17 @@
 
 (function() {
 
-// Don't even load HTMLDecor if "nodecor" is one of the search options
-if (/(^\?|&)nodecor($|&)/.test(location.search)) return;
-
-var htmldecor_script = '/HTMLDecor/HTMLDecor.js'; // FIXME
-
 var defaults = { // NOTE defaults also define the type of the associated config option
+	"htmldecor-script": "/HTMLDecor/HTMLDecor.js", // FIXME
 	"log-level": "warn",
 	"decor-autostart": true,
 	"decor-theme": "",
 	"decor-hidden-timeout": 3000,
 	"polling-interval": 50
 }
+
+// Don't even load HTMLDecor if "nodecor" is one of the search options
+if (/(^\?|&)nodecor($|&)/.test(location.search)) return;
 
 var vendorPrefix = "meeko";
 
@@ -225,9 +224,10 @@ var start = function() {
 	decor.config({ decorReady: Viewport.unhide });
 	decor["theme"] = globalOptions["decor-theme"];
 	if (globalOptions["decor-autostart"]) decor.start();
-	else 
+	else Viewport.unhide();
 }
 
+var htmldecor_script = globalOptions['htmldecor-script']; // FIXME
 loadScript(htmldecor_script, start, Viewport.unhide);
 //	loadScript('/config.js', oncomplete, oncomplete);
 
