@@ -6,7 +6,7 @@
 (function() {
 
 var defaults = { // NOTE defaults also define the type of the associated config option
-	"htmldecor-script": '{bootscriptdir}/HTMLDecor.js',
+	"htmldecor-script": '{bootscriptdir}HTMLDecor.js',
 	"log-level": "warn",
 	"decor-autostart": true,
 	"decor-theme": "",
@@ -62,9 +62,16 @@ var marker = head.firstChild;
 
 function loadScript(url, onload, onerror) {
 	var script = document.createElement('script');
-	script.src = url;
-	script.onload = onload;
 	script.onerror = onerror;
+	var loaded = false;
+	if (script.readyState) script.onreadystatechange = function() {
+		if (loaded) return;
+		if (script.readyState != "loaded" && script.readyState != "complete") return;
+		loaded = true;
+		onload();
+	}
+	else script.onload = onload;
+	script.src = url;
 	marker.parentNode.insertBefore(script, marker);
 }
 
@@ -233,7 +240,7 @@ var start = function() {
 	else Viewport.unhide();
 }
 
-var bootscriptdir = getCurrentScript().src.replace(/\/[^\/]*$/, '');
+var bootscriptdir = getCurrentScript().src.replace(/\/[^\/]*$/, '/');
 var htmldecor_script = globalOptions['htmldecor-script'].replace('{bootscriptdir}', bootscriptdir);
 
 loadScript(htmldecor_script, start, Viewport.unhide);
