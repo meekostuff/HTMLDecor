@@ -233,7 +233,6 @@ var start = function() {
 	var async = Meeko.async;
 	async.pollingInterval = globalOptions["polling-interval"];
 	var decor = Meeko.decor;
-	decor.preventAutostart();
 	decor.config({ decorReady: Viewport.unhide });
 	decor["theme"] = globalOptions["decor-theme"];
 	if (globalOptions["decor-autostart"]) decor.start();

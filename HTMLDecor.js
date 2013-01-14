@@ -1419,52 +1419,5 @@ function getDecorMeta(doc) {
 
 // end decor defn
 
-var Viewport = (function() {
-
-var head = document.getElementsByTagName("head")[0];
-var fragment = document.createDocumentFragment();
-var style = document.createElement("style");
-fragment.appendChild(style); // NOTE on IE this realizes style.styleSheet 
-
-// NOTE hide the page until the decor is ready
-if (style.styleSheet) style.styleSheet.cssText = "body { visibility: hidden; }";
-else style.textContent = "body { visibility: hidden; }";
-
-function hide() {
-	head.insertBefore(style, document.head.firstChild);
-}
-
-function unhide() {
-	if (style.parentNode != head) return;
-	document.head.removeChild(style);
-	// NOTE on IE sometimes content stays hidden although 
-	// the stylesheet has been removed.
-	// The following forces the content to be revealed
-	document.body.style.visibility = "hidden";
-	delay(function() { document.body.style.visibility = ""; });
-}
-
-return {
-	hide: hide,
-	unhide: unhide
-}
-
-})();
-
-decor.autostart = defaults['decor-autostart'];
-Viewport.hide();
-decor.config({
-	decorReady: Viewport.unhide	
-});
-decor.preventAutostart = function() {
-	decor.autostart = false;
-	Viewport.unhide();
-}
-
-wait(function() { return !!document.body; }, function() {
-	if (!decor.autostart) return;
-	decor.start();
-});
-
 })();
 
