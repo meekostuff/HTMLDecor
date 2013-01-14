@@ -24,8 +24,6 @@ then HTMLDecor updates the real content
 and `history.pushState()` is used to update the browser URL. 
 
 HTMLDecor.js is less than 10kB when minified and gzipped.
-FIXME: You can even access HTMLDecor.js from a CDN at
-http://dist.meekostuff.net/HTMLDecor/2.0-stable/HTMLDecor.js
 
 To see this in action visit my [blog](http://meekostuff.net/blog/) where I am dog-fooding this script.
 Make sure you view the page source and check that it is just raw content.
@@ -57,8 +55,8 @@ only displayed if HTMLDecor is NOT enabled.
 	<head>
 		<!-- create a link to the decor page. All attributes are needed -->
 		<link rel="meeko-decor" type="text/html" href="decor.html" />
-		<!-- and source the HTMLDecor script -->
-		<script src="http://dist.meekostuff.net/HTMLDecor/2.0-stable/HTMLDecor.js"></script>
+		<!-- and source the HTMLDecor boot-script -->
+		<script src="/path/to/HTMLDecor/boot.js"></script>
 		<!-- page specific style -->
 		<style>
 		.styled-from-page { border: 2px dashed green; }
@@ -124,8 +122,8 @@ When page.html is loaded into the browser, HTMLDecor will merge decor.html into 
 		</style>
 		<!-- create a link to the decor page -->
 		<link rel="meeko-decor" type="text/html" href="decor.html" />
-		<!-- and source the HTMLDecor script -->
-		<script src="http://dist.meekostuff.net/HTMLDecor/2.0-stable/HTMLDecor.js"></script>
+		<!-- and source the HTMLDecor boot-script -->
+		<script src="/path/to/HTMLDecor/boot.js"></script>
 		<!-- page specific style -->
 		<style>
 		.styled-from-page { border: 2px dashed green; }
@@ -158,16 +156,23 @@ When page.html is loaded into the browser, HTMLDecor will merge decor.html into 
 Installation
 ------------
 
-FIXME: The easiest way to use HTMLDecor is via the CDN. Simply include the following line in the `<head>` of your page:
+1. Copy or clone the HTMLDecor files to a directory on your server.
+2. Source the HTMLDecor boot-script into your pages, like this 
 
-		<script src="http://dist.meekostuff.net/HTMLDecor/2.0-stable/HTMLDecor.js"></script>
+		<script src="/path/to/HTMLDecor/boot.js"></script>
 		
-FIXME: Alternatively you can [download HTMLDecor.js](http://dist.meekostuff.net/HTMLDecor/2.0-stable/HTMLDecor.js)
-and install it on your server. 
+TODO: Alternatively you can source HTMLDecor from CDN
+1. Copy the
+[HTMLDecor CDN boot-script](http://dist.meekostuff.net/HTMLDecor/2.0-stable/boot-dist.js)
+to your server, probably in the top directory. 
+2. Source the HTMLDecor CDN boot-script into your pages, like this 
+
+		<script src="/boot-dist.js"></script>
+
 
 How it works
 ------------
-1. Set the visibility of the page to "hidden".
+1. Set the visibility of the page to "hidden". \*
 2. Detect the first `<link rel="meeko-decor" href="..." />`, fully resolve the @href and use as the decor URL.
 3. Load the decor URL into an iframe.
 4. Fully resolve URLs for all scripts, images and links in the decor page. 
@@ -179,7 +184,9 @@ from the `<head>` of the decor page into the `<head>` of the content page.
  then the element in the decor is replaced with the element from the content.
  All other child nodes of the body in the content page are deleted.
 8. When all linked stylesheets for the document have loaded, set the visibility of the page to "visible".
-This step may occur at any time during or after step 7.
+This step may occur at any time during or after step 7. \*
+
+\* Steps 1 & 8 are handled by the boot-script.
 
 
 Fallbacks
@@ -225,6 +232,7 @@ will be removed from the page before the decor is applied, e.g.
 		assuming the decor has an element with matching @id
 		</div>
 	</body>	
+
 
 PushState Assisted Navigation
 -----------------------------
@@ -368,7 +376,7 @@ HTMLDecor relies on `<link>` elements to reference the decor for a page, like so
 This is similar to the way external stylesheets are associated with the page,
 the main exception being that multiple stylesheets can be applied to the page.
 
-**NOTE** that all decor `<link>` must be in the `<head>` of the page before the `HTMLDecor.js` script is included.
+**NOTE** that all decor `<link>` must be in the `<head>` of the page before the HTMLDecor starts. 
 
 HTMLDecor also allows a page to specify more than one decor file and let the most specific one be chosen in the browser.
 A decor `<link>` may have attributes that, when matched, increase its specificity for the page and,
@@ -435,7 +443,7 @@ This allows for a fallback styling option of decor-less pages. For example, the 
 `<style title="nodecor">...</style>`  
 or  
 `<link rel="stylesheet" href="style.css" title="nodecor" />`  
-- if HTMLDecor.js detects that it is included in a decor page then it will abort. This allows you to use a decor page as a normal page 
+- if HTMLDecor detects that it is included in a decor page then it will abort. This allows you to use a decor page as a normal page 
 in your site if that is desirable. 
 - in most current browsers, elements from the content can be moved into the decor *while the element is still loading*. 
 On IE6,7,8 this will throw an error, so for those browsers the decor is inserted and elements moved only after the DOM has fully loaded.
@@ -451,7 +459,8 @@ The configuration options may also be useful for debugging.
 Configuration
 -------------
 
-**WARNING** the method of configuration is not stable and likely to change in a future release.
+**WARNING** the method of configuration is handled by the boot-script,
+is not stable and is likely to change in a future release.
 
 You probably don't want to change the default configuration, but if you find the need, here's how.
 
