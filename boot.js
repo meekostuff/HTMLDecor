@@ -6,7 +6,7 @@
 (function() {
 
 var defaults = { // NOTE defaults also define the type of the associated config option
-	"htmldecor-script": "/HTMLDecor/HTMLDecor.js", // FIXME
+	"htmldecor-script": '{bootscriptdir}/HTMLDecor.js',
 	"log-level": "warn",
 	"decor-autostart": true,
 	"decor-theme": "",
@@ -25,7 +25,13 @@ var Meeko = window.Meeko || (window.Meeko = {});
  ### Utility functions
  */
 
-var document = window.document;
+function $$(selector) { return document.getElementsByTagName(selector); }
+
+function getCurrentScript() { // TODO this won't work if script is dynamically inserted (or async / defer)
+	var allScripts = $$('script');
+	var script = allScripts[allScripts.length - 1];
+	return script;
+}
 
 var uc = function(str) { return str.toUpperCase(); }
 var lc = function(str) { return str.toLowerCase(); }
@@ -51,7 +57,7 @@ function(text) {
 
 var loadScript = (function() {
 
-var head = document.getElementsByTagName("head")[0]; // TODO is there always a <head>?
+var head = $$("head")[0]; // TODO is there always a <head>?
 var marker = head.firstChild;
 
 function loadScript(url, onload, onerror) {
@@ -114,7 +120,7 @@ this.LOG_LEVEL = levels.warn; // DEFAULT
 
 var Viewport = (function() {
 
-var head = document.getElementsByTagName("head")[0];
+var head = $$("head")[0];
 var fragment = document.createDocumentFragment();
 var style = document.createElement("style");
 fragment.appendChild(style); // NOTE on IE this realizes style.styleSheet 
@@ -124,12 +130,12 @@ if (style.styleSheet) style.styleSheet.cssText = "body { visibility: hidden; }";
 else style.textContent = "body { visibility: hidden; }";
 
 function hide() {
-	head.insertBefore(style, document.head.firstChild);
+	head.insertBefore(style, head.firstChild);
 }
 
 function unhide() {
 	if (style.parentNode != head) return;
-	document.head.removeChild(style);
+	head.removeChild(style);
 	// NOTE on IE sometimes content stays hidden although 
 	// the stylesheet has been removed.
 	// The following forces the content to be revealed
@@ -227,7 +233,9 @@ var start = function() {
 	else Viewport.unhide();
 }
 
-var htmldecor_script = globalOptions['htmldecor-script']; // FIXME
+var bootscriptdir = getCurrentScript().src.replace(/\/[^\/]*$/, '');
+var htmldecor_script = globalOptions['htmldecor-script'].replace('{bootscriptdir}', bootscriptdir);
+
 loadScript(htmldecor_script, start, Viewport.unhide);
 //	loadScript('/config.js', oncomplete, oncomplete);
 
