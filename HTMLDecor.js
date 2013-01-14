@@ -24,8 +24,7 @@ var XMLHttpRequest = window.XMLHttpRequest;
 var defaults = { // NOTE defaults also define the type of the associated config option
 	"log-level": "warn",
 	"decor-theme": "",
-	"polling-interval": 50,
-	"decor-autostart": true
+	"polling-interval": 50
 }
 
 var vendorPrefix = "meeko";
