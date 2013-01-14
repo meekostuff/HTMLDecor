@@ -160,14 +160,6 @@ Installation
 2. Source the HTMLDecor boot-script into your pages, like this 
 
 		<script src="/path/to/HTMLDecor/boot.js"></script>
-		
-TODO: Alternatively you can source HTMLDecor from CDN
-1. Copy the
-[HTMLDecor CDN boot-script](http://dist.meekostuff.net/HTMLDecor/2.0-stable/boot-dist.js)
-to your server, probably in the top directory. 
-2. Source the HTMLDecor CDN boot-script into your pages, like this 
-
-		<script src="/boot-dist.js"></script>
 
 
 How it works
