@@ -79,6 +79,11 @@ return loadScript;
 
 })();
 
+function resolveURL(url) { // works for all browsers including IE < 8
+	var div = document.createElement('div');
+	div.innerHTML = '<a href="' + url + '"></a>';
+	return div.firstChild.href;
+}
 
 function queue(fnList, oncomplete, onerror) {
 	var list = [].concat(fnList);
@@ -218,6 +223,39 @@ var globalOptions = (function() {
 	return options;
 })();
 
+
+function getDecorURL(doc) {
+	var link = getDecorLink(doc);
+	if (!link) return null; // FIXME warning message
+	var href = link.getAttribute("href");
+	return resolveURL(href); // FIXME href should already be absolute
+}
+
+function getDecorLink(doc) {
+	var matchingLinks = [];
+	var link, specificity = 0;
+	some($$("link", doc.head), function(el) {
+		var tmp, sp = 0;
+		if (el.nodeType != 1) return;
+		var type = lc(el.type);
+		if (!/^\s*MEEKO-DECOR\s*$/i.test(el.rel)) return;
+		if (type == "text/html" || type == "") sp += 1;
+		else {
+			logger.error("Invalid decor document type: " + type);
+			return;
+		}
+		if (tmp = el.getAttribute("media")) { // FIXME polyfill for matchMedia??
+			if (window.matchMedia && window.matchMedia(tmp).matches) sp += 2;
+			else return; // NOTE if the platform doesn't support media queries then this decor is rejected
+		}
+		if (sp > specificity) {
+			specificity = sp;
+			link = el;
+		}
+	});
+	return link;
+}
+
 /* now do start-up */
 
 var timeout = globalOptions["decor-hidden-timeout"];
@@ -233,7 +271,10 @@ var start = function() {
 	var async = Meeko.async;
 	async.pollingInterval = globalOptions["polling-interval"];
 	var decor = Meeko.decor;
-	decor.config({ decorReady: Viewport.unhide });
+	decor.config({
+		decorReady: Viewport.unhide,
+		detect: getDecorURL
+	});
 	decor["theme"] = globalOptions["decor-theme"];
 	if (globalOptions["decor-autostart"]) decor.start();
 	else Viewport.unhide();

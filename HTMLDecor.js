@@ -23,7 +23,6 @@ var XMLHttpRequest = window.XMLHttpRequest;
 
 var defaults = { // NOTE defaults also define the type of the associated config option
 	"log-level": "warn",
-	"decor-theme": "",
 	"polling-interval": 50
 }
 
@@ -732,13 +731,18 @@ panner.config = decor.config;
 extend(decor, {
 
 started: false,
+current: {
+	url: null
+},
 placeHolders: {},
 
 start: function() {
 	if (decor.started) throw "Already started";
 	decor.started = true;
-	var decorURL = getDecorURL(document);
+	var decorURL = decor.options.lookup(document.URL);
+	if (!decorURL) decorURL = decor.options.detect(document);
 	if (!decorURL) return; // FIXME warning message
+	decor.current.url = decorURL; // FIXME what if decorate fails??
 	return queue([
 
 	function() {
@@ -775,16 +779,6 @@ decorate: async(function(decorURL, callback) {
 		decor.options.load(decorURL, {
 			onComplete: function(result) { doc = result; cb.complete(); },
 			onError: function() { logger.error("loadHTML fail for " + url); cb.error(); } // FIXME need decorError notification / handling
-		});
-	}),
-	async(function(cb) {
-		// NOTE don't need to keep track of altDecorURL, since it has a 1-to-1 relationship with decorURL
-		// TODO but it would be nice to store more data
-		var altDecorURL = getDecorURL(doc, true);
-		if (!altDecorURL) return true;
-		decor.options.load(altDecorURL, {
-			onComplete: function(result) { doc = result; cb.complete(); },
-			onError: function() { logger.error("loadHTML fail for " + url); cb.error(); }
 		});
 	}),
 	function() {
@@ -997,6 +991,15 @@ replace: function(url, callback) {
 
 navigate: async(function(options, callback) {
 	var url = options.url;
+	var decorURL = decor.options.lookup(url);
+	if (typeof decorURL !== "string" || decorURL !== decor.current.url) {
+		removeEvent(window, "unload", panner.onUnload);
+		addEvent(window, "unload", noop); // Disable bfcache
+		location.replace(url);
+		callback.complete(msg);	// TODO should this be an error??
+		return;
+	}
+	
 	var loader = async(function(cb) {
 		panner.options.load(url, cb);
 	});
@@ -1006,26 +1009,6 @@ navigate: async(function(options, callback) {
 	onComplete: function(msg) {
 		panner.contentURL = URI(document.URL).nohash;
 		callback.complete(msg);
-	},
-	
-	onError: function(msg) {
-		/*
-		  Ideally we just use
-		      location.reload()
-		  but Webkit / Chrome and Opera have buggy behavior, see https://bugs.webkit.org/show_bug.cgi?id=80697
-		  Basically, if `location.replace(url)` is the equivalent of `location.reload()` then
-		  back-button behavior is broken on the next-page.
-		  Webkit / Chrome would be fixed by
-		      history.replaceState({}, null, "#");
-		      location.replace("");
-		  but Opera needs something more.
-		  The following solution works on all browsers tested.
-		*/
-		history.replaceState({}, null, panner.contentURL);
-		removeEvent(window, "unload", panner.onUnload);
-		addEvent(window, "unload", noop); // Disable bfcache
-		location.replace(url);
-		callback.error(msg);
 	}
 	
 	});
@@ -1049,11 +1032,12 @@ function show(node) { node.removeAttribute("hidden"); }
 function noop() {}
 
 decor.options = {
-	theme: defaults['decor-theme'],
 	decorIn: { before: noop, after: noop },
 	decorReady: noop, // TODO should this be decorIn:complete ??
 	decorOut: { before: noop, after: noop }, // TODO
-	load: async(function(url, cb) { DOM.loadHTML(url, cb); })
+	load: async(function(url, cb) { DOM.loadHTML(url, cb); }),
+	detect: function(document) {},
+	lookup: function(uri) {}
 }
 
 panner.options = {
@@ -1110,8 +1094,7 @@ var page = async(function(loader, callback) {
 	}),
 	function() { return wait(function() { return ready; }); },
 	function() {
-		if (getDecorURL(document) == getDecorURL(doc)) scrollToId();
-		else throw "Next page has different decor"; 
+		scrollToId();
 	},
 	// we don't get to here if location.replace() was called
 	function() {
@@ -1351,60 +1334,6 @@ function domContentLoaded() {
 return domContentLoaded;
 
 })();
-
-function getDecorURL(doc, inDecor) {
-	var link = getDecorLink(doc, inDecor);
-	if (!link) return null; // FIXME warning message
-	var href = link.getAttribute("href");
-	if (inDecor) return href;
-	return URI(document.URL).resolve(href); // FIXME href should already be absolute
-}
-
-function getDecorLink(doc, inDecor) {
-	if (!doc) doc = document;
-	var frameTheme, userTheme;
-	if (window.frameElement) frameTheme = window.frameElement.getAttribute("data-theme");
-	// FIXME should userTheme come from the config??
-	userTheme = decor.options.theme; 
-	var matchingLinks = [];
-	var link, specificity = 0;
-	forEach($$("link", doc.head), function(el) {
-		var tmp, sp = 0;
-		if (el.nodeType != 1) return;
-		var type = lc(el.type);
-		if (inDecor) {
-			if (!/^\s*ALTERNATE\s*$/i.test(el.rel)) return;
-			if (type == "text/html" || type == "") sp += 1;
-			else return;
-		}
-		else {
-			if (!/^\s*MEEKO-DECOR\s*$/i.test(el.rel)) return;
-			if (type == "text/html" || type == "") sp += 1;
-			else {
-				logger.error("Invalid decor document type: " + type);
-				return;
-			}
-		}
-		// TODO @data-assert="<js-code>"
-		if (tmp = el.getAttribute("media")) { // FIXME polyfill for matchMedia??
-			if (window.matchMedia && window.matchMedia(tmp).matches) sp += 4;
-			else return; // NOTE if the platform doesn't support media queries then this decor is rejected
-		}
-		if (tmp = el.getAttribute("data-frame-theme")) {
-			if (tmp == frameTheme) sp += 8;
-			else return;
-		}
-		if (tmp = el.getAttribute("data-user-theme")) {
-			if (tmp == userTheme) sp += 16;
-			else return;
-		}
-		if (sp > specificity) {
-			specificity = sp;
-			link = el;
-		}
-	});
-	return link;
-}
 
 function getDecorMeta(doc) {
 	if (!doc) doc = document;
