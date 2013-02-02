@@ -943,7 +943,7 @@ onHyperlink: function(target) { // return false to preventDefault
 		return false;
 	}
 
-	return panner.onSiteLink(uri.href); // TODO should this pass an absPath rather than absURL??
+	return panner.onSiteLink(uri.href); // TODO this should pass a URI object rather than URL string
 },
 
 onSiteLink: function(url) { // return false to preventDefault
@@ -995,7 +995,8 @@ navigate: async(function(options, callback) {
 	if (typeof decorURL !== "string" || decorURL !== decor.current.url) {
 		removeEvent(window, "unload", panner.onUnload);
 		addEvent(window, "unload", noop); // Disable bfcache
-		location.replace(url);
+		var modifier = options.replace ? "replace" : "assign";
+		location[modifier](url);
 		callback.complete(msg);	// TODO should this be an error??
 		return;
 	}
