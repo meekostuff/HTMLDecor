@@ -9,7 +9,6 @@ var defaults = { // NOTE defaults also define the type of the associated config 
 	"htmldecor-script": '{bootscriptdir}HTMLDecor.js',
 	"log-level": "warn",
 	"decor-autostart": true,
-	"decor-theme": "",
 	"decor-hidden-timeout": 3000,
 	"polling-interval": 50
 }
@@ -275,7 +274,6 @@ var start = function() {
 		decorReady: Viewport.unhide,
 		detect: getDecorURL
 	});
-	decor["theme"] = globalOptions["decor-theme"];
 	if (globalOptions["decor-autostart"]) decor.start();
 	else Viewport.unhide();
 }
