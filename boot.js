@@ -8,8 +8,8 @@
 var defaults = { // NOTE defaults also define the type of the associated config option
 	"htmldecor-script": '{bootscriptdir}HTMLDecor.js',
 	"log-level": "warn",
-	"decor-autostart": true,
-	"decor-hidden-timeout": 3000,
+	"autostart": true,
+	"hidden-timeout": 3000,
 	"polling-interval": 50,
 	"config-script": ''
 }
@@ -274,7 +274,7 @@ function getDecorLink(doc) {
 
 /* now do start-up */
 
-var timeout = globalOptions["decor-hidden-timeout"];
+var timeout = globalOptions["hidden-timeout"];
 if (timeout > 0) {
 	Viewport.hide();
 	delay(Viewport.unhide, timeout);
@@ -293,7 +293,7 @@ var config = function() {
 }
 
 var start = function() {
-	if (globalOptions["decor-autostart"]) Meeko.decor.start();
+	if (globalOptions["autostart"]) Meeko.decor.start();
 	else Viewport.unhide();
 }
 
@@ -304,7 +304,7 @@ var htmldecor_script = globalOptions['htmldecor-script'];
 if (!htmldecor_script) throw "HTMLDecor script URL is not configured";
 htmldecor_script = resolveURL(htmldecor_script, urlParams);
 var config_script = globalOptions['config-script'];
-if (config_script) config_script = resolveURL(config_script, urlParams);
+if (config_script && typeof config_script == 'string') config_script = resolveURL(config_script, urlParams);
 
 queue([
 htmldecor_script,
