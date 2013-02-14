@@ -10,7 +10,8 @@ var defaults = { // NOTE defaults also define the type of the associated config 
 	"log-level": "warn",
 	"decor-autostart": true,
 	"decor-hidden-timeout": 3000,
-	"polling-interval": 50
+	"polling-interval": 50,
+	"config-script": '{bootscriptdir}config.js'
 }
 
 // Don't even load HTMLDecor if "nodecor" is one of the search options
@@ -78,24 +79,33 @@ return loadScript;
 
 })();
 
-function resolveURL(url) { // works for all browsers including IE < 8
+function resolveURL(url, params) { // works for all browsers including IE < 8
+	for (var name in params) {
+		url = url.replace('{' + name + '}', params[name]); // WARN max of one reolace per param
+	}
 	var div = document.createElement('div');
 	div.innerHTML = '<a href="' + url + '"></a>';
 	return div.firstChild.href;
 }
 
+function delay(callback, timeout) {
+	return window.setTimeout(callback, timeout);
+}
+
 function queue(fnList, oncomplete, onerror) {
 	var list = [].concat(fnList);
+	var errorback = function(err) {
+		if (onerror) onerror(err);
+	}
 	var queueback = function() {
 		var fn = list.shift();
-		if (fn) fn(queueback, onerror);
+		if (fn) delay(function() {
+			try { fn(queueback, errorback); }
+			catch(err) { errorback(err); }
+		});
 		else if (oncomplete) oncomplete();
 	}
 	queueback();
-}
-
-function delay(callback, timeout) {
-	return window.setTimeout(callback, timeout);
 }
 
 var logger = Meeko.logger || (Meeko.logger = new function() {
@@ -266,22 +276,41 @@ if (timeout > 0) {
 var log_index = logger.levels[globalOptions["log-level"]];
 if (log_index != null) logger.LOG_LEVEL = log_index;
 
-var start = function() {
+var config = function(oncomplete, onerror) {
 	var async = Meeko.async;
 	async.pollingInterval = globalOptions["polling-interval"];
-	var decor = Meeko.decor;
-	decor.config({
+	Meeko.decor.config({
 		decorReady: Viewport.unhide,
 		detect: getDecorURL
 	});
-	if (globalOptions["decor-autostart"]) decor.start();
-	else Viewport.unhide();
+	oncomplete();
 }
 
-var bootscriptdir = getCurrentScript().src.replace(/\/[^\/]*$/, '/');
-var htmldecor_script = globalOptions['htmldecor-script'].replace('{bootscriptdir}', bootscriptdir);
+var start = function(oncomplete, onerror) {
+	if (globalOptions["decor-autostart"]) Meeko.decor.start();
+	else Viewport.unhide();
+	oncomplete();
+}
 
-loadScript(htmldecor_script, start, Viewport.unhide);
-//	loadScript('/config.js', oncomplete, oncomplete);
+var urlParams = {
+	bootscriptdir: getCurrentScript().src.replace(/\/[^\/]*$/, '/')
+}
+var htmldecor_script = globalOptions['htmldecor-script'];
+if (!htmldecor_script) throw "HTMLDecor script URL is not configured";
+htmldecor_script = resolveURL(htmldecor_script, urlParams);
+var config_script = globalOptions['config-script'];
+if (config_script) config_script = resolveURL(config_script, urlParams);
+
+queue([
+function(oncomplete, onerror) {
+	loadScript(htmldecor_script, oncomplete, onerror);
+},
+config,
+function(oncomplete, onerror) {
+	if (config_script) loadScript(config_script, oncomplete, onerror);
+	else oncomplete();
+},
+start
+], null, Viewport.unhide);
 
 })();
