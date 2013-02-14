@@ -11,7 +11,7 @@ var defaults = { // NOTE defaults also define the type of the associated config 
 	"decor-autostart": true,
 	"decor-hidden-timeout": 3000,
 	"polling-interval": 50,
-	"config-script": '{bootscriptdir}config.js'
+	"config-script": ''
 }
 
 // Don't even load HTMLDecor if "nodecor" is one of the search options
@@ -33,6 +33,15 @@ function getCurrentScript() { // TODO this won't work if script is dynamically i
 	return script;
 }
 
+function resolveURL(url, params) { // works for all browsers including IE < 8
+	for (var name in params) {
+		url = url.replace('{' + name + '}', params[name]); // WARN max of one reolace per param
+	}
+	var div = document.createElement('div');
+	div.innerHTML = '<a href="' + url + '"></a>';
+	return div.firstChild.href;
+}
+
 var uc = function(str) { return str.toUpperCase(); }
 var lc = function(str) { return str.toLowerCase(); }
 
@@ -45,12 +54,7 @@ var some = function(a, fn, context) { // some() is forEach() if fn() always retu
 
 var words = function(text) { return text.split(/\s+/); }
 
-var parseJSON = (window.JSON && JSON.parse) ?
-function(text) {
-	try { return JSON.parse(text); }
-	catch (error) { return; }
-} :
-function(text) {
+var parseJSON = function(text) { // NOTE this allows code to run. This is a feature, not a bug.
 	try { return ( Function('return ( ' + text + ' );') )(); }
 	catch (error) { return; }
 }
@@ -79,15 +83,6 @@ return loadScript;
 
 })();
 
-function resolveURL(url, params) { // works for all browsers including IE < 8
-	for (var name in params) {
-		url = url.replace('{' + name + '}', params[name]); // WARN max of one reolace per param
-	}
-	var div = document.createElement('div');
-	div.innerHTML = '<a href="' + url + '"></a>';
-	return div.firstChild.href;
-}
-
 function delay(callback, timeout) {
 	return window.setTimeout(callback, timeout);
 }
@@ -98,12 +93,24 @@ function queue(fnList, oncomplete, onerror) {
 		if (onerror) onerror(err);
 	}
 	var queueback = function() {
+		if (list.length <= 0) {
+			if (oncomplete) oncomplete();
+			return;
+		}
 		var fn = list.shift();
-		if (fn) delay(function() {
-			try { fn(queueback, errorback); }
-			catch(err) { errorback(err); }
-		});
-		else if (oncomplete) oncomplete();
+		switch(typeof fn) {
+		case "string":
+			loadScript(fn, queueback, errorback);
+			break;
+		case "function":
+			delay(function() {
+				try { fn(); queueback(); }
+				catch(err) { errorback(err); }
+			});
+			break;
+		default: // TODO
+			break;
+		}
 	}
 	queueback();
 }
@@ -276,20 +283,18 @@ if (timeout > 0) {
 var log_index = logger.levels[globalOptions["log-level"]];
 if (log_index != null) logger.LOG_LEVEL = log_index;
 
-var config = function(oncomplete, onerror) {
+var config = function() {
 	var async = Meeko.async;
 	async.pollingInterval = globalOptions["polling-interval"];
 	Meeko.decor.config({
 		decorReady: Viewport.unhide,
 		detect: getDecorURL
 	});
-	oncomplete();
 }
 
-var start = function(oncomplete, onerror) {
+var start = function() {
 	if (globalOptions["decor-autostart"]) Meeko.decor.start();
 	else Viewport.unhide();
-	oncomplete();
 }
 
 var urlParams = {
@@ -302,14 +307,9 @@ var config_script = globalOptions['config-script'];
 if (config_script) config_script = resolveURL(config_script, urlParams);
 
 queue([
-function(oncomplete, onerror) {
-	loadScript(htmldecor_script, oncomplete, onerror);
-},
+htmldecor_script,
 config,
-function(oncomplete, onerror) {
-	if (config_script) loadScript(config_script, oncomplete, onerror);
-	else oncomplete();
-},
+config_script || function() {},
 start
 ], null, Viewport.unhide);
 
