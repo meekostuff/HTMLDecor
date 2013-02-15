@@ -845,10 +845,9 @@ decorate: async(function(decorURL, callback) {
 		function resolve(el, attrName) {
 			if (tagName(el) != 'script') return _resolve(el, attrName);		
 			var scriptType = el.type;
-			var isJS = (!scriptType || /^text\/javascript$/i.test(scriptType));
-			if (isJS) el.type = 0; // IE6 and IE& will re-execute script if @src is modified (even to same path)
+			var isJS = (!scriptType || /^text\/javascript/i.test(scriptType));
+			if (isJS) el.type = "text/javascript?complete"; // IE6 and IE& will re-execute script if @src is modified (even to same path)
 			_resolve(el, attrName);
-			if (isJS && !!el.type) el.type = scriptType; // WARN on IE6 !!el.type will be false, but (el.type == "") is false
 		}
 		
 		function resolveAll(root, tag, attr) {
@@ -1171,7 +1170,7 @@ function mergeHead(doc, isDecor) {
 
 	// remove decor / page elements except for <script type=text/javascript>
 	forSiblings (isDecor ? "before" : "after", marker, function(node) {
-		if (tagName(node) == "script" && (!node.type || node.type.match(/^text\/javascript$/i))) return;
+		if (tagName(node) == "script" && (!node.type || node.type.match(/^text\/javascript/i))) return;
 		dstHead.removeChild(node);
 	});
 
