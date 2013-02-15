@@ -358,62 +358,6 @@ but BEFORE the page content is MERGED WITH the decor.
 Scripts in the `<body>` of the next page are **enabled** AFTER the content in the `<body>` of the next page is MERGED WITH the page.
 You do not need and SHOULD NOT have scripts in any page (other than the decor document). 
 
-Alternate Decor
----------------
-
-HTMLDecor relies on `<link>` elements to reference the decor for a page, like so
-
-    <link rel="meeko-decor" type="text/html" href="decor.html" />
-
-This is similar to the way external stylesheets are associated with the page,
-the main exception being that multiple stylesheets can be applied to the page.
-
-**NOTE** that all decor `<link>` must be in the `<head>` of the page before the HTMLDecor starts. 
-
-HTMLDecor also allows a page to specify more than one decor file and let the most specific one be chosen in the browser.
-A decor `<link>` may have attributes that, when matched, increase its specificity for the page and,
-when unmatched, disqualify it from being chosen. The attributes are:
-
-#### media
-
-    <link rel="meeko-decor" type="text/html" media="handheld" href="handheld-decor.html" />
-
-This is intended to have the same meaning as `media` stylesheets.
-If the `window.matchMedia()` method doesn't exist then these decor pages are disqualified.
-Otherwise `window.matchMedia()` is used to determine if the decor is appropriate. 
-
-**WARNING** Some media probably don't support javascript (e.g. `print`).
-HTMLDecor settings would be useless for those media.
-
-#### data-frame-theme
-
-    <link rel="meeko-decor" type="text/html" data-frame-theme="simple" href="simple-decor.html" />
-
-This allows a page to have a different decor when inside an `iframe` - say a popup view of another page.  
-The decor can only be chosen if the page is in an `iframe` and the `iframe` has a `data-theme` attribute with matching value.
-
-#### data-user-theme
-
-    <link rel="meeko-decor" type="text/html" data-user-theme="minimal" href="minimal-decor.html" />
-
-This allows the page to let the user influence the choice of decor. 
-The decor can only be chosen if if the `meeko-decor-theme` key from `sessionStorage` or `localStorage` has a matching value.
-
-If one or more of these attributes are present then they MUST ALL be valid, otherwise the decor is disqualified.
-If there are several decor files that still qualify then any decor with `@data-user-theme` is most specific,
-followed by `@data-frame-theme`, followed by `@media`, followed by decor with none of these attributes.
-
-If there is more than one decor with the same specificity then the first one in the page is chosen. 
-
-### Decor Redirection
-
-Alternate decor can also be specified from the decor file.
-This allows you to start using alternate decor without modifying the real content pages.
-In the decor file for a page, simply link to alternate versions of the decor using `@rel="alternate"`, e.g.
-
-    <link rel="alternate" type="text/html" media="handheld" href="handheld-decor.html" />
-    <link rel="alternate" type="text/html" data-frame-theme="simple" href="simple-decor.html" />
-    <link rel="alternate" type="text/html" data-user-theme="minimal" href="minimal-decor.html" />
 
 License
 -------
@@ -460,8 +404,8 @@ HTMLDecor has the following config options (default values in **bold**).
 
 - log-level: "none", "error", **"warn"**, "info", "debug"
 - polling-interval: **50** (milliseconds)
-- decor-autostart: **true**, false
-- decor-hidden-timeout: **3000** (milliseconds)
+- autostart: **true**, false
+- hidden-timeout: **3000** (milliseconds)
 
 HTMLDecor reads config options immediately after the script loads.
 Sources for configuration options are detailed below. 
@@ -473,7 +417,7 @@ Options can be **preset** by script, like this
 	var Meeko = window.Meeko || (window.Meeko = {});
 	Meeko.options = {
 		"log-level": "info"
-	}	
+	};	
 	</script>
 		
 Boolean options, such as `decor-autostart`, can have any of these boolean-like values: true/false, yes/no, on/off, 1/0
@@ -482,9 +426,9 @@ Typically the only important options are `decor-autostart` and `decor-hidden-tim
     <script>
 	var Meeko = window.Meeko || (window.Meeko = {});
 	Meeko.options = {
-		"decor-autostart": "no",
-		"decor-hidden-timeout": 1000
-	}	
+		"autostart": "no",
+		"hidden-timeout": 1000
+	};
 	</script>
 
 This tells HTMLDecor not to start automatically, and when a manual start is requested to
@@ -501,7 +445,7 @@ For this reason HTMLDecor reads `sessionStorage` and `localStorage` at startup, 
 
 Config options are read from JSON stored in the `meeko-options` key. Thus the following would prevent `autostart` and turn on `debug` logging.
 
-	sessionStorage.setItem('meeko-options', JSON.stringify({ "decor-autostart": "no", "log-level": "debug" }) );
+	sessionStorage.setItem('meeko-options', JSON.stringify({ "autostart": "no", "log-level": "debug" }) );
 
 _Note_ that the page would require a refresh after these settings were made.
 
@@ -510,7 +454,7 @@ _Note_ that the page would require a refresh after these settings were made.
 HTMLDecor looks in the query part of the page URL for JSON in the `meeko-options` option.
 Thus the following would prevent `autostart` and turn on `debug` logging.
 
-	http://example.org/index.html?meeko-options={"decor-autostart":"no","log-level":"debug"}
+	http://example.org/index.html?meeko-options={"autostart":"no","log-level":"debug"}
 	
 URL query options override all other settings. 
 
@@ -526,6 +470,5 @@ TODO
 will probably be wrong when imported into the page. 
 - investigate the use of [HTML in XMLHttpRequest](https://developer.mozilla.org/en/HTML_in_XMLHttpRequest) in place of an iframe. 
 - delayed loading (or user-triggered loading) of sections of the page
-- `<link rel="meeko-decor" data-assert="capability_check()" ... />` for more flexibility in specifying decor document
 - HTMLDecor equivalents of `showModalDialog()` and `showModelessDialog()` using iframes and with theming option
 
