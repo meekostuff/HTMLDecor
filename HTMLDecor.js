@@ -844,9 +844,8 @@ decorate: async(function(decorURL, callback) {
 		function resolve(el, attrName) {
 			if (tagName(el) != 'script') return _resolve(el, attrName);		
 			var scriptType = el.type;
-			el.type = scriptType + '?disabled';
+			if (!scriptType || /^text\/javascript$/i.test(scriptType)) el.type = 0; // WARN !el.type will be true, but (el.type == "") is false
 			_resolve(el, attrName);
-			el.type = scriptType;
 		}
 		
 		function resolveAll(root, tag, attr) {
