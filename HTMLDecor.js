@@ -742,6 +742,7 @@ start: function() {
 	var decorURL = decor.options.lookup(document.URL);
 	if (!decorURL) decorURL = decor.options.detect(document);
 	if (!decorURL) return; // FIXME warning message
+	decorURL = URI(document.URL).resolve(decorURL);
 	decor.current.url = decorURL; // FIXME what if decorate fails??
 	return queue([
 
@@ -844,8 +845,10 @@ decorate: async(function(decorURL, callback) {
 		function resolve(el, attrName) {
 			if (tagName(el) != 'script') return _resolve(el, attrName);		
 			var scriptType = el.type;
-			if (!scriptType || /^text\/javascript$/i.test(scriptType)) el.type = 0; // WARN !el.type will be true, but (el.type == "") is false
+			var isJS = (!scriptType || /^text\/javascript$/i.test(scriptType));
+			if (isJS) el.type = 0; // IE6 and IE& will re-execute script if @src is modified (even to same path)
 			_resolve(el, attrName);
+			if (isJS && !!el.type) el.type = scriptType; // WARN on IE6 !!el.type will be false, but (el.type == "") is false
 		}
 		
 		function resolveAll(root, tag, attr) {
@@ -991,7 +994,7 @@ replace: function(url, callback) {
 navigate: async(function(options, callback) {
 	var url = options.url;
 	var decorURL = decor.options.lookup(url);
-	if (typeof decorURL !== "string" || decorURL !== decor.current.url) {
+	if (typeof decorURL !== "string" || URI(document.URL).resolve(decorURL) !== decor.current.url) {
 		removeEvent(window, "unload", panner.onUnload);
 		addEvent(window, "unload", noop); // Disable bfcache
 		var modifier = options.replace ? "replace" : "assign";
