@@ -3,6 +3,7 @@
  * Mozilla Public License v2.0 (http://mozilla.org/MPL/2.0/)
  */
 
+
 (function() {
 
 var defaults = { // NOTE defaults also define the type of the associated config option
@@ -59,12 +60,16 @@ var parseJSON = function(text) { // NOTE this allows code to run. This is a feat
 	catch (error) { return; }
 }
 
-var loadScript = (function() {
+function delay(callback, timeout) {
+	return window.setTimeout(callback, timeout);
+}
+
+var queue = (function() {
 
 var head = $$("head")[0]; // TODO is there always a <head>?
 var marker = head.firstChild;
 
-function loadScript(url, onload, onerror) {
+function prepareScript(url, onload, onerror) {
 	var script = document.createElement('script');
 	script.onerror = onerror;
 	var loaded = false;
@@ -76,44 +81,71 @@ function loadScript(url, onload, onerror) {
 	}
 	else script.onload = onload;
 	script.src = url;
+	
+	if (script.async == true) {
+		script.async = false;
+		marker.parentNode.insertBefore(script, marker);
+	}
+	return script;
+}
+
+function enableScript(script) {
+	if (script.parentNode) return;
 	marker.parentNode.insertBefore(script, marker);
 }
 
-return loadScript;
-
-})();
-
-function delay(callback, timeout) {
-	return window.setTimeout(callback, timeout);
+function disableScript(script) {
+	if (!script.parentNode) return;
+	script.parentNode.removeChild(script);
 }
 
 function queue(fnList, oncomplete, onerror) {
-	var list = [].concat(fnList);
-	var errorback = function(err) {
-		if (onerror) onerror(err);
-	}
-	var queueback = function() {
-		if (list.length <= 0) {
-			if (oncomplete) oncomplete();
-			return;
-		}
-		var fn = list.shift();
+	var list = [];
+	some(fnList, function(fn) {
 		switch(typeof fn) {
 		case "string":
-			loadScript(fn, queueback, errorback);
+			list.push(prepareScript(fn, queueback, errorback));
 			break;
 		case "function":
-			delay(function() {
-				try { fn(); queueback(); }
-				catch(err) { errorback(err); }
-			});
+			list.push(fn);
 			break;
 		default: // TODO
 			break;
 		}
-	}
+	});
 	queueback();
+
+	function errorback(err) {
+		logger.error(err);
+		var fn;
+		while (fn = list.shift()) {
+			if (typeof fn == 'function') continue;
+			// NOTE the only other option is a prepared script
+			disableScript(fn);
+		}
+		if (onerror) onerror(err);
+	}
+
+	function queueback() {
+		var fn;
+		while (fn = list.shift()) {
+			if (typeof fn == "function") {
+				try { fn(); continue; }
+				catch(err) { errorback(err); return; }
+			}
+			else { // NOTE the only other option is a prepared script
+				enableScript(fn);
+				return;
+			}
+		}
+		if (oncomplete) oncomplete();
+		return;
+	}
 }
+
+return queue;
+
+})();
 
 var logger = Meeko.logger || (Meeko.logger = new function() {
 
@@ -284,8 +316,7 @@ var log_index = logger.levels[globalOptions["log-level"]];
 if (log_index != null) logger.LOG_LEVEL = log_index;
 
 var config = function() {
-	var async = Meeko.async;
-	async.pollingInterval = globalOptions["polling-interval"];
+	Meeko.async.pollingInterval = globalOptions["polling-interval"];
 	Meeko.decor.config({
 		decorReady: Viewport.unhide,
 		detect: getDecorURL
