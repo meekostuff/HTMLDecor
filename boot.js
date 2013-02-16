@@ -75,6 +75,7 @@ function prepareScript(url, onload, onerror) {
 	var loaded = false;
 	if (script.readyState) script.onreadystatechange = function() {
 		if (loaded) return;
+		if (!script.parentNode) return; // onreadystatechange will always fire after insertion, but can fire before which messes up the queue
 		if (script.readyState != "loaded" && script.readyState != "complete") return;
 		loaded = true;
 		onload();
