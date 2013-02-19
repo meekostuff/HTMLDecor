@@ -18,6 +18,8 @@ var defaults = { // NOTE defaults also define the type of the associated config 
 // Don't even load HTMLDecor if "nodecor" is one of the search options
 if (/(^\?|&)nodecor($|&)/.test(location.search)) return;
 
+var document = window.document;
+
 var vendorPrefix = "meeko";
 
 var Meeko = window.Meeko || (window.Meeko = {});
@@ -42,6 +44,36 @@ function resolveURL(url, params) { // works for all browsers including IE < 8
 	div.innerHTML = '<a href="' + url + '"></a>';
 	return div.firstChild.href;
 }
+
+var addEvent = 
+	document.addEventListener && function(node, event, fn) { return node.addEventListener(event, fn, true); } || // NOTE using capture phase
+	document.attachEvent && function(node, event, fn) { return node.attachEvent("on" + event, fn); } ||
+	function(node, event, fn) { node["on" + event] = fn; }
+
+var isContentLoaded = (function() { // TODO perhaps remove listeners after load detected
+
+var loaded = false;
+function onLoaded(e) {
+	if (e.target == document) loaded = true;
+	if (document.readyState == "complete") loaded = true;
+}
+function onChange(e) {
+	var readyState = document.readyState;
+	if (readyState == "loaded" || readyState == "complete") loaded = true;
+}
+
+addEvent(document, "readystatechange", onChange);
+addEvent(document, "DOMContentLoaded", onLoaded);
+addEvent(document, "load", onLoaded);
+
+var isContentLoaded = function() {
+	return loaded;
+}
+
+return isContentLoaded;
+
+})();
+
 
 var uc = function(str) { return str.toUpperCase(); }
 var lc = function(str) { return str.toLowerCase(); }
@@ -318,6 +350,7 @@ var log_index = logger.levels[globalOptions["log-level"]];
 if (log_index != null) logger.LOG_LEVEL = log_index;
 
 var config = function() {
+	Meeko.DOM.isContentLoaded = isContentLoaded;
 	Meeko.async.pollingInterval = globalOptions["polling-interval"];
 	Meeko.decor.config({
 		decorReady: Viewport.unhide,

@@ -9,7 +9,9 @@
 
 // TODO substantial error handling and notification needs to be added
 // Also more isolation.
-// <link rel="meeko-base" />
+// <link rel="self" />
+// Would be nice if more of the internal functions were called as method, eg DOM.isContentLoaded()...
+// ... this would allow the boot-script to modify them as appropriate
 
 // FIXME Is javascript even supported for different media devices? 
 // e.g. will <link rel="meeko-decor" media="print" /> even work?
@@ -441,6 +443,21 @@ var removeEvent =
 	document.detachEvent && function(node, event, fn) { return node.detachEvent("on" + event, fn); } ||
 	function(node, event, fn) { if (node["on" + event] == fn) node["on" + event] = null; }
 
+var readyStateLookup = {
+	"uninitialized": false,
+	"loading": false,
+	"interactive": false, // TODO is this correct??
+	"loaded": true,
+	"complete": true
+}
+
+var isContentLoaded = function() { // WARN this assumes that document.readyState is valid or that content is ready...
+	// Change Meeko.DOM.isContentLoaded if you need something better
+	var readyState = document.readyState;
+	var loaded = !readyState || readyStateLookup[readyState];
+	return loaded;
+}
+
 var URI = (function() {
 
 var URI = function(str) {
@@ -695,7 +712,7 @@ var DOM = Meeko.DOM || (Meeko.DOM = {});
 extend(DOM, {
 	$id: $id, $$: $$, tagName: tagName, forSiblings: forSiblings, matchesElement: matchesElement, firstChild: firstChild,
 	replaceNode: replaceNode, scrollToId: scrollToId, addEvent: addEvent, removeEvent: removeEvent, createDocument: createDocument,
-	URI: URI, loadHTML: loadHTML, parseHTML: parseHTML, copyAttributes: copyAttributes,
+	isContentLoaded: isContentLoaded, URI: URI, loadHTML: loadHTML, parseHTML: parseHTML, copyAttributes: copyAttributes,
 	polyfill: polyfill
 });
 
@@ -783,7 +800,8 @@ decorate: async(function(decorURL, callback) {
 		});
 	}),
 	function() {
-		return wait(function() { return !!document.body; });
+		if (!panner.options.preprocess) return wait(function() { return !!document.body; });
+		else return wait(function() { return DOM.isContentLoaded(); });
 	},
 	function() {
 		page_preprocess(document);
@@ -809,7 +827,7 @@ decorate: async(function(decorURL, callback) {
 	},
 	function() {
 		return until(
-			domContentLoaded,
+			function() { return DOM.isContentLoaded(); },
 			function() {
 				var nodeList = [];
 				contentStart = decorEnd.nextSibling;
@@ -1221,12 +1239,14 @@ function page_preprocess(doc) {
 	forSiblings ("starting", srcHead.firstChild, function(node) { // remove nodes that match specified conditions
 		switch(tagName(node)) { 
 		case "style": case "link":
-			if (node.title.match(/^nodecor$/i)) break;
+			if (node.title.match(/^\s*nodecor\s*$/i)) break;
 			return;
 		default: return;
 		}
 		srcHead.removeChild(node);
 	});
+	var preprocess = panner.options.preprocess;
+	if (preprocess) isolate(function() { preprocess(doc); }); // FIXME what if preprocess throws??
 }
 
 function placeContent(content, beforeReplace, afterReplace) { // this should work for content from both internal and external documents
@@ -1314,28 +1334,6 @@ this.isEmpty = function() {
 }
 
 }
-
-var readyStateLookup = {
-	"uninitialized": false,
-	"loading": false,
-	"interactive": false,
-	"loaded": true, // TODO is this correct??
-	"complete": true
-}
-
-var domContentLoaded = (function() {
-
-var loaded = false;
-if (!document.readyState) {
-	addEvent(document, "DOMContentLoaded", function() { loaded = true; });
-	addEvent(window, "load", function() { loaded = true; });
-}
-function domContentLoaded() { 
-	return loaded || readyStateLookup[document.readyState];
-}
-return domContentLoaded;
-
-})();
 
 function getDecorMeta(doc) {
 	if (!doc) doc = document;
