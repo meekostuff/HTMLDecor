@@ -674,17 +674,7 @@ polyfill();
  ### Get config options
 */
 
-var getOptions = function() {
-	var search = location.search,
-		options = {}; 
-	if (search) search.substr(1).replace(/(?:^|&)([^&=]+)=?([^&]*)/g, function(m, key, val) { if (m) options[key] = decodeURIComponent(val); });
-	return options;
-}
-var urlQuery = getOptions();
-
 var dataSources = [];
-var queryConfig = parseJSON(urlQuery[vendorPrefix+'-config']);
-if (queryConfig) dataSources.push( function(name) { return queryConfig[name]; } );
 
 try { // NOTE initial testing on IE10 showed attempting to get localStorage throws an access error
 	if (window.sessionStorage) {
