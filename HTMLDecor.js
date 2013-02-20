@@ -99,16 +99,7 @@ var firstChild = function(parent, matcher) {
 
 var script = last(document.getElementsByTagName("script")); // WARN this wouldn't be valid if script is dynamically inserted
 
-var getOptions = function() {
-	var search = location.search,
-		options = {}; 
-	if (search) search.substr(1).replace(/(?:^|&)([^&=]+)=?([^&]*)/g, function(m, key, val) { if (m) options[key] = val; });
-	return options;
-}
-var urlQuery = getOptions();
-
 var dataSources = [];
-dataSources.push( function(name) { return urlQuery[vendorPrefix+"-"+name]; } );
 if (window.sessionStorage) dataSources.push( function(name) { return sessionStorage.getItem(vendorPrefix+"-"+name); });
 if (window.localStorage) dataSources.push( function(name) { return localStorage.getItem(vendorPrefix+"-"+name); });
 dataSources.push(function(name) { return script.getAttribute("data-" + name.replace(modulePrefix+"-", "")); });
