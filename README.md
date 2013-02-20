@@ -502,22 +502,13 @@ If autostart is turned off, HTMLDecor can be manually started by calling `Meeko.
 When debugging a page you probably don't want to modify the page source to change HTMLDecor options,
 especially as you may have to change them back after you've found the problem.
 For this reason HTMLDecor reads `sessionStorage` and `localStorage` at startup, looking for config options.
-`sessionStorage` options override those found in `localStorage`, which in turn override those in data-attributes.
+`sessionStorage` options override those found in `localStorage`, which in turn override those in `Meeko.config`.
 
 Config options are read from JSON stored in the `meeko-config` key. Thus the following would prevent `autostart` and turn on `debug` logging.
 
 	sessionStorage.setItem('meeko-config', JSON.stringify({ "decor-autostart": "no", "log-level": "debug" }) );
 
 _Note_ that the page would require a refresh after these settings were made.
-
-### From the page URL query options
-`localStorage` and `sessionStorage` are not available on all browsers (particularly IE6 and IE7).
-HTMLDecor looks in the query part of the page URL for JSON in the `meeko-config` option.
-Thus the following would prevent `autostart` and turn on `debug` logging.
-
-	http://example.org/index.html?meeko-config={"decor-autostart":"no","log-level":"debug"}
-	
-URL query options override all other settings. 
 
 
 TODO
