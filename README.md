@@ -1,3 +1,6 @@
+**WARNING: this branch is obsolete**
+
+
 HTMLDecor
 =========
 
@@ -274,15 +277,6 @@ Config options must be prefixed with `meeko-`. Thus the following would prevent 
 	sessionStorage.setItem('meeko-log-level', 'debug');
 
 _Note_ that the page would require a refresh after these settings were made.
-
-### From the page URL query options
-`localStorage` and `sessionStorage` are not available on all browsers (particularly IE6 and IE7).
-HTMLDecor looks in the query part of the page URL for config options.
-Config options must be prefixed with `meeko-`. Thus the following would prevent `autostart` and turn on `debug` logging.
-
-	http://example.org/index.html?meeko-decor-autostart=no&meeko-log-level=debug
-	
-URL query options override all other settings. 
 
 
 TODO
