@@ -24,8 +24,8 @@ var XMLHttpRequest = window.XMLHttpRequest;
 (function() {
 
 var defaults = { // NOTE defaults also define the type of the associated config option
-	"log-level": "warn",
-	"polling-interval": 50
+	"log_level": "warn",
+	"polling_interval": 50
 }
 
 var vendorPrefix = "meeko";
@@ -310,7 +310,7 @@ var queue = async(function(fnList, queueCB) {
 	queueback();
 });
 
-async.pollingInterval = defaults['polling-interval'];
+async.pollingInterval = defaults['polling_interval'];
 
 extend(async, {
 	isAsync: isAsync, Callback: Callback, delay: delay, wait: wait, until: until, queue: queue
@@ -732,7 +732,7 @@ this[name] = !window.console && function() {} ||
 
 }, this);
 
-this.LOG_LEVEL = levels[defaults['log-level']]; // DEFAULT
+this.LOG_LEVEL = levels[defaults['log_level']]; // DEFAULT
 
 }); // end logger defn
 
@@ -864,7 +864,7 @@ decorate: async(function(decorURL, callback) {
 			if (tagName(el) != 'script') return _resolve(el, attrName);		
 			var scriptType = el.type;
 			var isJS = (!scriptType || /^text\/javascript/i.test(scriptType));
-			if (isJS) el.type = "text/javascript?complete"; // IE6 and IE& will re-execute script if @src is modified (even to same path)
+			if (isJS) el.type = "text/javascript?complete"; // IE6 and IE7 will re-execute script if @src is modified (even to same path)
 			_resolve(el, attrName);
 		}
 		

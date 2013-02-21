@@ -7,12 +7,12 @@
 (function() {
 
 var defaults = { // NOTE defaults also define the type of the associated config option
-	"htmldecor-script": '{bootscriptdir}HTMLDecor.js',
-	"log-level": "warn",
+	"htmldecor_script": '{bootscriptdir}HTMLDecor.js',
+	"log_level": "warn",
 	"autostart": true,
-	"hidden-timeout": 3000,
-	"polling-interval": 50,
-	"config-script": ''
+	"hidden_timeout": 3000,
+	"polling_interval": 50,
+	"config_script": ''
 }
 
 // Don't even load HTMLDecor if "nodecor" is one of the search options
@@ -20,12 +20,67 @@ if (/(^\?|&)nodecor($|&)/.test(location.search)) return;
 
 var document = window.document;
 
-var vendorPrefix = "meeko";
+var vendorPrefix = "Meeko";
 
 var Meeko = window.Meeko || (window.Meeko = {});
 
 /*
- ### Utility functions
+ ### JS utilities
+ */
+var uc = function(str) { return str.toUpperCase(); }
+var lc = function(str) { return str.toLowerCase(); }
+
+var some = function(a, fn, context) { // some() is forEach() if fn() always returns falsish
+	for (var n=a.length, i=0; i<n; i++) {
+		if (fn.call(context, a[i], i, a)) return true; 
+	}
+	return false;
+}
+
+var words = function(text) { return text.split(/\s+/); }
+
+var parseJSON = function(text) { // NOTE this allows code to run. This is a feature, not a bug.
+	try { return ( Function('return ( ' + text + ' );') )(); }
+	catch (error) { return; }
+}
+
+
+/*
+ ### logger defn and init
+ */
+var logger = Meeko.logger || (Meeko.logger = new function() {
+
+var levels = this.levels = words("none error warn info debug");
+
+some(levels, function(name, num) {
+
+levels[name] = num;
+this[name] = function() { this._log({ level: num, message: arguments }); }
+
+}, this);
+
+this._log = function(data) { 
+	if (data.level > this.LOG_LEVEL) return;
+	data.timeStamp = +(new Date);
+        data.message = [].join.call(data.message, " ");
+        if (this.write) this.write(data);
+}
+
+this.startTime = +(new Date), padding = "      ";
+
+this.write = (window.console) && function(data) { 
+	var offset = padding + (data.timeStamp - this.startTime), 
+		first = offset.length-padding.length-1,
+		offset = offset.substring(first);
+	console.log(offset+"ms " + levels[data.level]+": " + data.message); 
+}
+
+this.LOG_LEVEL = levels[defaults['log_level']]; // DEFAULT. Options are read later
+
+}); // end logger defn
+
+/*
+ ### DOM utilities
  */
 
 function $$(selector) { return document.getElementsByTagName(selector); }
@@ -51,6 +106,7 @@ var addEvent =
 	function(node, event, fn) { node["on" + event] = fn; }
 
 var isContentLoaded = (function() { // TODO perhaps remove listeners after load detected
+// WARN this function assumes the script is included in the page markup so it will run before DOMContentLoaded, etc
 
 var loaded = false;
 function onLoaded(e) {
@@ -62,7 +118,7 @@ function onChange(e) {
 	if (readyState == "loaded" || readyState == "complete") loaded = true;
 }
 
-addEvent(document, "readystatechange", onChange);
+addEvent(document, "readystatechange", onChange); 
 addEvent(document, "DOMContentLoaded", onLoaded);
 addEvent(document, "load", onLoaded);
 
@@ -74,23 +130,9 @@ return isContentLoaded;
 
 })();
 
-
-var uc = function(str) { return str.toUpperCase(); }
-var lc = function(str) { return str.toLowerCase(); }
-
-var some = function(a, fn, context) { // some() is forEach() if fn() always returns falsish
-	for (var n=a.length, i=0; i<n; i++) {
-		if (fn.call(context, a[i], i, a)) return true; 
-	}
-	return false;
-}
-
-var words = function(text) { return text.split(/\s+/); }
-
-var parseJSON = function(text) { // NOTE this allows code to run. This is a feature, not a bug.
-	try { return ( Function('return ( ' + text + ' );') )(); }
-	catch (error) { return; }
-}
+/*
+ ### async functions
+ */
 
 function delay(callback, timeout) {
 	return window.setTimeout(callback, timeout);
@@ -180,37 +222,9 @@ return queue;
 
 })();
 
-var logger = Meeko.logger || (Meeko.logger = new function() {
-
-var levels = this.levels = words("none error warn info debug");
-
-some(levels, function(name, num) {
-
-levels[name] = num;
-this[name] = function() { this._log({ level: num, message: arguments }); }
-
-}, this);
-
-this._log = function(data) { 
-	if (data.level > this.LOG_LEVEL) return;
-	data.timeStamp = +(new Date);
-        data.message = [].join.call(data.message, " ");
-        if (this.write) this.write(data);
-}
-
-this.startTime = +(new Date), padding = "      ";
-
-this.write = (window.console) && function(data) { 
-	var offset = padding + (data.timeStamp - this.startTime), 
-		first = offset.length-padding.length-1,
-		offset = offset.substring(first);
-	console.log(offset+"ms " + levels[data.level]+": " + data.message); 
-}
-
-this.LOG_LEVEL = levels.warn; // DEFAULT
-
-}); // end logger defn
-
+/*
+ ### Viewport hide / unhide
+ */
 var Viewport = (function() {
 
 var head = $$("head")[0];
@@ -227,7 +241,7 @@ function hide() {
 }
 
 function unhide() {
-	var pollingInterval = globalOptions['polling-interval'];
+	var pollingInterval = globalOptions['polling_interval'];
 	if (style.parentNode != head) return;
 	head.removeChild(style);
 	// NOTE on IE sometimes content stays hidden although 
@@ -250,26 +264,31 @@ return {
 
 var dataSources = [];
 
-var urlParams = (function() {
-	var search = location.search,
-		options = {}; 
-	if (search) search.substr(1).replace(/(?:^|&)([^&=]+)=?([^&]*)/g, function(m, key, val) { if (m) options[key] = decodeURIComponent(val); });
-	return options;
-})();
-
-var urlOptions = parseJSON(urlParams[vendorPrefix+'-options']);
-if (urlOptions) dataSources.push( function(name) { return urlOptions[name]; } );
-
-try { // NOTE initial testing on IE10 showed attempting to get localStorage throws an access error
+try {
 	if (window.sessionStorage) {
-		var sessionOptions = parseJSON(sessionStorage.getItem(vendorPrefix + "-options"));
+		var sessionOptions = parseJSON(sessionStorage.getItem(vendorPrefix + ".options"));
 		if (sessionOptions) dataSources.push( function(name) { return sessionOptions[name]; } );
 	}
+} catch(error) {
+	logger.warn('sessionStorage defined but inaccessible');
+}
+try {
+    function getCookieItem(sKey) { // See https://developer.mozilla.org/en-US/docs/DOM/Storage
+      return unescape(document.cookie.replace(new RegExp("(?:^|.*;\\s*)" + escape(sKey).replace(/[\-\.\+\*]/g, "\\$&") + "\\s*\\=\\s*((?:[^;](?!;))*[^;]?).*"), "$1")); // TODO decodeURIComponent??
+    }
+	var cookieOptions = parseJSON(getCookieItem(vendorPrefix + ".options"));
+	if (cookieOptions) dataSources.push( function(name) { return cookieOptions[name]; } );
+} catch(error) {
+	logger.warn('cookies inaccessible');
+}
+try { // NOTE initial testing on IE10 showed attempting to get localStorage throws an access error
 	if (window.localStorage) {
-		var localOptions = parseJSON(localStorage.getItem(vendorPrefix + "-options"));
+		var localOptions = parseJSON(localStorage.getItem(vendorPrefix + ".options"));
 		if (localOptions) dataSources.push( function(name) { return localOptions[name]; } );
 	}
-} catch(error) {}
+} catch(error) {
+	logger.warn('localStorage defined but inaccessible');	
+}
 
 if (Meeko.options) dataSources.push( function(name) { return Meeko.options[name]; } )
 
@@ -277,7 +296,7 @@ var getData = function(name, type) {
 	var data = null;
 	some(dataSources, function(fn) {
 		var val = fn(name);
-		if (val === null) return false;
+		if (val == null) return false;
 		switch (type) {
 		case "string": data = val; break;
 		case "number":
@@ -285,9 +304,8 @@ var getData = function(name, type) {
 			// TODO else logger.warn("incorrect config option " + val + " for " + name); 
 			break;
 		case "boolean":
-			if (/^(yes|on|true|1)$/i.test(val)) data = true;
-			else if (/^(no|off|false|0)$/i.test(val)) data = false;
-			// TODO else logger.warn("incorrect config option " + val + " for " + name); 
+			data = !!val;
+			// if ([false, true, 0, 1].indexOf(val) < 0) logger.warn("incorrect config option " + val + " for " + name); 
 			break;
 		}
 		return (data !== null); 
@@ -305,7 +323,9 @@ var globalOptions = (function() {
 	return options;
 })();
 
-
+/*
+ ### plugin functions for HTMLDecor
+ */
 function getDecorURL(doc) {
 	var link = getDecorLink(doc);
 	if (!link) return null; // FIXME warning message
@@ -338,20 +358,22 @@ function getDecorLink(doc) {
 	return link;
 }
 
-/* now do start-up */
+/*
+ ## Startup
+*/
 
-var timeout = globalOptions["hidden-timeout"];
+var log_index = logger.levels[globalOptions["log_level"]];
+if (log_index != null) logger.LOG_LEVEL = log_index;
+
+var timeout = globalOptions["hidden_timeout"];
 if (timeout > 0) {
 	Viewport.hide();
 	delay(Viewport.unhide, timeout);
 }
 
-var log_index = logger.levels[globalOptions["log-level"]];
-if (log_index != null) logger.LOG_LEVEL = log_index;
-
 var config = function() {
 	Meeko.DOM.isContentLoaded = isContentLoaded;
-	Meeko.async.pollingInterval = globalOptions["polling-interval"];
+	Meeko.async.pollingInterval = globalOptions["polling_interval"];
 	Meeko.decor.config({
 		decorReady: Viewport.unhide,
 		detect: getDecorURL
@@ -366,10 +388,10 @@ var start = function() {
 var urlParams = {
 	bootscriptdir: getCurrentScript().src.replace(/\/[^\/]*$/, '/')
 }
-var htmldecor_script = globalOptions['htmldecor-script'];
+var htmldecor_script = globalOptions['htmldecor_script'];
 if (!htmldecor_script) throw "HTMLDecor script URL is not configured";
 htmldecor_script = resolveURL(htmldecor_script, urlParams);
-var config_script = globalOptions['config-script'];
+var config_script = globalOptions['config_script'];
 if (config_script && typeof config_script == 'string') config_script = resolveURL(config_script, urlParams);
 
 queue([
