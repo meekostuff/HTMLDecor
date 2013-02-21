@@ -777,8 +777,8 @@ start: function() {
 			history.replaceState({"meeko-decor": true }, null);
 		}, true);
 		// NOTE fortuitously all the browsers that support pushState() also support addEventListener() and dispatchEvent()
-		window.addEventListener("click", panner.onClick, true);
-		window.addEventListener("popstate", panner.onPopState, true);
+		window.addEventListener("click", function(e) { panner.onClick(e); }, true);
+		window.addEventListener("popstate", function(e) { panner.onPopState(e); }, true);
 	}
 		
 	]);
@@ -907,45 +907,34 @@ contentURL: "",
 
 onClick: function(e) { // NOTE only pushState enabled browsers use this
 	// Before panning to the next page, have to work out if that is appropriate
-	if (e["meeko-decor"]) return; // a fake event
+
 	if (e.button != 0) return; // FIXME what is the value for button in IE's W3C events model??
 	if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return; // FIXME do these always trigger modified click behavior??
 	// Find closest <a> to e.target
 	for (var target=e.target; target!=document.body; target=target.parentNode) if (tagName(target) == "a") break;
 	if (tagName(target) != "a") return; // only handling hyperlink clicks
 	var href = target.getAttribute("href");
-	if (!href) return;
+	if (!href) return; // completely none of our business
 
-	// stop the real click event propagating... FIXME is there a way to detect defaultPrevented without faking events??
-	if (e.stopImmediatePropagation) e.stopImmediatePropagation();
-	else e.stopPropagation();
-
-	// and dispatch a fake click event
-	var fakeEvent = document.createEvent("MouseEvent");
-	fakeEvent.initMouseEvent("click", e.bubbles, e.cancelable, e.view, e.detail,
-			e.screenX, e.screenY, e.clientX, e.clientY,
-			e.ctrlKey, e.altKey, e.shiftKey, e.metaKey,
-			e.button, e.relatedTarget);
-	fakeEvent["meeko-decor"] = true;
+	// From here on we effectively take over the default-action of the event
+	// Shim the event to detect external code calling preventDefault() and to make sure we call it (but late as possible);
+	var defaultPrevented = false;
+	e._preventDefault = e.preventDefault;
+	e.preventDefault = function(event) { defaultPrevented = true; this._preventDefault(); }
+	e._stopPropagation = e.stopPropagation;
+	e.stopPropagation = function() { this._preventDefault(); this._stopPropagation(); }
+	e._stopImmediatePropagation = e.stopImmediatePropagation;
+	e.stopImmediatePropagation = function() { this._preventDefault(); this._stopImmediatePropagation(); }
 	
-	// NOTE the fake event MUST have the default prevented, so provide a way to discover if another script requested it
-	var defaultPrevented = false; 
-	function preventDefault(event) { if (event.defaultPrevented) defaultPrevented = true; event.preventDefault(); }
-	fakeEvent._stopPropagation = fakeEvent.stopPropagation;
-	fakeEvent.stopPropagation = function() { preventDefault(this); this._stopPropagation(); }
-	fakeEvent._stopImmediatePropagation = fakeEvent.stopImmediatePropagation;
-	fakeEvent.stopImmediatePropagation = function() { preventDefault(this); this._stopImmediatePropagation(); }
-	window.addEventListener("click", preventDefault, false);
-	e.target.dispatchEvent(fakeEvent); 
-	window.removeEventListener("click", preventDefault, false);
+	function backstop(event) { event._preventDefault(); }
+	window.addEventListener('click', backstop, false);
 	
-	if (defaultPrevented) { // other scripts want to disable HTMLDecor. FIXME is this a good idea?
-		e.preventDefault();
-		return;
-	}
-	
-	var acceptDefault = panner.onHyperlink(target);
-	if (acceptDefault == false) e.preventDefault();
+	delay(function() {
+		window.removeEventListener('click', backstop, false);
+		if (defaultPrevented) return;
+		var acceptDefault = panner.onHyperlink(target); // either do panning
+		if (acceptDefault != false) location.assign(target.href); // or manually trigger browser navigation
+	});
 },
 
 onHyperlink: function(target) { // return false to preventDefault
