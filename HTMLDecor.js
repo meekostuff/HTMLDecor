@@ -905,19 +905,32 @@ extend(panner, {
 
 contentURL: "",
 
-onClick: function(e) { // NOTE only pushState enabled browsers use this
+onClick: function(e) {
+	// NOTE only pushState enabled browsers use this
+	// We want panning to be the default behavior for clicks on hyperlinks - <a href>
 	// Before panning to the next page, have to work out if that is appropriate
+	// `return` means ignore the click
 
 	if (e.button != 0) return; // FIXME what is the value for button in IE's W3C events model??
 	if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return; // FIXME do these always trigger modified click behavior??
+
 	// Find closest <a> to e.target
 	for (var target=e.target; target!=document.body; target=target.parentNode) if (tagName(target) == "a") break;
 	if (tagName(target) != "a") return; // only handling hyperlink clicks
 	var href = target.getAttribute("href");
-	if (!href) return; // completely none of our business
-
+	if (!href) return; // not really a hyperlink
+	
+	// test hyperlinks
+	if (target.target) return; // no iframe
+	var baseURI = URI(document.URL);
+	var uri = URI(baseURI.resolve(href));
+	if (uri.nopathname != baseURI.nopathname) return; // no external urls
+	
+	// TODO perhaps should test same-site and same-page links
+	var isPageLink = (uri.nohash == baseURI.nohash); // TODO what about page-links that match the current hash
+	
 	// From here on we effectively take over the default-action of the event
-	// Shim the event to detect external code calling preventDefault() and to make sure we call it (but late as possible);
+	// Shim the event to detect if external code has called preventDefault(), and to make sure we call it (but late as possible);
 	var defaultPrevented = false;
 	e._preventDefault = e.preventDefault;
 	e.preventDefault = function(event) { defaultPrevented = true; this._preventDefault(); }
@@ -932,32 +945,18 @@ onClick: function(e) { // NOTE only pushState enabled browsers use this
 	delay(function() {
 		window.removeEventListener('click', backstop, false);
 		if (defaultPrevented) return;
-		var acceptDefault = panner.onHyperlink(target); // either do panning
-		if (acceptDefault != false) location.assign(target.href); // or manually trigger browser navigation
+		if (isPageLink) panner.onPageLink(uri);
+		else panner.onSiteLink(uri);
 	});
 },
 
-onHyperlink: function(target) { // return false to preventDefault
-	if (target.target) return;
-	var baseURI = URI(document.URL);
-	var uri = URI(baseURI.resolve(target.getAttribute("href")));
-	if (uri.nopathname != baseURI.nopathname) return; // and external urls
-	
-	// by this point HTMLDecor wants to prevent the browser default
-	// TODO Need to handle anchor links. The following just replicates browser behavior
-	if (uri.nohash == baseURI.nohash) {
-		history.pushState({"meeko-decor": true}, null, uri.href);
-		scrollToId(target.hash.substr(1));
-		return false;
-	}
-
-	return panner.onSiteLink(uri.href); // TODO this should pass a URI object rather than URL string
+onPageLink: function(uri) {	// TODO Need to handle anchor links. The following just replicates browser behavior
+	history.pushState({"meeko-decor": true}, null, uri.href);
+	scrollToId(uri.hash.substr(1));
 },
 
-onSiteLink: function(url) { // return false to preventDefault
-	// Now attempt to pan
-	panner.assign(url);
-	return false;
+onSiteLink: function(uri) {	// Now attempt to pan
+	panner.assign(uri.href);
 },
 
 onPopState: function(e) {
