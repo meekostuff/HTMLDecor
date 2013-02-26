@@ -402,10 +402,14 @@ You probably don't want to change the default configuration, but if you find the
 
 HTMLDecor has the following config options (default values in **bold**).
 
+- htmldecor_script: **"{bootscriptdir}HTMLDecor.js"**
 - log_level: "none", "error", **"warn"**, "info", "debug"
 - polling_interval: **50** (milliseconds)
 - autostart: **true**, false
 - hidden_timeout: **3000** (milliseconds)
+- html5_block_elements: **"article aside figcaption figure footer header hgroup main nav section"**
+- html5_inline_elements: **"abbr mark"**
+- config_script: ""
 
 HTMLDecor reads config options immediately after the script loads.
 Sources for configuration options are detailed below. 
