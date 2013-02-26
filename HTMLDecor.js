@@ -214,7 +214,7 @@ var async = function(fn) {
 		}
 		var params = [].slice.call(arguments, 0);
 		params[nParams - 1] = cb;
-		var result = fn.apply(this, params);
+		var result = fn.apply(this, params); // FIXME result should never occur, right? Is it an async function or not!?
 		if (result) delay(function() { cb.complete(result) });
 		return cb;
 	}
@@ -243,7 +243,7 @@ function waitback() {
 		else i++;
 	}
 	if (!callbacks.length) {
-		window.clearInterval(timerId);
+		window.clearInterval(timerId); // FIXME probably shouldn't use intervals cause it may screw up debuggers
 		timerId = null;
 	}
 }
@@ -266,15 +266,10 @@ var until = function(test, fn, untilCB) {
 var delay = async(function(fn, timeout, delayCB) {
 	var timerId = window.setTimeout(function() {
 		var result;
-		var success = isolate(function() { result = fn(delayCB); });
+		var success = isolate(function() { result = fn(); });
 		if (!success) {
 			delayCB.error();
 			return;
-		}
-		else if (isAsync(result)) {
-			if (delayCB == result) return; // callback is delegated
-			result.onComplete = delayCB.onComplete;
-			result.onError = delayCB.onError;
 		}
 		else delayCB.complete(result);
 	}, timeout);
@@ -515,7 +510,6 @@ return URI;
 })();
 
 var loadHTML = async(function(url, cb) {
-	var DOM = this;
 	var xhr = window.XMLHttpRequest ?
 		new XMLHttpRequest() :
 		new ActiveXObject("Microsoft.XMLHTTP");
@@ -538,9 +532,23 @@ forEach(words("link@<href script@<src img@<src iframe@<src video@<src audio@<src
 	else hrefAttrs[tag] = attrName;
 });
 
-var parseHTML = (function() {
+var parseHTML = function(html, url) {
+	parser = new HTMLParser();
+	return parser.parse(html, url);
+}
 
-function parseHTML(html, url) {
+var HTMLParser = (function() {
+// This class allows external code to provide a `prepare(doc)` method for before content parsing.
+// The main reason to do this is the so called `html5shiv`. 
+
+var HTMLParser = function() {}
+
+extend(HTMLParser.prototype, {
+
+parse: function(html, url) {
+	if (!url) throw "URL must be specified";
+	var parser = this;
+	
 	// TODO disabling URIs would be faster if done with one regexp replace()
 	// prevent resources (<img>, <link>, etc) from loading in parsing context, by renaming @src, @href to @meeko-src, @meeko-href
 	var disableURIs = function(tag, attrName) {
@@ -567,10 +575,10 @@ function parseHTML(html, url) {
 	docHead.insertBefore(iframe, docHead.firstChild);
 	var iframeDoc = iframe.contentWindow.document;
 
+	if (parser.prepare) isolate(function() { parser.prepare(iframeDoc) }); // WARN external code
 	iframeDoc.open();
 	iframeDoc.write(html);
 	iframeDoc.close();
-
 
 	polyfill(iframeDoc);
 
@@ -615,6 +623,11 @@ function parseHTML(html, url) {
 	return pseudoDoc;
 }
 
+
+}); // end HTMLParser prototype
+
+
+// TODO should these functions be exposed on `DOM`?
 var importDocument = document.importNode ? // NOTE returns a pseudoDoc
 function(srcDoc) {
 	var docEl = document.importNode(srcDoc.documentElement, true);
@@ -642,19 +655,23 @@ function(srcDoc) {
 
 	docEl.appendChild(docBody);
 	
+	var doc = createDocument();
+	doc.appendChild(docEl);
+	polyfill(doc);
+
 	/*
 	 * WARN on IE6 `element.innerHTML = ...` will drop all leading <script>'s
 	 * Work-around this by prepending some benign element to the src <body>
 	 * and removing it from the dest <body> after the copy is done
 	 */
 	var srcBody = srcDoc.body;
+	// FIXME why can't we just use srcBody.cloneNode(true)??
+	if (HTMLParser.prototype.prepare) HTMLParser.prototype.prepare(doc); // TODO maybe this should be in createDocument
 	srcBody.insertBefore(srcDoc.createElement('wbr'), srcBody.firstChild);
 	docBody.innerHTML = srcDoc.body.innerHTML; 
+
 	docBody.removeChild(docBody.firstChild); // TODO assert firstChild.tagName == 'wbr'
 
-	var doc = createDocument();
-	doc.appendChild(docEl);
-	polyfill(doc);
 	return doc;
 }
 
@@ -665,7 +682,8 @@ function(srcNode) {
 } :
 composeNode; 
 
-return parseHTML;
+
+return HTMLParser;
 
 })();
 
@@ -712,7 +730,7 @@ var DOM = Meeko.DOM || (Meeko.DOM = {});
 extend(DOM, {
 	$id: $id, $$: $$, tagName: tagName, forSiblings: forSiblings, matchesElement: matchesElement, firstChild: firstChild,
 	replaceNode: replaceNode, scrollToId: scrollToId, addEvent: addEvent, removeEvent: removeEvent, createDocument: createDocument,
-	isContentLoaded: isContentLoaded, URI: URI, loadHTML: loadHTML, parseHTML: parseHTML, copyAttributes: copyAttributes,
+	isContentLoaded: isContentLoaded, URI: URI, HTMLParser: HTMLParser, loadHTML: loadHTML, parseHTML: parseHTML, copyAttributes: copyAttributes,
 	polyfill: polyfill
 });
 
