@@ -478,6 +478,7 @@ URI.prototype.parse = function parse(str) {
 	this.nosearch = this.nopathname + this.pathname;
 	this.nohash = this.nosearch + this.search;
 	this.href = this.nohash + this.hash;
+	this.toString = function() { return this.href; }
 };
 
 URI.prototype.resolve = function resolve(relURL) {
@@ -774,10 +775,13 @@ placeHolders: {},
 start: function() {
 	if (decor.started) throw "Already started";
 	decor.started = true;
-	var decorURL = decor.options.lookup(document.URL);
-	if (!decorURL) decorURL = decor.options.detect(document);
-	if (!decorURL) return; // FIXME warning message
-	decorURL = URI(document.URL).resolve(decorURL);
+	var options = decor.options, lookup = options.lookup, detect = options.detect;
+	var decorURL;
+	var uri = URI(document.URL);
+	if (lookup) decorURL = lookup(uri);
+	if (!decorURL && detect) decorURL = detect(document); // FIXME this should wait until <head> is completely loaded
+	if (!decorURL) return; // FIXME warning message + notify decorAbort
+	decorURL = uri.resolve(decorURL);
 	decor.current.url = decorURL; // FIXME what if decorate fails??
 	return queue([
 
@@ -812,17 +816,25 @@ decorate: async(function(decorURL, callback) {
 	queue([
 
 	async(function(cb) {
-		decor.options.load(decorURL, {
-			onComplete: function(result) { doc = result; cb.complete(); },
-			onError: function() { logger.error("loadHTML fail for " + url); cb.error(); } // FIXME need decorError notification / handling
+		var load = decor.options.httpGet;
+		load(decorURL, null, {}, {
+			onComplete: function(result) {
+				var normalize = decor.options.normalize;
+				if (normalize) isolate(function() { normalize(result, { uri: URI(decorURL) }); });
+				doc = result;
+				cb.complete(doc);
+			},
+			onError: function() { logger.error("loadHTML fail for " + decorURL); cb.error(); } // FIXME need decorError notification / handling
 		});
 	}),
 	function() {
-		if (!panner.options.preprocess) return wait(function() { return !!document.body; });
-		else return wait(function() { return DOM.isContentLoaded(); });
+		if (panner.options.normalize) return wait(function() { return DOM.isContentLoaded(); });
+		else return wait(function() { return !!document.body; });
 	},
 	function() {
-		page_preprocess(document);
+		var normalize = panner.options.normalize;
+		if (normalize) isolate(function() { normalize(document, { uri: URI(document.URL) }); });
+		page_prepare(document);
 		marker = document.createElement("meta");
 		marker.name = "meeko-decor";
 		document.head.insertBefore(marker, document.head.firstChild);
@@ -954,8 +966,10 @@ onClick: function(e) {
 	e.preventDefault = function(event) { defaultPrevented = true; this._preventDefault(); }
 	e._stopPropagation = e.stopPropagation;
 	e.stopPropagation = function() { this._preventDefault(); this._stopPropagation(); }
-	e._stopImmediatePropagation = e.stopImmediatePropagation;
-	e.stopImmediatePropagation = function() { this._preventDefault(); this._stopImmediatePropagation(); }
+	if (e.stopImmediatePropagation) {
+		e._stopImmediatePropagation = e.stopImmediatePropagation;
+		e.stopImmediatePropagation = function() { this._preventDefault(); this._stopImmediatePropagation(); }
+	}
 	
 	function backstop(event) { event._preventDefault(); }
 	window.addEventListener('click', backstop, false);
@@ -986,7 +1000,15 @@ onPopState: function(e) {
 	if (newURL != panner.contentURL) {
 		scrollToId();
 		var loader = async(function(cb) {
-			panner.options.load(document.URL, cb)
+			var load = panner.options.httpGet;
+			load(document.URL, null, {}, {
+				onComplete: function(doc) {
+					var normalize = panner.options.normalize;
+					if (normalize) isolate(function() { normalize(doc, { uri: URI(document.URL) }); });
+					cb.complete(doc);
+				},
+				onError: function(err) { cb.error(err); }
+			});
 		});
 		page(loader);
 		panner.contentURL = newURL;
@@ -1001,22 +1023,23 @@ onUnload: function(e) {
 },
 
 assign: function(url, callback) {
-	return panner.navigate({
+	panner.navigate({
 		url: url,
 		replace: false
-	});
+	}, callback);
 },
 
 replace: function(url, callback) {
-	return panner.navigate({
+	panner.navigate({
 		url: url,
 		replace: true
-	});
+	}, callback);
 },
 
 navigate: async(function(options, callback) {
 	var url = options.url;
-	var decorURL = decor.options.lookup(url);
+	var uri = URI(url);
+	var decorURL = decor.options.lookup(uri);
 	if (typeof decorURL !== "string" || URI(document.URL).resolve(decorURL) !== decor.current.url) {
 		removeEvent(window, "unload", panner.onUnload);
 		addEvent(window, "unload", noop); // Disable bfcache
@@ -1025,11 +1048,19 @@ navigate: async(function(options, callback) {
 		callback.complete(msg);	// TODO should this be an error??
 		return;
 	}
-	
+
 	var loader = async(function(cb) {
-		panner.options.load(url, cb);
-	});
-	
+		var load = panner.options.httpGet;
+		load(url, null, {}, {
+			onComplete: function(doc) {
+				var normalize = panner.options.normalize;
+				if (normalize) isolate(function() { normalize(doc, { uri: URI(url) }); }); // FIXME what if normalize throws??
+				cb.complete(doc);
+			},
+			onError: function(err) { cb.error(err); }
+		});
+	})
+
 	page(loader, {
 		
 	onComplete: function(msg) {
@@ -1058,21 +1089,25 @@ function show(node) { node.removeAttribute("hidden"); }
 function noop() {}
 
 decor.options = {
+	lookup: function(uri) {},
+	detect: function(document) {},
+	httpGet: async(function(uri, data, settings, cb) { DOM.loadHTML(uri, cb); }),
+	// load: async(function(uri, data, settings, cb) {}),
 	decorIn: { before: noop, after: noop },
 	decorReady: noop, // TODO should this be decorIn:complete ??
-	decorOut: { before: noop, after: noop }, // TODO
-	load: async(function(url, cb) { DOM.loadHTML(url, cb); }),
-	detect: function(document) {},
-	lookup: function(uri) {}
+	decorOut: { before: noop, after: noop } // TODO
 }
 
-panner.options = {
+panner.options = { 
 	duration: 0,
+	httpGet: async(function(uri, data, settings, cb) { DOM.loadHTML(uri, cb); }),
+	// httpPost: async(function(uri, data, settings, cb) {}),
+	// load: async(function(uri, data, settings, cb) {}),
+	// normalize: function(doc, settings) {},
 	nodeRemoved: { before: hide, after: show },
 	nodeInserted: { before: hide, after: show },
 	pageOut: { before: noop, after: noop },
 	pageIn: { before: noop, after: noop },
-	load: async(function(url, cb) { DOM.loadHTML(url, cb); })
 }
 
 var decor_notify = function(phase, type, target, detail) {
@@ -1156,7 +1191,7 @@ var pageIn = async(function(doc, cb) {
 
 	function() {
 		notify("before", "pageIn", document, doc);
-		page_preprocess(doc);
+		page_prepare(doc);
 	},
 	function() {
 		mergeHead(doc, false);
@@ -1240,7 +1275,7 @@ function mergeHead(doc, isDecor) {
 	forEach($$("script", dstHead), function(script) { scriptQueue.push(script); }); // FIXME this breaks if a script inserts other scripts
 }
 
-function page_preprocess(doc) {
+function page_prepare(doc) {
 	var srcHead = doc.head;
 	forSiblings ("starting", srcHead.firstChild, function(node) { // remove nodes that match specified conditions
 		switch(tagName(node)) { 
@@ -1251,8 +1286,6 @@ function page_preprocess(doc) {
 		}
 		srcHead.removeChild(node);
 	});
-	var preprocess = panner.options.preprocess;
-	if (preprocess) isolate(function() { preprocess(doc); }); // FIXME what if preprocess throws??
 }
 
 function placeContent(content, beforeReplace, afterReplace) { // this should work for content from both internal and external documents
