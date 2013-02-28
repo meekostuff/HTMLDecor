@@ -453,17 +453,17 @@ var isContentLoaded = function() { // WARN this assumes that document.readyState
 	return loaded;
 }
 
-var URI = (function() {
+var URL = (function() {
 
-var URI = function(str) {
-	if (!(this instanceof URI)) return new URI(str);
+var URL = function(str) {
+	if (!(this instanceof URL)) return new URL(str);
 	this.parse(str);
 }
 
 var keys = ["source","protocol","host","hostname","port","pathname","search","hash"];
 var parser = /^([^:\/?#]+:)?(?:\/\/(([^:\/?#]*)(?::(\d*))?))?([^?#]*)?(\?[^#]*)?(#.*)?$/;
 
-URI.prototype.parse = function parse(str) {
+URL.prototype.parse = function parse(str) {
 	str = trim(str);
 	var	m = parser.exec(str);
 
@@ -481,7 +481,7 @@ URI.prototype.parse = function parse(str) {
 	this.toString = function() { return this.href; }
 };
 
-URI.prototype.resolve = function resolve(relURL) {
+URL.prototype.resolve = function resolve(relURL) {
 	relURL = trim(relURL);
 	if (!this.supportsResolve) return relURL;
 	var substr1 = relURL.charAt(0), substr2 = relURL.substr(0,2);
@@ -506,7 +506,7 @@ URI.prototype.resolve = function resolve(relURL) {
 }
 
 
-return URI;
+return URL;
 
 })();
 
@@ -550,16 +550,16 @@ parse: function(html, url) {
 	if (!url) throw "URL must be specified";
 	var parser = this;
 	
-	// TODO disabling URIs would be faster if done with one regexp replace()
+	// TODO disabling URLs would be faster if done with one regexp replace()
 	// prevent resources (<img>, <link>, etc) from loading in parsing context, by renaming @src, @href to @meeko-src, @meeko-href
-	var disableURIs = function(tag, attrName) {
+	var disableURLs = function(tag, attrName) {
 		var vendorAttrName = vendorPrefix + "-" + attrName;
 		html = html.replace(RegExp("<" + tag + "\\b[^>]*>", "ig"), function(tagString) {
 			return tagString.replace(RegExp("\\b" + attrName + "=", "i"), vendorAttrName + "=");
 		});
 	}
-	each(hrefAttrs, disableURIs);
-	each(srcAttrs, disableURIs);
+	each(hrefAttrs, disableURLs);
+	each(srcAttrs, disableURLs);
 	
 	// disable <script>
 	// TODO currently handles script @type=""|"text/javascript"
@@ -583,7 +583,7 @@ parse: function(html, url) {
 
 	polyfill(iframeDoc);
 
-	var baseURI = URI(url);
+	var baseURL = URL(url);
 	
 	// TODO not really sure how to handle <base href="..."> already in doc.
 	// For now just honor them if present
@@ -592,7 +592,7 @@ parse: function(html, url) {
 		if (!node.getAttribute("href")) return;
 		base = iframeDoc.head.removeChild(node);
 	});
-	if (base) baseURI = URI(baseURI.resolve(base.getAttribute('href')));
+	if (base) baseURL = URL(baseURL.resolve(base.getAttribute('href')));
 	
 	forEach($$("style", iframeDoc.body), function(node) { // TODO support <style scoped>
 		iframeDoc.head.appendChild(node);
@@ -601,7 +601,7 @@ parse: function(html, url) {
 	var pseudoDoc = importDocument(iframeDoc);
 	docHead.removeChild(iframe);
 
-	function enableURIs(tag, attrName) { 
+	function enableURLs(tag, attrName) { 
 		var vendorAttrName = vendorPrefix + "-" + attrName;
 		forEach($$(tag, pseudoDoc), function(el) {
 			var relURL = el.getAttribute(vendorAttrName);
@@ -612,12 +612,12 @@ parse: function(html, url) {
 				('' == mod) ? relURL : // empty, but not null
 				('#' == mod) ? relURL : // NOTE anchor hrefs aren't normalized
 				('?' == mod) ? relURL : // NOTE query hrefs aren't normalized
-				baseURI.resolve(relURL);
+				baseURL.resolve(relURL);
 			el.setAttribute(attrName, absURL);
 		});
 	}
-	each(hrefAttrs, enableURIs);
-	each(srcAttrs, enableURIs);
+	each(hrefAttrs, enableURLs);
+	each(srcAttrs, enableURLs);
 
 	// FIXME need warning for doc property mismatches between page and decor
 	// eg. charset, doc-mode, content-type, etc
@@ -731,7 +731,7 @@ var DOM = Meeko.DOM || (Meeko.DOM = {});
 extend(DOM, {
 	$id: $id, $$: $$, tagName: tagName, forSiblings: forSiblings, matchesElement: matchesElement, firstChild: firstChild,
 	replaceNode: replaceNode, scrollToId: scrollToId, addEvent: addEvent, removeEvent: removeEvent, createDocument: createDocument,
-	isContentLoaded: isContentLoaded, URI: URI, HTMLParser: HTMLParser, loadHTML: loadHTML, parseHTML: parseHTML, copyAttributes: copyAttributes,
+	isContentLoaded: isContentLoaded, URL: URL, HTMLParser: HTMLParser, loadHTML: loadHTML, parseHTML: parseHTML, copyAttributes: copyAttributes,
 	polyfill: polyfill
 });
 
@@ -777,11 +777,11 @@ start: function() {
 	decor.started = true;
 	var options = decor.options, lookup = options.lookup, detect = options.detect;
 	var decorURL;
-	var uri = URI(document.URL);
-	if (lookup) decorURL = lookup(uri);
+	var oURL = URL(document.URL);
+	if (lookup) decorURL = lookup(oURL.href);
 	if (!decorURL && detect) decorURL = detect(document); // FIXME this should wait until <head> is completely loaded
 	if (!decorURL) return; // FIXME warning message + notify decorAbort
-	decorURL = uri.resolve(decorURL);
+	decorURL = oURL.resolve(decorURL);
 	decor.current.url = decorURL; // FIXME what if decorate fails??
 	return queue([
 
@@ -789,7 +789,7 @@ start: function() {
 		return decor.decorate(decorURL);
 	},
 	function() {
-		panner.contentURL = URI(document.URL).nohash;
+		panner.contentURL = URL(document.URL).nohash;
 		addEvent(window, "unload", panner.onUnload);
 		
 		if (!history.pushState) return;
@@ -820,7 +820,7 @@ decorate: async(function(decorURL, callback) {
 		load(decorURL, null, {}, {
 			onComplete: function(result) {
 				var normalize = decor.options.normalize;
-				if (normalize) isolate(function() { normalize(result, { uri: URI(decorURL) }); });
+				if (normalize) isolate(function() { normalize(result, { url: decorURL }); });
 				doc = result;
 				cb.complete(doc);
 			},
@@ -833,7 +833,7 @@ decorate: async(function(decorURL, callback) {
 	},
 	function() {
 		var normalize = panner.options.normalize;
-		if (normalize) isolate(function() { normalize(document, { uri: URI(document.URL) }); });
+		if (normalize) isolate(function() { normalize(document, { url: document.URL }); });
 		page_prepare(document);
 		marker = document.createElement("meta");
 		marker.name = "meeko-decor";
@@ -880,13 +880,13 @@ decorate: async(function(decorURL, callback) {
 		);
 	},
 	function() { return wait(function() { return complete && scriptQueue.isEmpty(); }); },
-	function() { // NOTE resolve URIs in landing page
+	function() { // NOTE resolve URLs in landing page
 		// TODO could be merged with code in parseHTML
-		var baseURI = URI(document.URL);
+		var baseURL = URL(document.URL);
 		function _resolve(el, attrName) {
 			var relURL = el.getAttribute(attrName);
 			if (relURL == null) return;
-			var absURL = baseURI.resolve(relURL);
+			var absURL = baseURL.resolve(relURL);
 			el.setAttribute(attrName, absURL);
 		}
 		
@@ -952,12 +952,13 @@ onClick: function(e) {
 	
 	// test hyperlinks
 	if (target.target) return; // no iframe
-	var baseURI = URI(document.URL);
-	var uri = URI(baseURI.resolve(href));
-	if (uri.nopathname != baseURI.nopathname) return; // no external urls
+	var baseURL = URL(document.URL);
+	var url = baseURL.resolve(href);
+	var oURL = URL(url);
+	if (oURL.nopathname != baseURL.nopathname) return; // no external urls
 	
 	// TODO perhaps should test same-site and same-page links
-	var isPageLink = (uri.nohash == baseURI.nohash); // TODO what about page-links that match the current hash
+	var isPageLink = (oURL.nohash == baseURL.nohash); // TODO what about page-links that match the current hash
 	
 	// From here on we effectively take over the default-action of the event
 	// Shim the event to detect if external code has called preventDefault(), and to make sure we call it (but late as possible);
@@ -977,18 +978,18 @@ onClick: function(e) {
 	delay(function() {
 		window.removeEventListener('click', backstop, false);
 		if (defaultPrevented) return;
-		if (isPageLink) panner.onPageLink(uri);
-		else panner.onSiteLink(uri);
+		if (isPageLink) panner.onPageLink(url);
+		else panner.onSiteLink(url);
 	});
 },
 
-onPageLink: function(uri) {	// TODO Need to handle anchor links. The following just replicates browser behavior
-	history.pushState({"meeko-decor": true}, null, uri.href);
-	scrollToId(uri.hash.substr(1));
+onPageLink: function(url) {	// TODO Need to handle anchor links. The following just replicates browser behavior
+	history.pushState({"meeko-decor": true}, null, url);
+	scrollToId(URL(url).hash.substr(1));
 },
 
-onSiteLink: function(uri) {	// Now attempt to pan
-	panner.assign(uri.href);
+onSiteLink: function(url) {	// Now attempt to pan
+	panner.assign(url);
 },
 
 onPopState: function(e) {
@@ -996,7 +997,7 @@ onPopState: function(e) {
 	if (e.stopImmediatePropagation) e.stopImmediatePropagation();
 	else e.stopPropagation();
 	// NOTE there is no default-action for popstate
-	var newURL = URI(document.URL).nohash;
+	var newURL = URL(document.URL).nohash;
 	if (newURL != panner.contentURL) {
 		scrollToId();
 		var loader = async(function(cb) {
@@ -1004,7 +1005,7 @@ onPopState: function(e) {
 			load(document.URL, null, {}, {
 				onComplete: function(doc) {
 					var normalize = panner.options.normalize;
-					if (normalize) isolate(function() { normalize(doc, { uri: URI(document.URL) }); });
+					if (normalize) isolate(function() { normalize(doc, { url: document.URL }); });
 					cb.complete(doc);
 				},
 				onError: function(err) { cb.error(err); }
@@ -1038,9 +1039,8 @@ replace: function(url, callback) {
 
 navigate: async(function(options, callback) {
 	var url = options.url;
-	var uri = URI(url);
-	var decorURL = decor.options.lookup(uri);
-	if (typeof decorURL !== "string" || URI(document.URL).resolve(decorURL) !== decor.current.url) {
+	var decorURL = decor.options.lookup(url);
+	if (typeof decorURL !== "string" || URL(document.URL).resolve(decorURL) !== decor.current.url) {
 		removeEvent(window, "unload", panner.onUnload);
 		addEvent(window, "unload", noop); // Disable bfcache
 		var modifier = options.replace ? "replace" : "assign";
@@ -1054,7 +1054,7 @@ navigate: async(function(options, callback) {
 		load(url, null, {}, {
 			onComplete: function(doc) {
 				var normalize = panner.options.normalize;
-				if (normalize) isolate(function() { normalize(doc, { uri: URI(url) }); }); // FIXME what if normalize throws??
+				if (normalize) isolate(function() { normalize(doc, { url: url }); }); // FIXME what if normalize throws??
 				cb.complete(doc);
 			},
 			onError: function(err) { cb.error(err); }
@@ -1064,7 +1064,7 @@ navigate: async(function(options, callback) {
 	page(loader, {
 		
 	onComplete: function(msg) {
-		panner.contentURL = URI(document.URL).nohash;
+		panner.contentURL = URL(document.URL).nohash;
 		callback.complete(msg);
 	}
 	
@@ -1089,10 +1089,10 @@ function show(node) { node.removeAttribute("hidden"); }
 function noop() {}
 
 decor.options = {
-	lookup: function(uri) {},
+	lookup: function(url) {},
 	detect: function(document) {},
-	httpGet: async(function(uri, data, settings, cb) { DOM.loadHTML(uri, cb); }),
-	// load: async(function(uri, data, settings, cb) {}),
+	httpGet: async(function(url, data, settings, cb) { DOM.loadHTML(url, cb); }),
+	// load: async(function(url, data, settings, cb) {}),
 	decorIn: { before: noop, after: noop },
 	decorReady: noop, // TODO should this be decorIn:complete ??
 	decorOut: { before: noop, after: noop } // TODO
@@ -1100,9 +1100,9 @@ decor.options = {
 
 panner.options = { 
 	duration: 0,
-	httpGet: async(function(uri, data, settings, cb) { DOM.loadHTML(uri, cb); }),
-	// httpPost: async(function(uri, data, settings, cb) {}),
-	// load: async(function(uri, data, settings, cb) {}),
+	httpGet: async(function(url, data, settings, cb) { DOM.loadHTML(url, cb); }),
+	// httpPost: async(function(url, data, settings, cb) {}),
+	// load: async(function(url, data, settings, cb) {}),
 	// normalize: function(doc, settings) {},
 	nodeRemoved: { before: hide, after: show },
 	nodeInserted: { before: hide, after: show },
@@ -1222,7 +1222,7 @@ var pageIn = async(function(doc, cb) {
 
 
 function mergeHead(doc, isDecor) {
-	var baseURI = URI(document.URL);
+	var baseURL = URL(document.URL);
 	var dstHead = document.head;
 	var marker = getDecorMeta();
 	if (!marker) throw "No meeko-decor marker found. ";
@@ -1239,7 +1239,7 @@ function mergeHead(doc, isDecor) {
 		switch(tagName(node)) {
 		case "script":
 			if (every($$("script", dstHead), function(el) {
-				return baseURI.resolve(el.src) != node.src; // FIXME @src should already be resolved to absURL
+				return baseURL.resolve(el.src) != node.src; // FIXME @src should already be resolved to absURL
 			})) return;
 			break;
 		default: return;
