@@ -717,7 +717,14 @@ var checkStyleSheets = function() {
 		} 
 		catch (error) {
 			// handle Firefox cross-domain
-			return (error.name == "NS_ERROR_DOM_SECURITY_ERR");
+			switch(error.name) {
+			case "NS_ERROR_DOM_SECURITY_ERR": case "SecurityError":
+				return true;
+			case "NS_ERROR_DOM_INVALID_ACCESS_ERR": case "InvalidAccessError":
+				return false;
+			default:
+				return true; // FIXME what if Firefox changes the name again??
+			}
 		} 
 	});
 }
