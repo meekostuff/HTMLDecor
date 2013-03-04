@@ -3,6 +3,7 @@
  * Mozilla Public License v2.0 (http://mozilla.org/MPL/2.0/)
  */
 
+// FIXME globalOptions needs to be exposed for debugging purposes
 
 (function() {
 
@@ -14,7 +15,7 @@ var defaults = { // NOTE defaults also define the type of the associated config 
 	"polling_interval": 50,
 	"html5_block_elements": 'article aside figcaption figure footer header hgroup main nav section',
 	"html5_inline_elements": 'abbr mark',
-	"config_script": ''
+	"config_script": '{bootscriptdir}config.js'
 }
 
 // Don't even load HTMLDecor if "nodecor" is one of the search options
@@ -41,7 +42,7 @@ var some = function(a, fn, context) { // some() is forEach() if fn() always retu
 
 var words = function(text) { return text.split(/\s+/); }
 
-var parseJSON = function(text) { // NOTE this allows code to run. This is a feature, not a bug.
+var parseJSON = function(text) { // NOTE this allows code to run. This is a feature, not a bug. I think.
 	try { return ( Function('return ( ' + text + ' );') )(); }
 	catch (error) { return; }
 }
@@ -328,38 +329,6 @@ var globalOptions = (function() {
 /*
  ### plugin functions for HTMLDecor
  */
-function getDecorURL(doc) {
-	var link = getDecorLink(doc);
-	if (!link) return null; // FIXME warning message
-	var href = link.getAttribute("href");
-	return resolveURL(href); // FIXME href should already be absolute
-}
-
-function getDecorLink(doc) {
-	var matchingLinks = [];
-	var link, specificity = 0;
-	some($$("link", doc.head), function(el) {
-		var tmp, sp = 0;
-		if (el.nodeType != 1) return;
-		var type = lc(el.type);
-		if (!/^\s*MEEKO-DECOR\s*$/i.test(el.rel)) return;
-		if (type == "text/html" || type == "") sp += 1;
-		else {
-			logger.error("Invalid decor document type: " + type);
-			return;
-		}
-		if (tmp = el.getAttribute("media")) { // FIXME polyfill for matchMedia??
-			if (window.matchMedia && window.matchMedia(tmp).matches) sp += 2;
-			else return; // NOTE if the platform doesn't support media queries then this decor is rejected
-		}
-		if (sp > specificity) {
-			specificity = sp;
-			link = el;
-		}
-	});
-	return link;
-}
-
 var html5prepare = (function() {
 
 var blockTags = words(globalOptions['html5_block_elements']);
@@ -411,8 +380,7 @@ var config = function() {
 	Meeko.DOM.HTMLParser.prototype.prepare = html5prepare;
 	Meeko.async.pollingInterval = globalOptions["polling_interval"];
 	Meeko.decor.config({
-		decorReady: Viewport.unhide,
-		detect: getDecorURL
+		decorReady: Viewport.unhide
 	});
 }
 
