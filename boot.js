@@ -3,8 +3,6 @@
  * Mozilla Public License v2.0 (http://mozilla.org/MPL/2.0/)
  */
 
-// FIXME globalOptions needs to be exposed for debugging purposes
-
 (function() {
 
 var defaults = { // NOTE defaults also define the type of the associated config option
@@ -30,15 +28,13 @@ var Meeko = window.Meeko || (window.Meeko = {});
 /*
  ### JS utilities
  */
-var uc = function(str) { return str.toUpperCase(); }
-var lc = function(str) { return str.toLowerCase(); }
-
-var some = function(a, fn, context) { // some() is forEach() if fn() always returns falsish
+var some = function(a, fn, context) { 
 	for (var n=a.length, i=0; i<n; i++) {
 		if (fn.call(context, a[i], i, a)) return true; 
 	}
 	return false;
 }
+var forEach = some; // some() is forEach() if fn() always returns falsish
 
 var words = function(text) { return text.split(/\s+/); }
 
@@ -55,7 +51,7 @@ var logger = Meeko.logger || (Meeko.logger = new function() {
 
 var levels = this.levels = words("none error warn info debug");
 
-some(levels, function(name, num) {
+forEach(levels, function(name, num) {
 
 levels[name] = num;
 this[name] = function() { this._log({ level: num, message: arguments }); }
@@ -179,7 +175,7 @@ function disableScript(script) {
 
 function queue(fnList, oncomplete, onerror) {
 	var list = [];
-	some(fnList, function(fn) {
+	forEach(fnList, function(fn) {
 		switch(typeof fn) {
 		case "string":
 			list.push(prepareScript(fn, queueback, errorback));
@@ -222,42 +218,6 @@ function queue(fnList, oncomplete, onerror) {
 }
 
 return queue;
-
-})();
-
-/*
- ### Viewport hide / unhide
- */
-var Viewport = (function() {
-
-var head = $$("head")[0];
-var fragment = document.createDocumentFragment();
-var style = document.createElement("style");
-fragment.appendChild(style); // NOTE on IE this realizes style.styleSheet 
-
-// NOTE hide the page until the decor is ready
-if (style.styleSheet) style.styleSheet.cssText = "body { visibility: hidden; }";
-else style.textContent = "body { visibility: hidden; }";
-
-function hide() {
-	head.insertBefore(style, head.firstChild);
-}
-
-function unhide() {
-	var pollingInterval = globalOptions['polling_interval'];
-	if (style.parentNode != head) return;
-	head.removeChild(style);
-	// NOTE on IE sometimes content stays hidden although 
-	// the stylesheet has been removed.
-	// The following forces the content to be revealed
-	document.body.style.visibility = "hidden";
-	delay(function() { document.body.style.visibility = ""; }, pollingInterval);
-}
-
-return {
-	hide: hide,
-	unhide: unhide
-}
 
 })();
 
@@ -316,7 +276,7 @@ var getData = function(name, type) {
 	return data;
 }
 
-var globalOptions = (function() {
+var bootOptions = Meeko.bootOptions = (function() {
 	var options = {};
 	for (var name in defaults) {
 		var def = options[name] = defaults[name];
@@ -331,8 +291,8 @@ var globalOptions = (function() {
  */
 var html5prepare = (function() {
 
-var blockTags = words(globalOptions['html5_block_elements']);
-var inlineTags = words(globalOptions['html5_inline_elements']);
+var blockTags = words(bootOptions['html5_block_elements']);
+var inlineTags = words(bootOptions['html5_inline_elements']);
 
 if (blockTags.length) { // FIXME add a test for html5 support. TODO what about inline tags?
 
@@ -351,7 +311,7 @@ head.insertBefore(style, head.firstChild);
 
 function html5prepare(doc) {
 	if (!doc) doc = document;
-	some(blockTags.concat(inlineTags), function(tag) {
+	forEach(blockTags.concat(inlineTags), function(tag) {
 		doc.createElement(tag);
 	});	
 }
@@ -361,15 +321,51 @@ return html5prepare;
 })();
 
 /*
+ ### Viewport hide / unhide
+ */
+var Viewport = (function() {
+
+var head = $$("head")[0];
+var fragment = document.createDocumentFragment();
+var style = document.createElement("style");
+fragment.appendChild(style); // NOTE on IE this realizes style.styleSheet 
+
+// NOTE hide the page until the decor is ready
+if (style.styleSheet) style.styleSheet.cssText = "body { visibility: hidden; }";
+else style.textContent = "body { visibility: hidden; }";
+
+function hide() {
+	head.insertBefore(style, head.firstChild);
+}
+
+function unhide() {
+	var pollingInterval = bootOptions['polling_interval'];
+	if (style.parentNode != head) return;
+	head.removeChild(style);
+	// NOTE on IE sometimes content stays hidden although 
+	// the stylesheet has been removed.
+	// The following forces the content to be revealed
+	document.body.style.visibility = "hidden";
+	delay(function() { document.body.style.visibility = ""; }, pollingInterval);
+}
+
+return {
+	hide: hide,
+	unhide: unhide
+}
+
+})();
+
+/*
  ## Startup
 */
 
-var log_index = logger.levels[globalOptions["log_level"]];
+var log_index = logger.levels[bootOptions["log_level"]];
 if (log_index != null) logger.LOG_LEVEL = log_index;
 
 html5prepare(document);
 
-var timeout = globalOptions["hidden_timeout"];
+var timeout = bootOptions["hidden_timeout"];
 if (timeout > 0) {
 	Viewport.hide();
 	delay(Viewport.unhide, timeout);
@@ -378,24 +374,24 @@ if (timeout > 0) {
 var config = function() {
 	Meeko.DOM.isContentLoaded = isContentLoaded;
 	Meeko.DOM.HTMLParser.prototype.prepare = html5prepare;
-	Meeko.async.pollingInterval = globalOptions["polling_interval"];
+	Meeko.async.pollingInterval = bootOptions["polling_interval"];
 	Meeko.decor.config({
 		decorReady: Viewport.unhide
 	});
 }
 
 var start = function() {
-	if (globalOptions["autostart"]) Meeko.decor.start();
+	if (bootOptions["autostart"]) Meeko.decor.start();
 	else Viewport.unhide();
 }
 
 var urlParams = {
 	bootscriptdir: getCurrentScript().src.replace(/\/[^\/]*$/, '/')
 }
-var htmldecor_script = globalOptions['htmldecor_script'];
+var htmldecor_script = bootOptions['htmldecor_script'];
 if (!htmldecor_script) throw "HTMLDecor script URL is not configured";
 htmldecor_script = resolveURL(htmldecor_script, urlParams);
-var config_script = globalOptions['config_script'];
+var config_script = bootOptions['config_script'];
 if (config_script && typeof config_script == 'string') config_script = resolveURL(config_script, urlParams);
 
 queue([
