@@ -16,8 +16,8 @@ var defaults = { // NOTE defaults also define the type of the associated config 
 	"config_script": '{bootscriptdir}config.js'
 }
 
-// Don't even load HTMLDecor if "nodecor" is one of the search options
-if (/(^\?|&)nodecor($|&)/.test(location.search)) return;
+// Don't even load HTMLDecor if "nodecor" / "noboot" is one of the search options
+if (/(^\?|&)(no_?decor|no_?boot)($|&)/.test(location.search)) return;
 
 var document = window.document;
 
@@ -235,6 +235,9 @@ try {
 } catch(error) {
 	logger.warn('sessionStorage defined but inaccessible');
 }
+
+if (!Meeko.options || !Meeko.options['ignore_cookie_options']) {
+	
 try {
     function getCookieItem(sKey) { // See https://developer.mozilla.org/en-US/docs/DOM/Storage
       return unescape(document.cookie.replace(new RegExp("(?:^|.*;\\s*)" + escape(sKey).replace(/[\-\.\+\*]/g, "\\$&") + "\\s*\\=\\s*((?:[^;](?!;))*[^;]?).*"), "$1")); // TODO decodeURIComponent??
@@ -244,6 +247,9 @@ try {
 } catch(error) {
 	logger.warn('cookies inaccessible');
 }
+
+}
+
 try { // NOTE initial testing on IE10 showed attempting to get localStorage throws an access error
 	if (window.localStorage) {
 		var localOptions = parseJSON(localStorage.getItem(vendorPrefix + ".options"));

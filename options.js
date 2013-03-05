@@ -10,6 +10,7 @@
 
 var Meeko = window.Meeko || {};
 Meeko.options = { // these are the default values
+	"ignore_cookie_options": false,
 	"htmldecor_script": '{bootscriptdir}HTMLDecor.js', // use an abs-path or abs-url
 	"log_level": "warn", // debug, info, warn, error, none
 	"autostart": true, 
