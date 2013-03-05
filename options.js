@@ -1,12 +1,12 @@
-/* START HTMLDecor options */
+/* START HTMLDecor boot options */
 
 /*
- * This code MUST run before the HTMLDecor boot-script.
- *   EITHER
- * Prepend this code to the boot-script (for performance)
- *   OR 
- * Source this file into the page before sourcing the boot-script (to simplify reconfiguration)
- */
+This code MUST run before the boot-script.
+  EITHER
+Prepend this code to the boot-script (for performance)
+  OR 
+Source this file into the page before sourcing the boot-script (to simplify reconfiguration)
+*/
 
 var Meeko = window.Meeko || {};
 Meeko.options = { // these are the default values
@@ -21,4 +21,4 @@ Meeko.options = { // these are the default values
 	"config_script": '{bootscriptdir}config.js' // can be a script-url OR a function
 };
 
-/* END HTMLDecor options */
+/* END HTMLDecor boot options */
