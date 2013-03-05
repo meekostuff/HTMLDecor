@@ -3,10 +3,6 @@
  * Mozilla Public License v2.0 (http://mozilla.org/MPL/2.0/)
  */
 
-// TODO Move script and options detection outside of the decor module
-// Eventually logger and decor could be in separate modules
-// and built into this script.
-
 // TODO substantial error handling and notification needs to be added
 // Also more isolation.
 // <link rel="self" />
@@ -91,19 +87,9 @@ var trim = ''.trim ?
 function(str) { return str.trim(); } :
 function(str) { return str.replace(/^\s+/, '').replace(/\s+$/, ''); }
 
-var parseJSON = (window.JSON && JSON.parse) ?
-function(text) {
-	try { return JSON.parse(text); }
-	catch (error) { return; }
-} :
-function(text) {
-	try { return ( Function('return ( ' + text + ' );') )(); }
-	catch (error) { return; }
-}
-
 if (!Meeko.stuff) Meeko.stuff = {}
 extend(Meeko.stuff, {
-	uc: uc, lc: lc, forEach: forEach, every: every, words: words, each: each, extend: extend, trim: trim, parseJSON: parseJSON
+	uc: uc, lc: lc, forEach: forEach, every: every, words: words, each: each, extend: extend, config: config, trim: trim
 });
 
 /*
@@ -510,7 +496,74 @@ return URL;
 
 })();
 
-var loadHTML = async(function(url, cb) {
+var loadHTML = async(function(url, cb) { // WARN only performs GET
+	var htmlLoader = new HTMLLoader();
+	htmlLoader.load(url, null, {
+		url: url
+	}, cb);
+});
+
+var HTMLLoader = (function() {
+
+var HTMLLoader = function(options) {
+	if (!(this instanceof HTMLLoader)) return new HTMLLoader(options);
+	if (!options) return;
+	var htmlLoader = this;
+	each(options, function(key, val) {
+		if (key == 'load') return;
+		if (!(key in htmlLoader)) return;
+		htmlLoader[key] = val;
+	});
+}
+
+extend(HTMLLoader.prototype, {
+
+load: async(function(url, data, settings, cb) {
+	var htmlLoader = this;
+	var xhr, doc;
+	
+	if (!settings.url) settings.url = url;
+	
+	queue([
+		async(function(cb) {
+			htmlLoader.request(url, data, settings, {
+				onComplete: function(result) { doc = result; cb.onComplete(); },
+				onError: function(err) { logger.error(err); cb.onError(err); }
+			});
+		}),
+		function() {
+			if (htmlLoader.normalize) htmlLoader.normalize(doc, settings);
+		}
+	], {
+		onComplete: function() { cb.onComplete(doc); },
+		onError: cb.onError
+	});
+}),
+
+serialize: function(data, settings) { return ""; },
+
+request: async(function(url, data, settings, cb) {
+	var method = settings.method || 'GET';
+	var sendText = null;
+	if (/POST/i.test(method)) {
+		throw "POST not supported"; // FIXME
+		sendText = this.serialize(data, settings);
+	}
+	else if (/GET/i.test(method)) {
+		// no-op
+	}
+	else {
+		throw uc(method) + ' not supported';
+	}
+	doRequest(url, sendText, settings, cb);
+}),
+
+normalize: function(doc, settings) {}
+
+});
+
+var doRequest = async(function(url, sendText, settings, cb) {
+	var method = settings.method || 'GET';
 	var xhr = window.XMLHttpRequest ?
 		new XMLHttpRequest() :
 		new ActiveXObject("Microsoft.XMLHTTP");
@@ -518,13 +571,17 @@ var loadHTML = async(function(url, cb) {
 		if (xhr.readyState != 4) return;
 		delay(function() { // Use delay to stop the readystatechange event interrupting other event handlers (on IE). 
 			if (xhr.status != 200) cb.error(xhr.status); // FIXME what should status be??
-			var doc = DOM.parseHTML(xhr.responseText, url);
+			var doc = parseHTML(xhr.responseText, settings.url);
 			cb.complete(doc);
 		});
 	}
-	xhr.open("GET", url, true);
-	xhr.send("");
+	xhr.open(method, url, true);
+	xhr.send(sendText);
 });
+
+return HTMLLoader;
+
+})();
 
 var srcAttrs = {}, hrefAttrs = {};
 forEach(words("link@<href script@<src img@<src iframe@<src video@<src audio@<src source@<src a@href area@href q@cite blockquote@cite ins@cite del@cite form@action input@formaction button@formaction"), function(text) {
@@ -534,7 +591,7 @@ forEach(words("link@<href script@<src img@<src iframe@<src video@<src audio@<src
 });
 
 var parseHTML = function(html, url) {
-	parser = new HTMLParser();
+	var parser = new HTMLParser();
 	return parser.parse(html, url);
 }
 
@@ -542,7 +599,10 @@ var HTMLParser = (function() {
 // This class allows external code to provide a `prepare(doc)` method for before content parsing.
 // The main reason to do this is the so called `html5shiv`. 
 
-var HTMLParser = function() {}
+var HTMLParser = function() { // TODO should this receive options like HTMLLoader??
+	if (this instanceof HTMLParser) return;
+	return new HTMLParser();
+}
 
 extend(HTMLParser.prototype, {
 
@@ -737,8 +797,9 @@ var polyfill = function(doc) { // NOTE more stuff could be added here if *necess
 var DOM = Meeko.DOM || (Meeko.DOM = {});
 extend(DOM, {
 	$id: $id, $$: $$, tagName: tagName, forSiblings: forSiblings, matchesElement: matchesElement, firstChild: firstChild,
-	replaceNode: replaceNode, scrollToId: scrollToId, addEvent: addEvent, removeEvent: removeEvent, createDocument: createDocument,
-	isContentLoaded: isContentLoaded, URL: URL, HTMLParser: HTMLParser, loadHTML: loadHTML, parseHTML: parseHTML, copyAttributes: copyAttributes,
+	replaceNode: replaceNode, copyAttributes: copyAttributes, scrollToId: scrollToId,
+	addEvent: addEvent, removeEvent: removeEvent, createDocument: createDocument, isContentLoaded: isContentLoaded, URL: URL,
+	HTMLLoader: HTMLLoader, HTMLParser: HTMLParser, loadHTML: loadHTML, parseHTML: parseHTML,
 	polyfill: polyfill
 });
 
@@ -823,15 +884,12 @@ decorate: async(function(decorURL, callback) {
 	queue([
 
 	async(function(cb) {
-		var load = decor.options.httpGet;
-		load(decorURL, null, {}, {
+		decor.options.load(decorURL, null, { method: 'GET' }, {
 			onComplete: function(result) {
-				var normalize = decor.options.normalize;
-				if (normalize) isolate(function() { normalize(result, { url: decorURL }); });
 				doc = result;
 				cb.complete(doc);
 			},
-			onError: function() { logger.error("loadHTML fail for " + decorURL); cb.error(); } // FIXME need decorError notification / handling
+			onError: function() { logger.error("HTMLLoader failed for " + decorURL); cb.error(); } // FIXME need decorError notification / handling
 		});
 	}),
 	function() {
@@ -839,8 +897,7 @@ decorate: async(function(decorURL, callback) {
 		else return wait(function() { return !!document.body; });
 	},
 	function() {
-		var normalize = panner.options.normalize;
-		if (normalize) isolate(function() { normalize(document, { url: document.URL }); });
+		if (panner.options.normalize) isolate(function() { panner.options.normalize(document, { url: document.URL }); });
 		page_prepare(document);
 		marker = document.createElement("meta");
 		marker.name = "meeko-decor";
@@ -1008,15 +1065,7 @@ onPopState: function(e) {
 	if (newURL != panner.contentURL) {
 		scrollToId();
 		var loader = async(function(cb) {
-			var load = panner.options.httpGet;
-			load(document.URL, null, {}, {
-				onComplete: function(doc) {
-					var normalize = panner.options.normalize;
-					if (normalize) isolate(function() { normalize(doc, { url: document.URL }); });
-					cb.complete(doc);
-				},
-				onError: function(err) { cb.error(err); }
-			});
+			panner.options.load(newURL, null, { method: 'GET' }, cb);
 		});
 		page(loader);
 		panner.contentURL = newURL;
@@ -1057,16 +1106,8 @@ navigate: async(function(options, callback) {
 	}
 
 	var loader = async(function(cb) {
-		var load = panner.options.httpGet;
-		load(url, null, {}, {
-			onComplete: function(doc) {
-				var normalize = panner.options.normalize;
-				if (normalize) isolate(function() { normalize(doc, { url: url }); }); // FIXME what if normalize throws??
-				cb.complete(doc);
-			},
-			onError: function(err) { cb.error(err); }
-		});
-	})
+		panner.options.load(url, null, { method: 'GET' }, cb);
+	});
 
 	page(loader, {
 		
@@ -1098,8 +1139,10 @@ function noop() {}
 decor.options = {
 	lookup: function(url) {},
 	detect: function(document) {},
-	httpGet: async(function(url, data, settings, cb) { DOM.loadHTML(url, cb); }),
-	// load: async(function(url, data, settings, cb) {}),
+	load: async(function(url, data, settings, cb) {
+		var loader = new HTMLLoader(decor.options);
+		loader.load(url, data, settings, cb);
+	}),
 	decorIn: { before: noop, after: noop },
 	decorReady: noop, // TODO should this be decorIn:complete ??
 	decorOut: { before: noop, after: noop } // TODO
@@ -1107,10 +1150,10 @@ decor.options = {
 
 panner.options = { 
 	duration: 0,
-	httpGet: async(function(url, data, settings, cb) { DOM.loadHTML(url, cb); }),
-	// httpPost: async(function(url, data, settings, cb) {}),
-	// load: async(function(url, data, settings, cb) {}),
-	// normalize: function(doc, settings) {},
+	load: async(function(url, data, settings, cb) {
+		var loader = new HTMLLoader(panner.options);
+		loader.load(url, data, settings, cb);
+	}),
 	nodeRemoved: { before: hide, after: show },
 	nodeInserted: { before: hide, after: show },
 	pageOut: { before: noop, after: noop },
@@ -1153,7 +1196,7 @@ var page = async(function(loader, callback) {
 	async(function(cb) {
 		if (typeof loader == "function") loader({
 			onComplete: function(result) { doc = result; if (!outCB.called) outCB.abort(); cb.complete(); },
-			onError: function() { logger.error("loadHTML fail for " + url); cb.error(); }		
+			onError: function() { logger.error("HTMLLoader failed for " + url); cb.error(); }		
 		});
 		else {
 			doc = loader;
