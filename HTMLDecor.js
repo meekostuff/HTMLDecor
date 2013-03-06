@@ -246,7 +246,7 @@ return wait;
 })();
 
 var until = function(test, fn, untilCB) {
-	return wait(function() { fn(); return test(); }, untilCB);
+	return wait(function() { var complete = test(); if (!complete) fn(); return complete; }, untilCB);
 }
 
 var delay = async(function(fn, timeout, delayCB) {
@@ -882,6 +882,7 @@ start: function() {
 decorate: async(function(decorURL, callback) {
 	var doc, complete = false;
 	var contentStart, decorEnd;
+	var placingContent = false;
 	var decorReady = false;
 
 	if (getDecorMeta()) throw "Cannot decorate a document that has already been decorated";
@@ -926,8 +927,9 @@ decorate: async(function(decorURL, callback) {
 	},
 	function() {
 		return until(
-			function() { return DOM.isContentLoaded(); },
+			function() { return DOM.isContentLoaded() && placingContent; },
 			function() {
+				placingContent = true;
 				var nodeList = [];
 				contentStart = decorEnd.nextSibling;
 				if (contentStart) placeContent(
@@ -941,7 +943,7 @@ decorate: async(function(decorURL, callback) {
 						delay(function() {
 							notify("after", "nodeInserted", document.body, node);
 							remove(nodeList, node.id);
-							if (!nodeList.length) complete = true;
+							if (!nodeList.length && DOM.isContentLoaded()) complete = true;
 						});
 					}
 				);
