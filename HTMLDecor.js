@@ -540,7 +540,7 @@ load: async(function(url, data, settings, cb) {
 	});
 }),
 
-serialize: function(data, settings) { return ""; },
+serialize: function(data, settings) { return ""; },  // TODO
 
 request: async(function(url, data, settings, cb) {
 	var method = settings.method || 'GET';
@@ -571,7 +571,7 @@ var doRequest = async(function(url, sendText, settings, cb) {
 		if (xhr.readyState != 4) return;
 		delay(function() { // Use delay to stop the readystatechange event interrupting other event handlers (on IE). 
 			if (xhr.status != 200) cb.error(xhr.status); // FIXME what should status be??
-			var doc = parseHTML(xhr.responseText, settings.url);
+			var doc = parseHTML(new String(xhr.responseText), settings.url);
 			cb.complete(doc);
 		});
 	}
@@ -630,7 +630,7 @@ parse: function(html, url) {
 		}
 		return tag.replace(/\>$/, ' type="text/javascript?disabled">');
 	});
-	var iframe = document.createElement("iframe");
+	var iframe = document.createElement("iframe"),
 	    docHead = document.head;
 	iframe.name = "_decor";
 	docHead.insertBefore(iframe, docHead.firstChild);
