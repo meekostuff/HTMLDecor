@@ -525,17 +525,17 @@ load: async(function(url, data, settings, cb) {
 	if (!settings.url) settings.url = url;
 	
 	queue([
-		async(function(cb) {
+		async(function(qb) {
 			htmlLoader.request(url, data, settings, {
-				onComplete: function(result) { doc = result; cb.onComplete(); },
-				onError: function(err) { logger.error(err); cb.onError(err); }
+				onComplete: function(result) { doc = result; qb.complete(); },
+				onError: function(err) { logger.error(err); qb.error(err); }
 			});
 		}),
 		function() {
 			if (htmlLoader.normalize) htmlLoader.normalize(doc, settings);
 		}
 	], {
-		onComplete: function() { cb.onComplete(doc); },
+		onComplete: function() { cb.complete(doc); },
 		onError: cb.onError
 	});
 }),
