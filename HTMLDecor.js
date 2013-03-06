@@ -567,16 +567,21 @@ var doRequest = async(function(url, sendText, settings, cb) {
 	var xhr = window.XMLHttpRequest ?
 		new XMLHttpRequest() :
 		new ActiveXObject("Microsoft.XMLHTTP");
-	xhr.onreadystatechange = function() {
-		if (xhr.readyState != 4) return;
-		delay(function() { // Use delay to stop the readystatechange event interrupting other event handlers (on IE). 
-			if (xhr.status != 200) cb.error(xhr.status); // FIXME what should status be??
-			var doc = parseHTML(new String(xhr.responseText), settings.url);
-			cb.complete(doc);
-		});
-	}
+	xhr.onreadystatechange = onchange;
 	xhr.open(method, url, true);
 	xhr.send(sendText);
+	function onchange() {
+		if (xhr.readyState != 4) return;
+		if (xhr.status != 200) {
+			cb.error(xhr.status); // FIXME what should status be??
+			return;
+		}
+		delay(onload); // Use delay to stop the readystatechange event interrupting other event handlers (on IE). 
+	}
+	function onload() { 
+		var doc = parseHTML(new String(xhr.responseText), settings.url);
+		cb.complete(doc);
+	}
 });
 
 return HTMLLoader;
@@ -1157,7 +1162,7 @@ panner.options = {
 	nodeRemoved: { before: hide, after: show },
 	nodeInserted: { before: hide, after: show },
 	pageOut: { before: noop, after: noop },
-	pageIn: { before: noop, after: noop },
+	pageIn: { before: noop, after: noop }
 }
 
 var decor_notify = function(phase, type, target, detail) {
