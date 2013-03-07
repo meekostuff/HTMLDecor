@@ -926,7 +926,7 @@ decorate: async(function(decorURL, callback) {
 		wait(function() { return checkStyleSheets(); }, function() { decorReady = true; decor_notify("after", "decorReady", document); });
 		decorEnd = document.createTextNode("");
 		document.body.insertBefore(decorEnd, contentStart);
-		notify("before", "pageIn", document); // TODO perhaps this should be stalled until scriptQueue.isEmpty() (or a config option)
+		notify("before", "pageIn", document, document); // TODO perhaps this should be stalled until scriptQueue.isEmpty() (or a config option)
 	},
 	function() {
 		return until(
