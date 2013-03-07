@@ -446,16 +446,19 @@ var URL = function(str) {
 	this.parse(str);
 }
 
-var keys = ["source","protocol","host","hostname","port","pathname","search","hash"];
-var parser = /^([^:\/?#]+:)?(?:\/\/(([^:\/?#]*)(?::(\d*))?))?([^?#]*)?(\?[^#]*)?(#.*)?$/;
+var keys = ["source","protocol","hostname","port","pathname","search","hash"];
+var parser = /^([^:\/?#]+:)?(?:\/\/([^:\/?#]*)(?::(\d*))?)?([^?#]*)?(\?[^#]*)?(#.*)?$/;
 
 URL.prototype.parse = function parse(str) {
 	str = trim(str);
 	var	m = parser.exec(str);
 
 	for (var n=keys.length, i=0; i<n; i++) this[keys[i]] = m[i] || '';
-	this.href = str;
-	this.supportsResolve = /http:|https:|ftp:|file:/.test(this.protocol);
+	this.protocol = lc(this.protocol);
+	this.hostname = lc(this.hostname);
+	this.host = this.hostname;
+	if (this.port) this.host += ':' + this.port;
+	this.supportsResolve = /^(http|https|ftp|file):$/i.test(this.protocol);
 	if (!this.supportsResolve) return;
 	if (this.pathname == '') this.pathname = '/';
 	this.nopathname = this.protocol + (this.supportsResolve ? '//' : '') + this.host;
