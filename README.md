@@ -65,8 +65,8 @@ Installation
 	
 	Visually inspect the displayed page for the following possible failures:
 	
-		- boxes with **red** background or borders. 
-		- boxes that claim to be styled with colored borders but just have the default border. 
+	- boxes with **red** background or borders. 
+	- boxes that claim to be styled with colored borders but just have the default border. 
 	
 3. Source the HTMLDecor boot-script into your pages, with this line in the `<head>` of each page 
 	
@@ -575,11 +575,11 @@ This can be achieved by editing the site-specific `config.js` created during [Pr
 Usually you only want to configure how HTMLDecor determines the appropriate decor-document for a page. 
 Do this by providing one of the following options: 
 
--  **`detect(doc)`**  
-    MUST return the decor-URL by inspecting the current page when HTMLDecor starts (this doesn't allow panning)
+- **`detect(doc)`**  
+	MUST return the decor-URL by inspecting the current page when HTMLDecor starts (this doesn't allow panning)
 
--  **`lookup(url)`**  
-    MUST return the decor-URL for any URL in the site, either the current `document.URL`,
+- **`lookup(url)`**  
+	MUST return the decor-URL for any URL in the site, either the current `document.URL`,
 	or the URL of a different page that is to be panned in.
 
 `lookup(url)` is the recommended option.
