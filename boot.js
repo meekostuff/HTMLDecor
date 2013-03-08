@@ -91,6 +91,7 @@ function getCurrentScript() { // TODO this won't work if script is dynamically i
 }
 
 function resolveURL(url, params) { // works for all browsers including IE < 8
+	if (url.substr(0,2) == '//') url = location.protocol + url;
 	for (var name in params) {
 		url = url.replace('{' + name + '}', params[name]); // WARN max of one reolace per param
 	}
