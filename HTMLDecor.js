@@ -851,18 +851,23 @@ placeHolders: {},
 start: function() {
 	if (decor.started) throw "Already started";
 	decor.started = true;
-	var options = decor.options, lookup = options.lookup, detect = options.detect;
+	var options = decor.options;
 	var decorURL;
-	var oURL = URL(document.URL);
-	if (lookup) decorURL = lookup(oURL.href);
-	if (!decorURL && detect) decorURL = detect(document); // FIXME this should wait until <head> is completely loaded
-	if (!decorURL) return; // FIXME warning message + notify decorAbort
-	decorURL = oURL.resolve(decorURL);
-	decor.current.url = decorURL; // FIXME what if decorate fails??
 	return queue([
 
 	function() {
-		return decor.decorate(decorURL);
+		if (options.lookup) decorURL = options.lookup(document.URL);
+		if (decorURL) return;
+		if (options.detect) return wait(function() { return !!document.body; });
+	},
+	function() {
+		if (!decorURL && options.detect) decorURL = options.detect(document); // FIXME this should wait until <head> is completely loaded
+		if (!decorURL) throw "No decor could be determined for this page";
+		decorURL = URL(document.URL).resolve(decorURL);
+		decor.current.url = decorURL;
+	},
+	function() {
+		return decor.decorate(decorURL); // FIXME what if decorate fails??
 	},
 	function() {
 		panner.contentURL = URL(document.URL).nohash;
