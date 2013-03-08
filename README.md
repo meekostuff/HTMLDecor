@@ -78,7 +78,7 @@ Quick Start
 
 **This is the old way of specifying decor, but is conceptually easiest to understand.**
 **If you are new to HTMLDecor then read this documentation straight through.**
-**Otherwise feel free to skip to the [Configuration](#Configuration) section first.**
+**Otherwise feel free to skip to the [Configuration](#configuration) section first.**
 
 Create a HTML document (page.html) with some page specific content -
 elements that are children of `<body>` and have `@id`. 
@@ -426,7 +426,7 @@ Configuration
 
 ### Preparation
 
-Assuming the default [installation](#Installation) was successful,
+Assuming the default [installation](#installation) was successful,
 use these steps to prepare for site specific configuration.
 
 1. Copy `options.js` **and** `config.js` from the HTMLDecor directory to the root directory of your domain.
@@ -570,7 +570,7 @@ where `options` is an object containing key / value pairs
 that will overwrite current values.
 
 Configuration should be done before HTMLDecor starts. 
-This can be achieved by editing the site-specific `config.js` created during [Preparation](#Preparation).
+This can be achieved by editing the site-specific `config.js` created during [Preparation](#preparation).
 
 Usually you only want to configure how HTMLDecor determines the appropriate decor-document for a page. 
 Do this by providing one of the following options: 
@@ -601,10 +601,10 @@ that will overwrite current values.
 
 Typically you only want to configure panner animation options.
 These would be set in the decor-document,
-as dealt with in [Page Transition Animation](#Page Transition Animation).
+as dealt with in [Page Transition Animation](#page-transition-animation).
 
 All other configuration should be done before HTMLDecor starts. 
-This can be achieved by editing the site-specific `config.js` created during [Preparation](#Preparation).
+This can be achieved by editing the site-specific `config.js` created during [Preparation](#preparation).
 
 
 #### Pre-decorated pages
