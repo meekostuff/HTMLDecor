@@ -1,0 +1,758 @@
+<!DOCTYPE html><html><head><meta charset="UTF-8" /><link href="./decor/decor.html" rel="meeko-decor" /><script src="./boot.js"></script></head><body>
+
+<div id="__main__" role="main"><h1>HTMLDecor</h1>
+
+<blockquote>
+  <p>HTMLDecor means <strong>full</strong> separation of content from presentation.
+With CSS you can change the styling of a whole site with one stylesheet.
+With HTMLDecor you can change everything -
+banner, navbars, ads, page-layout and stylesheets.
+Not only is it simple to setup and maintain, 
+you'll cut the download time of every page,
+plus "pushState assisted navigation" comes for free.</p>
+</blockquote>
+
+<p>HTMLDecor is a Javascript page decoration engine which runs in the browser.
+It allows your site to deliver real page content first (and fast).
+Your site decor can be placed in its own page and merged in the browser instead of on the server. </p>
+
+<p>A site decor page is similar to an external stylesheet in that it can be shared between several pages.
+Originally it was even referenced with a resource link, just like stylesheets:</p>
+
+<pre><code>&lt;link rel="meeko-decor" type="text/html" href="decor.html" /&gt;
+</code></pre>
+
+<p><small><strong>(This referencing method has been superceded by external configuration, which is less limiting.)</strong></small></p>
+
+<p>As a bonus, when your site uses HTMLDecor, "pushState assisted navigation" requires no additional setup. 
+When someone viewing your page clicks on a link to another page that uses the same decor
+then HTMLDecor updates the real content
+and <code>history.pushState()</code> is used to update the browser URL. </p>
+
+<p>HTMLDecor.js is less than 10kB when minified and gzipped.</p>
+
+<p>To see this in action visit my <a href="http://meekostuff.net/blog/">blog</a> where I am dog-fooding this library.
+Make sure you view the page source and check that it is just raw content.
+The navbar and contact popup are all in the <a href="http://meekostuff.net/blog/decor.html">site-decor page</a>. </p>
+
+<p>For more info on the concept of HTMLDecor and its affinity with pushState assisted navigation, read  </p>
+
+<ul>
+<li><a href="http://meekostuff.net/blog/HTML-Decor-I/">The HTML decor concept</a></li>
+<li><a href="http://meekostuff.net/blog/HTML-Decor-II/">Introducing HTMLDecor.js</a></li>
+<li><a href="http://meekostuff.net/blog/pushState-was-made-for-HTMLDecor/">pushState was made for HTMLDecor</a></li>
+</ul>
+
+<p>More features are in the <a href="https://github.com/meekostuff/HTMLDecor/wiki/Road-map">road-map</a>.</p>
+
+<p>If you have any questions or comments, don't hesitate to contact the author via
+<a href="http://meekostuff.net/">web</a>, <a href="mailto:shogun70@gmail.com">email</a> or <a href="http://twitter.com/meekostuff">twitter</a>. </p>
+
+<h2>License</h2>
+
+<p>HTMLDecor is available under 
+<a href="http://www.mozilla.org/MPL/2.0/" title="Mozilla Public License version 2.0">MPL 2.0</a>.
+See the <a href="http://www.mozilla.org/MPL/2.0/FAQ.html" title="Frequently Asked Questions">MPL 2.0 FAQ</a>
+for your obligations if you intend to modify or distribute HTMLDecor or part thereof. </p>
+
+<h2>Installation</h2>
+
+<ol>
+<li><p>Copy or clone the HTMLDecor files to a directory on your server, say </p>
+
+<p>/path/to/HTMLDecor/</p></li>
+<li><p>Open a browser and navigate to the following page</p>
+
+<p>http://your.domain.com/path/to/HTMLDecor/test/normal.html</p></li>
+</ol>
+
+<p>Visually inspect the displayed page for the following possible failures:</p>
+
+<ul>
+<li>boxes with <strong>red</strong> background or borders. </li>
+<li><p>boxes that claim to be styled with colored borders but just have the default border. </p></li>
+<li><p>Source the HTMLDecor boot-script into your pages, with this line in the <code>&lt;head&gt;</code> of each page </p>
+
+<p><code>&lt;script src="/path/to/HTMLDecor/boot.js"&gt;&lt;/script&gt;</code></p></li>
+</ul>
+
+<h2>Quick Start</h2>
+
+<p><strong>This is the old way of specifying decor, but is conceptually easiest to understand.</strong>
+<strong>If you are new to HTMLDecor then read this documentation straight through.</strong>
+<strong>Otherwise feel free to skip to the <a href="#Configuration">Configuration</a> section first.</strong></p>
+
+<p>Create a HTML document (page.html) with some page specific content -
+elements that are children of <code>&lt;body&gt;</code> and have <code>@id</code>. 
+Any page specific scripts, styles or meta-data should go in <code>&lt;head&gt;</code>. 
+The <code>&lt;body&gt;</code> may also contain fallback content, which is
+only displayed if HTMLDecor is NOT enabled.</p>
+
+<pre><code>&lt;!DOCTYPE html&gt;
+&lt;html&gt;
+&lt;head&gt;
+    &lt;!-- create a link to the decor page. All attributes are needed --&gt;
+    &lt;link rel="meeko-decor" type="text/html" href="decor.html" /&gt;
+    &lt;!-- and source the HTMLDecor boot-script --&gt;
+    &lt;script src="/path/to/HTMLDecor/boot.js"&gt;&lt;/script&gt;
+    &lt;!-- include fallback stylesheets for when HTMLDecor doesn't run.
+        @title=nodecor stylesheets are removed !--&gt;
+    &lt;link rel="stylesheet" href="nodecor.css" title="nodecor" /&gt;
+    &lt;!-- page specific style --&gt;
+    &lt;style&gt;
+    .styled-from-page { border: 2px dashed green; }
+    &lt;/style&gt;
+&lt;/head&gt;
+&lt;body&gt;
+    &lt;header&gt;
+    This fallback content will be removed from the page
+    &lt;/header&gt;
+
+    &lt;article id="__content"&gt;&lt;!-- Page specific content, identified by @id --&gt;
+    #__content in page
+        &lt;div class="styled-from-decor"&gt;
+        This content is styled by the decor stylesheet
+        &lt;/div&gt;  
+        &lt;div class="styled-from-page"&gt;
+        This content is styled by the page stylesheet
+        &lt;/div&gt;  
+    &lt;/article&gt;
+
+    &lt;footer&gt;
+    This fallback content will be removed from the page
+    &lt;/footer&gt;
+&lt;/body&gt;
+&lt;/html&gt;
+</code></pre>
+
+<p>Create the decor document (decor.html).
+This is a normal page of HTML that, when viewed in the browser,
+will appear as the final page without the page specific content. </p>
+
+<pre><code>&lt;!DOCTYPE html&gt;
+&lt;html&gt;
+&lt;head&gt;
+    &lt;style&gt;
+    .styled-from-decor { border: 2px solid blue; }
+    &lt;/style&gt;
+&lt;/head&gt;
+&lt;body&gt;
+    &lt;header&gt;
+    #header in decor
+    &lt;/header&gt;
+
+    &lt;div id="__main"&gt;
+        #__main in decor
+        &lt;article id="__content"&gt;
+        #__content in decor: This will be replaced by #__content from the page
+        &lt;/article&gt;
+    &lt;/div&gt;
+
+    &lt;footer&gt;
+    #footer in decor
+    &lt;/footer&gt;
+&lt;/body&gt;
+&lt;/html&gt;
+</code></pre>
+
+<p>When page.html is loaded into the browser, HTMLDecor will merge decor.html into it, following these steps:</p>
+
+<ol>
+<li>Set the visibility of the page to "hidden". *</li>
+<li>Detect the first <code>&lt;link rel="meeko-decor" href="..." /&gt;</code>, fully resolve the @href and use as the decor URL.</li>
+<li>Load the decor URL into an iframe.</li>
+<li>Fully resolve URLs for all scripts, images and links in the decor page. </li>
+<li>Insert <code>&lt;script&gt;</code>, <code>&lt;style&gt;</code>, <code>&lt;link&gt;</code>, and conditionally <code>&lt;meta&gt;</code> and <code>&lt;title&gt;</code> 
+from the <code>&lt;head&gt;</code> of the decor page into the <code>&lt;head&gt;</code> of the content page.</li>
+<li>Insert the child nodes of the <code>&lt;body&gt;</code> of the decor page at the start of the <code>&lt;body&gt;</code> in the content page</li>
+<li>For each child node of the <code>&lt;body&gt;</code> in the content page, determine whether it should be deleted or moved into the decor.
+If a child node is an element with an ID, and the ID matches an element in the decor,
+then the element in the decor is replaced with the element from the content.
+All other child nodes of the body in the content page are deleted.</li>
+<li>When all linked stylesheets for the document have loaded, set the visibility of the page to "visible".
+This step may occur at any time during or after step 7. *</li>
+</ol>
+
+<p>* Steps 1 &amp; 8 are handled by the boot-script.</p>
+
+<p>This process results in a DOM tree like this:</p>
+
+<pre><code>&lt;!DOCTYPE html&gt;
+&lt;html&gt;
+&lt;head&gt;
+    &lt;style&gt;
+    .styled-from-decor { border: 2px solid blue; }
+    &lt;/style&gt;
+    &lt;!-- create a link to the decor page --&gt;
+    &lt;link rel="meeko-decor" type="text/html" href="decor.html" /&gt;
+    &lt;!-- and source the HTMLDecor boot-script --&gt;
+    &lt;script src="/path/to/HTMLDecor/boot.js"&gt;&lt;/script&gt;
+    &lt;!-- page specific style --&gt;
+    &lt;style&gt;
+    .styled-from-page { border: 2px dashed green; }
+    &lt;/style&gt;
+&lt;/head&gt;
+&lt;body&gt;
+    &lt;header&gt;
+    #header in decor
+    &lt;/header&gt;
+
+    &lt;div id="__main"&gt;
+        #__main in decor
+        &lt;article id="__content"&gt;
+        #__content in page
+            &lt;div class="styled-from-decor"&gt;
+            This content is styled by the decor stylesheet
+            &lt;/div&gt;  
+            &lt;div class="styled-from-page"&gt;
+            This content is styled by the page stylesheet
+            &lt;/div&gt;  
+        &lt;/article&gt;
+    &lt;/div&gt;
+
+    &lt;footer&gt;
+    #footer in decor
+    &lt;/footer&gt;
+&lt;/body&gt;
+&lt;/html&gt;
+</code></pre>
+
+<h2>Fallbacks</h2>
+
+<p>Sometimes HTMLDecor will not be able to apply the decor document to the page.
+This can occur because</p>
+
+<ul>
+<li>Javascript is disabled</li>
+<li>the HTMLDecor script failed to download</li>
+<li>HTMLDecor is configured to NOT autostart</li>
+<li>the decor document failed to download</li>
+</ul>
+
+<p>In this scenario you would like the page to have some basic styling and auxiliary content -
+something that can be dispensed with when HTMLDecor runs.</p>
+
+<h3>Stylesheets</h3>
+
+<p>Any <code>&lt;link rel="stylesheet"&gt;</code> or <code>&lt;style&gt;</code> elements that have <code>@title="nodecor"</code>
+will be removed from the page before the decor document is applied, e.g.</p>
+
+<pre><code>&lt;style title="nodecor"&gt;body { max-width: 72ex; }&lt;/style&gt;
+</code></pre>
+
+<h3>Auxiliary content</h3>
+
+<p>Children of <code>&lt;body&gt;</code> which have no <code>@id</code>,
+or which have <code>@id</code> that cannot be found in the decor document
+will be removed from the page before the decor is applied, e.g.</p>
+
+<pre><code>&lt;body&gt;
+    &lt;div&gt;
+    This irrelevant content will be DEFINITELY REMOVED from the page
+    because it has no @id
+    &lt;/div&gt;
+
+    &lt;div id="__irrelevant"&gt;
+    This content will be REMOVED from the page
+    assuming the decor has no element with matching @id
+    &lt;/div&gt;
+
+    &lt;div id="__content"&gt;
+    This content will be RETAINED in the page
+    assuming the decor has an element with matching @id
+    &lt;/div&gt;
+&lt;/body&gt;
+</code></pre>
+
+<h2>PushState Assisted Navigation</h2>
+
+<p>If <code>history.pushState</code> is available then HTMLDecor will conditionally over-ride the default browser behavior when hyperlinks are clicked.
+If the @href of the hyperlink is a document that specifies the same decor as the current page then it can be merged into the current page
+in a <em>similar</em> way to the startup merging of decor and document. </p>
+
+<p>Some hyperlinks are not appropriate for this and are ignored by HTMLDecor:</p>
+
+<ul>
+<li>hyperlinks to pages on other sites </li>
+<li>hyperlinks with a different protocol, e.g. <code>javascript:...</code>, <code>ftp:</code></li>
+<li><p>hyperlinks that target a different window or iframe, e.g.</p>
+
+<pre><code>    &lt;a href="some_page.html" target="_blank"&gt;...&lt;/a&gt;
+</code></pre></li>
+<li>anchor hyperlinks - <code>&lt;a href="#skip"&gt;</code></li>
+</ul>
+
+<p>That leaves hyperlinks to other pages within the same site.</p>
+
+<p>If a decor lookup function has been registered then HTMLDecor queries what the decor of the hyperlinked page would be.
+If it is the same as the current decor then the page is downloaded and used to replace the real content of the current page. </p>
+
+<p>Otherwise normal browser navigation to the next page is triggered. </p>
+
+<p><strong>Note</strong> that the HTMLDecor <code>click</code> handling can always be prevented by calling <code>event.preventDefault()</code>.</p>
+
+<p>"PushState Assisted Navigation" (PAN) may sometimes be referred to as panning, as in <a href="http://en.wikipedia.org/Panning_(camera)">camera panning</a>. </p>
+
+<h3>Page Transition Animation</h3>
+
+<p>To enable author supplied animation of page transitions, HTMLDecor provides the <code>Meeko.panner.config()</code> method.
+You could use it by placing something like the following in your <strong>decor document</strong></p>
+
+<pre><code>Meeko.panner.config({
+    duration: 0, // minimum time (ms) between paging start and end
+    nodeRemoved: {
+        before: hide, // handler for before a content node leaves the page. Called at start of transition.
+        after: show // handler for after a content node leaves the page. Cannot be called before duration has expired. 
+    },
+    nodeInserted: {
+        before: hide, // handler for before a node enters the page, after the new url has been downloaded.
+        after: show // handler for after a node enters the page. Called after a delay to allow styles set by `before` to be applied. 
+    },
+    pageOut: {
+        before: noop,
+        after: noop
+    },
+    pageIn: {
+        before: noop, // indicates that the decor is ready for content to be placed. This would allow decor to be mutated in url dependent way
+        after: noop // the equivalent of `window.onload` in non-pushstate enabled environments.
+    }
+});
+
+function hide(node) { node.setAttribute("hidden", "hidden"); }
+function show(node) { node.removeAttribute("hidden"); }
+function noop() {}
+</code></pre>
+
+<p>These are actually the default options so there's no need to repeat these settings.
+The method can be called at anytime. 
+Key / value pairs in the passed options object overwrite the matching internal setting.</p>
+
+<p><strong>NOTE</strong> There is not always a notification <strong>after</strong> <code>pageOut</code>.
+For instance, if the next page is ready before the transition duration has expired
+then the new nodes replace the old nodes directly, rather than transitioning through the decor placeholders. </p>
+
+<p><strong>Example:</strong> A simple way to achieve a fade-out / fade-in effect on page transition is to use the following in the decor document:</p>
+
+<pre><code>&lt;script&gt;
+Meeko.panner.config({
+    duration: 500
+});
+&lt;/script&gt;
+&lt;style&gt;
+#__content { /\* assuming #__content is the page-specific content \*/
+    -webkit-transition: opacity 0.5s linear;
+    -moz-transition: opacity 0.5s linear;
+    -ms-transition: opacity 0.5s linear;
+    -o-transition: opacity 0.5s linear;
+    transition: opacity 0.5s linear;
+}
+#__content[hidden] {
+    display: block;
+    visibility: visible;
+    opacity: 0;
+}
+&lt;/style&gt;
+</code></pre>
+
+<p><strong>Example:</strong> If your pages rely on <code>@class</code> on the <code>&lt;body&gt;</code> or <code>&lt;html&gt;</code> elements,
+the following will install them in the view-document when the page is panned in:</p>
+
+<pre><code>&lt;script&gt;
+Meeko.panner.config({
+    pageIn: {
+        before: function(doc) {
+            if (document == doc) return;
+            document.documentElement.className = doc.documentElement.className;
+            document.body.className = doc.body.className;
+        }
+    }
+});
+&lt;/script&gt;
+</code></pre>
+
+<h3>Waiting Indicators</h3>
+
+<p>If a new page takes longer than one second to load, the user may wonder if the loading has stalled.
+In this case a waiting indicator is typically used to reassure the user that the page is still loading.
+HTMLDecor provides a simple way to do this - when the <code>duration</code> has expired (and the next page still hasn't loaded)
+the decor document is used as the waiting page. </p>
+
+<h3>Manual handling</h3>
+
+<p>You can stop HTMLDecor handling hyperlink clicks by calling <code>event.preventDefault()</code> in a click handler, e.g.</p>
+
+<pre><code>document.onclick = function(event) { event.preventDefault(); }
+</code></pre>
+
+<p>You can also request HTMLDecor to navigate manually to a new URL by the following: </p>
+
+<pre><code>Meeko.panner.assign(newURL)
+</code></pre>
+
+<p>or with <code>history.replaceState()</code> behavior: </p>
+
+<pre><code>Meeko.panner.replace(newURL)
+</code></pre>
+
+<h2><code>&lt;script&gt;</code> handling</h2>
+
+<ul>
+<li><p>Scripts in the page are not handled by HTMLDecor - they execute at the expected time in the browser's script handling.
+The page does not need and SHOULD NOT have scripts - they SHOULD all be part of the decor. </p></li>
+<li><p>All scripts which are not in the initial page (that is, decor content or panned page content) are executed via dynamic script insertion, 
+but behave <strong>like</strong> scripts that are part of the page content. Page content is not blocked, but earlier scripts block later scripts 
+unless the earlier script has the <code>src</code> and <code>async</code> attributes. </p>
+
+<p><code>&lt;script src="..." async&gt;&lt;/script&gt;</code></p></li>
+</ul>
+
+<p>This dynamic script insertion is referred to as <strong>enabling</strong> in the following rules. </p>
+
+<ul>
+<li><p>Scripts in the <code>&lt;head&gt;</code> of the decor are <strong>enabled</strong> AFTER all the content in the <code>&lt;head&gt;</code> of the decor is MERGED WITH the page.</p></li>
+<li><p>Scripts in the <code>&lt;body&gt;</code> of the decor are <strong>enabled</strong> AFTER all the content in the <code>&lt;body&gt;</code> of the decor is INSERTED INTO the page,
+but BEFORE the page content is MERGED WITH the decor.</p></li>
+<li><p>When panning occurs, scripts in the <code>&lt;head&gt;</code> of the next page are <strong>enabled</strong> AFTER all the content in the <code>&lt;head&gt;</code> of the next page is MERGED WITH the page. 
+Scripts in the <code>&lt;body&gt;</code> of the next page are <strong>enabled</strong> AFTER the content in the <code>&lt;body&gt;</code> of the next page is MERGED WITH the page.
+You do not need and SHOULD NOT have scripts in any page (other than the decor document). </p></li>
+</ul>
+
+<h2>Debugging</h2>
+
+<p>By default, HTMLDecor logs error and warning messages to the browser console.
+The logger can be configured to provide info and debug messages (see Configuration).</p>
+
+<p>External code is called from HTMLDecor (e.g. nodeInserted / nodeRemoved hooks)
+using <a href="http://dean.edwards.name/weblog/2009/03/callbacks-vs-events/">event dispatch</a>
+instead of <code>try / catch</code> blocks.
+This isolates HTMLDecor from errors in external code,
+but doesn't prevent errors and stack-traces being logged in the browser console.</p>
+
+<p>Unfortunately, Firefox <a href="https://bugzilla.mozilla.org/show_bug.cgi?id=503244">doesn't log errors in event-listeners</a>.
+You may find debugging easier in a different browser. </p>
+
+<h2>Configuration</h2>
+
+<h3>Preparation</h3>
+
+<p>Assuming the default <a href="#Installation">installation</a> was successful,
+use these steps to prepare for site specific configuration.</p>
+
+<ol>
+<li><p>Copy <code>options.js</code> <strong>and</strong> <code>config.js</code> from the HTMLDecor directory to the root directory of your domain.</p>
+
+<p>If you have unix shell access to the domain's server </p>
+
+<pre><code>    cd /directory/of/your/domain
+    cp path/to/HTMLDecor/options.js path/to/HTMLDecor/config.js .
+</code></pre></li>
+<li><p>Edit your copy of <code>options.js</code> to change the following lines</p>
+
+<pre><code>    "htmldecor_script": '{bootscriptdir}HTMLDecor.js',
+    "config_script": '{bootscriptdir}config.js'
+</code></pre>
+
+<p>to be</p>
+
+<pre><code>    "htmldecor_script": '/path/to/HTMLDecor/HTMLDecor.js',
+    "config_script": '/config.js'
+</code></pre></li>
+<li><p>Concatenate your modified <code>options.js</code> with <code>boot.js</code> from the HTMLDecor directory
+and store in <code>boot.js</code> of the root directory.</p>
+
+<pre><code>    cat options.js path/to/HTMLDecor/boot.js &gt; boot.js
+</code></pre></li>
+<li><p>Source the modified HTMLDecor boot-script into your pages -
+preferably before any stylesheets - 
+with this line in the <code>&lt;head&gt;</code> of each page </p>
+
+<pre><code>    &lt;script src="/boot.js"&gt;&lt;/script&gt;
+</code></pre></li>
+<li><p>Make sure to test the modifications. <br />
+You could symlink to the test directory from the root directory</p>
+
+<pre><code>    ln -s path/to/HTMLDecor/test
+</code></pre>
+
+<p>then navigate in the browser to</p>
+
+<pre><code>    http://your.domain.com/test/normal.html
+</code></pre></li>
+</ol>
+
+<p>Now you have a simple setup allowing you to:</p>
+
+<ul>
+<li>modify your options without affecting the HTMLDecor installation, and</li>
+<li>update HTMLDecor without overwriting your options.</li>
+</ul>
+
+<p>When you want to:</p>
+
+<ul>
+<li><p>modify options</p>
+
+<ul>
+<li>edit your copy of <code>options.js</code></li>
+<li>repeat step 3 to rebuild your boot-script</li>
+</ul></li>
+<li><p>update HTMLDecor</p>
+
+<ul>
+<li>overwrite the HTMLDecor directory with the latest version</li>
+<li>repeat step 3</li>
+</ul></li>
+<li><p>minify HTMLDecor.js</p>
+
+<ul>
+<li>minify HTMLDecor.js to HTMLDecor.min.js in the /path/to/HTMLDecor directory</li>
+<li>change <code>htmldecor_script</code> to <code>/path/to/HTMLDecor/HTMLDecor.min.js</code> in your copy of the <code>options.js</code> file</li>
+<li>repeat step 3</li>
+</ul></li>
+<li><p>minify boot.js</p>
+
+<ul>
+<li>minify boot.js to boot.min.js in the /path/to/HTMLDecor directory</li>
+<li>repeat step 3 with <code>path/to/HTMLDecor/boot.min.js</code></li>
+</ul></li>
+</ul>
+
+<h3>Boot options</h3>
+
+<p>These options aren't specifically related to the operation of HTMLDecor. 
+The boot-script has the following options (default values in <strong>bold</strong>).</p>
+
+<ul>
+<li>htmldecor_script: <strong>"{bootscriptdir}HTMLDecor.js"</strong></li>
+<li>log_level: "none", "error", <strong>"warn"</strong>, "info", "debug"</li>
+<li>polling_interval: <strong>50</strong> (milliseconds)</li>
+<li>autostart: <strong>true</strong>, false</li>
+<li>hidden_timeout: <strong>3000</strong> (milliseconds)</li>
+<li>html5_block_elements: <strong>"article aside figcaption figure footer header hgroup main nav section"</strong></li>
+<li>html5_inline_elements: <strong>"abbr mark"</strong></li>
+<li>config_script: <strong>"{bootscriptdir}config.js"</strong></li>
+</ul>
+
+<p>Sources for options are detailed below. </p>
+
+<h4>From <code>Meeko.options</code></h4>
+
+<p><strong>NOTE</strong> this is how options are set in <code>options.js</code>. 
+Options can be <strong>preset</strong> by script, like this</p>
+
+<pre><code>&lt;script&gt;
+var Meeko = window.Meeko || (window.Meeko = {});
+Meeko.options = {
+    log_level: "info",
+    autostart: false,
+    hidden_timeout: 1000
+};
+&lt;/script&gt;
+</code></pre>
+
+<p>This tells HTMLDecor to
+- log 'info', 'warn' and 'error' messages
+- prevent automatic startup, and
+- when a manual start is requested to hide the page until all decor-resources are loaded <em>or</em>
+1000 milliseconds (1 second) have elapsed, whichever comes <em>first</em>.</p>
+
+<p>If autostart is turned off, HTMLDecor can be manually started by calling <code>Meeko.decor.start()</code>.</p>
+
+<h4>From localStorage and sessionStorage</h4>
+
+<p>When debugging a page you probably don't want to modify the page source to change HTMLDecor options,
+especially as you may have to change them back after you've found the problem.
+For this reason HTMLDecor reads <code>sessionStorage</code> and <code>localStorage</code> at startup, looking for config options.
+<code>sessionStorage</code> options override those found in <code>localStorage</code>, which in turn override those in data-attributes.</p>
+
+<p>Config options are read from JSON stored in the <code>Meeko.options</code> key. Thus the following would prevent <code>autostart</code> and turn on <code>debug</code> logging.</p>
+
+<pre><code>sessionStorage.setItem('Meeko.options', JSON.stringify({ autostart: false, log_level: "debug" }) );
+</code></pre>
+
+<p><em>Note</em> that the page would require a refresh after these settings were made.</p>
+
+<h3>HTMLDecor configuration</h3>
+
+<p>There are two aspects of HTMLDecor:</p>
+
+<ol>
+<li><p>Decoration - the wrapping of the primary content of the page with site decor</p></li>
+<li><p>Panning - replacing the primary content of the page while retaining the same decor</p></li>
+</ol>
+
+<p>These aspects are opposite in purpose, but similar in operation.
+In particular, they both involve: 
+- downloading of external content
+- normalizing this content to prepare for HTMLDecor processing
+- notifications of content insertion / removal, etc</p>
+
+<h3>Decorator engine</h3>
+
+<p>Options for the decorator are stored in <code>Meeko.decor.options</code>,
+which can be accessed directly or by calling </p>
+
+<pre><code>Meeko.decor.config(options);
+</code></pre>
+
+<p>where <code>options</code> is an object containing key / value pairs
+that will overwrite current values.</p>
+
+<p>Configuration should be done before HTMLDecor starts. 
+This can be achieved by editing the site-specific <code>config.js</code> created during <a href="#Preparation">Preparation</a>.</p>
+
+<p>Usually you only want to configure how HTMLDecor determines the appropriate decor-document for a page. 
+Do this by providing one of the following options: </p>
+
+<ul>
+<li><p><strong><code>detect(doc)</code></strong> <br />
+MUST return the decor-URL by inspecting the current page when HTMLDecor starts (this doesn't allow panning)</p></li>
+<li><p><strong><code>lookup(url)</code></strong> <br />
+MUST return the decor-URL for any URL in the site, either the current <code>document.URL</code>,
+or the URL of a different page that is to be panned in.</p></li>
+</ul>
+
+<p><code>lookup(url)</code> is the recommended option.
+<code>detect(doc)</code> is mainly provided for backwards compatibility,
+as can be seen in the default <code>config.js</code> script. </p>
+
+<p><strong>TODO:</strong> <code>request</code>, <code>normalize</code>, notifications</p>
+
+<h3>Panner engine</h3>
+
+<p>Options for the panner are stored in <code>Meeko.panner.options</code>,
+which can be accessed directly or by calling </p>
+
+<pre><code>Meeko.panner.config(options);
+</code></pre>
+
+<p>where <code>options</code> is an object containing key / value pairs
+that will overwrite current values.</p>
+
+<p>Typically you only want to configure panner animation options.
+These would be set in the decor-document,
+as dealt with in <a href="#Page Transition Animation">Page Transition Animation</a>.</p>
+
+<p>All other configuration should be done before HTMLDecor starts. 
+This can be achieved by editing the site-specific <code>config.js</code> created during <a href="#Preparation">Preparation</a>.</p>
+
+<h4>Pre-decorated pages</h4>
+
+<p>Pages on your site may not be in the format that HTMLDecor and your decor-document are expecting.
+The most likely scenario for this is that your primary content containers
+are not direct children of the <code>&lt;body&gt;</code>,
+or they do not have @id.
+In this case you need to provide a <code>normalize(doc)</code> function
+which will manipulate the DOM of <code>doc</code> into the appropriate format, e.g.</p>
+
+<pre><code>    Meeko.panner.config({
+        normalize: function(doc) {
+            var content = doc.getElementsByTagName('main')[0];
+            content.id = '__content';
+            doc.body.innerHTML = '';
+            doc.body.appendChild(content);
+        }
+    });
+</code></pre>
+
+<p><strong>NOTE:</strong> configuring the <code>normalize</code> option prevents initial page decoration
+until the <code>DOMContentLoaded</code> event (or safest equivalent). </p>
+
+<h4>Non-HTML payloads</h4>
+
+<p>You can also make your landing-page download as HTML 
+and thereafter request, say JSON, and build the primary-content HTML in the browser.
+Do this by providing a <code>request(url, data, settings, callback)</code> function, where</p>
+
+<ul>
+<li><strong>url</strong> is the URL of the page to be panned in</li>
+<li><strong>data</strong> is any form data (<strong>WARNING</strong> not implemented yet)</li>
+<li><strong>settings</strong> is an object containing at least the <code>URL</code> and <code>method</code></li>
+<li><strong>callback</strong> is an object with <code>complete(result)</code> and <code>error(err)</code> callback-methods</li>
+</ul>
+
+<p>An example of configuration might be</p>
+
+<pre><code>    Meeko.panner.config({
+        request: function(url, data, settings, callback) { // assumes 'GET'
+            var rq = new XMLHttpRequest;
+            rq.open('GET', url, true);
+            rq.setRequestHeader('Accept-Type', 'application/json');
+            rq.onreadystatechange = onchange;
+            rq.send();
+            function onchange() {
+                if (rq.readyState != 4) return;
+                if (rq.status != 200) {
+                    callback.error(rq.status);
+                    return;
+                }
+                onload();
+            }
+            function onload() {
+                var json = JSON.parse(rq.responseText);
+                var doc = document.implementation.createHTMLDocument(json.title);
+                doc.body.innerHTML = processJSON(json); // your json-to-html converter
+                callback.complete(doc);
+            }
+        }
+    });
+</code></pre>
+
+<h3>Bonus APIs</h3>
+
+<p>HTMLDecor defines various utility classes and functions for internal use.
+Many of these are also available for external use if appropriate.
+The most useful of these are in the <code>Meeko.DOM</code> namespace, and include </p>
+
+<ul>
+<li><p><code>Meeko.DOM.URL</code>
+This provides overlapping functionality with the <a href="http://url.spec.whatwg.org/#api">proposed URL API</a>.
+`Meeko.DOM.URL(absoluteURL) will return a URL object with the following (read-only) fields:</p>
+
+<ul>
+<li><code>href</code>, <code>protocol</code>, <code>host</code>, <code>hostname</code>, <code>port</code>, <code>pathname</code>, <code>search</code>, <code>hash</code> <strong>(Standard)</strong></li>
+<li><code>nopathname</code>, <code>basepath</code>, <code>base</code>, <code>nosearch</code>, <code>nohash</code> <strong>(Extensions)</strong>
+The URL object also has the <code>resolve(relativeURL)</code> method which performs a
+fast conversion of a relative URL to absolute, using itself for the <code>baseURL</code>.</li>
+</ul></li>
+<li><p><code>Meeko.DOM.$id</code>
+This is short-hand for <code>document.getElementById</code> (typically aliased to <code>$id</code> in a code block)</p></li>
+<li><p><code>Meeko.DOM.$$</code>
+This is short-hand for <code>document.getElementsByTagName</code> (typically aliased to <code>$$</code> in a code block)</p></li>
+</ul>
+
+<h2>Notes and Warnings</h2>
+
+<ul>
+<li>HTMLDecor may not be compatible with IE behaviors, eg <a href="http://css3pie.com/">CSS3 PIE</a>.</li>
+<li>The decor document is loaded via XMLHttpRequest(), parsed to disable scripts, then written into an iframe using <code>document.write()</code>. </li>
+<li>unlike CSS, decor pages should be in the same domain as the content page otherwise the browsers cross-site restrictions will apply.
+Detection for this hasn't been implemented yet. </li>
+<li>any stylesheets in the content document and with a title of "nodecor" will be deleted at the start of merging of the decor page. 
+This allows for a fallback styling option of decor-less pages. For example, the following stylesheets would be removed: <br />
+<code>&lt;style title="nodecor"&gt;...&lt;/style&gt;</code> <br />
+AND <br />
+<code>&lt;link rel="stylesheet" href="style.css" title="nodecor" /&gt;</code>  </li>
+<li>in most current browsers, elements from the content can be moved into the decor <em>while the element is still loading</em>. 
+On IE6,7,8 this will throw an error, so for those browsers the decor is inserted and elements moved only after the DOM has fully loaded.</li>
+<li>the configuration options and mechanism may change in future releases</li>
+<li>URLs in <code>&lt;style&gt;</code> sections of the decor are not resolved.
+This means that relative URLs - which are meant to be relative to the decor URL - 
+will probably be wrong when imported into the page.
+The work-around for this is to use absolute-paths or absolute-URLs (which you should probably be using anyway).</li>
+<li>There are no compatibility checks and warnings between the content and decor pages (charset, etc)</li>
+<li>There are no compatibility checks and warnings between the content element and the decor element it replaces (tagName, attrs, etc). </li>
+</ul>
+
+<h2>TODO</h2>
+
+<ul>
+<li>this README is too long - needs to be split up into sub-sections</li>
+<li>some features would be best explained with demo pages / sites </li>
+</ul>
+</div>
+
+
+
+
+</body></html>
