@@ -56,21 +56,21 @@ Installation
 ------------
 
 1. Copy or clone the HTMLDecor files to a directory on your server, say 
-
-    /path/to/HTMLDecor/
+	
+		/path/to/HTMLDecor/
 
 2. Open a browser and navigate to the following page
-
-	http://your.domain.com/path/to/HTMLDecor/test/normal.html
 	
-Visually inspect the displayed page for the following possible failures:
-
-- boxes with **red** background or borders. 
-- boxes that claim to be styled with colored borders but just have the default border. 
-
+		http://your.domain.com/path/to/HTMLDecor/test/normal.html
+	
+	Visually inspect the displayed page for the following possible failures:
+	
+		- boxes with **red** background or borders. 
+		- boxes that claim to be styled with colored borders but just have the default border. 
+	
 3. Source the HTMLDecor boot-script into your pages, with this line in the `<head>` of each page 
-
-	`<script src="/path/to/HTMLDecor/boot.js"></script>`
+	
+		`<script src="/path/to/HTMLDecor/boot.js"></script>`
 
 
 Quick Start
@@ -511,8 +511,8 @@ Sources for options are detailed below.
 
 #### From `Meeko.options`
 
-**NOTE** this is how options are set in `options.js`. 
-Options can be **preset** by script, like this
+**NOTE** this is how options are set in `options.js`.  
+Options can be **preset** by script, like this:
 
     <script>
 	var Meeko = window.Meeko || (window.Meeko = {});
@@ -527,7 +527,7 @@ This tells HTMLDecor to
 - log 'info', 'warn' and 'error' messages
 - prevent automatic startup, and
 - when a manual start is requested to hide the page until all decor-resources are loaded *or*
-1000 milliseconds (1 second) have elapsed, whichever comes *first*.
+	1000 milliseconds (1 second) have elapsed, whichever comes *first*.
 
 If autostart is turned off, HTMLDecor can be manually started by calling `Meeko.decor.start()`.
 
@@ -575,10 +575,10 @@ This can be achieved by editing the site-specific `config.js` created during [Pr
 Usually you only want to configure how HTMLDecor determines the appropriate decor-document for a page. 
 Do this by providing one of the following options: 
 
-- **`detect(doc)`**  
+-  **`detect(doc)`**  
     MUST return the decor-URL by inspecting the current page when HTMLDecor starts (this doesn't allow panning)
-   
-- **`lookup(url)`**  
+
+-  **`lookup(url)`**  
     MUST return the decor-URL for any URL in the site, either the current `document.URL`,
 	or the URL of a different page that is to be panned in.
 
@@ -674,10 +674,10 @@ Many of these are also available for external use if appropriate.
 The most useful of these are in the `Meeko.DOM` namespace, and include 
 
 + `Meeko.DOM.URL`
-	This provides overlapping functionality with the [proposed URL API](http://url.spec.whatwg.org/#api).
-	`Meeko.DOM.URL(absoluteURL) will return a URL object with the following (read-only) fields:
-	- `href`, `protocol`, `host`, `hostname`, `port`, `pathname`, `search`, `hash` **(Standard)**
-	- `nopathname`, `basepath`, `base`, `nosearch`, `nohash` **(Extensions)**
+	This provides overlapping functionality with the [proposed URL API](http://url.spec.whatwg.org/#api). 
+	`Meeko.DOM.URL(absoluteURL)` will return a URL object with the following (read-only) fields:  
+	- `href`, `protocol`, `host`, `hostname`, `port`, `pathname`, `search`, `hash` **(Standard)**  
+	- `nopathname`, `basepath`, `base`, `nosearch`, `nohash` **(Extensions)**  
 	The URL object also has the `resolve(relativeURL)` method which performs a
 	fast conversion of a relative URL to absolute, using itself for the `baseURL`.
 	

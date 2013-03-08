@@ -60,21 +60,23 @@ for your obligations if you intend to modify or distribute HTMLDecor or part the
 <ol>
 <li><p>Copy or clone the HTMLDecor files to a directory on your server, say </p>
 
-<p>/path/to/HTMLDecor/</p></li>
+<pre><code>/path/to/HTMLDecor/
+</code></pre></li>
 <li><p>Open a browser and navigate to the following page</p>
 
-<p>http://your.domain.com/path/to/HTMLDecor/test/normal.html</p></li>
-</ol>
+<pre><code>http://your.domain.com/path/to/HTMLDecor/test/normal.html
+</code></pre>
 
 <p>Visually inspect the displayed page for the following possible failures:</p>
 
-<ul>
-<li>boxes with <strong>red</strong> background or borders. </li>
-<li><p>boxes that claim to be styled with colored borders but just have the default border. </p></li>
+<pre><code>- boxes with **red** background or borders. 
+- boxes that claim to be styled with colored borders but just have the default border.
+</code></pre></li>
 <li><p>Source the HTMLDecor boot-script into your pages, with this line in the <code>&lt;head&gt;</code> of each page </p>
 
-<p><code>&lt;script src="/path/to/HTMLDecor/boot.js"&gt;&lt;/script&gt;</code></p></li>
-</ul>
+<pre><code>`&lt;script src="/path/to/HTMLDecor/boot.js"&gt;&lt;/script&gt;`
+</code></pre></li>
+</ol>
 
 <h2>Quick Start</h2>
 
@@ -537,8 +539,8 @@ The boot-script has the following options (default values in <strong>bold</stron
 
 <h4>From <code>Meeko.options</code></h4>
 
-<p><strong>NOTE</strong> this is how options are set in <code>options.js</code>. 
-Options can be <strong>preset</strong> by script, like this</p>
+<p><strong>NOTE</strong> this is how options are set in <code>options.js</code>. <br />
+Options can be <strong>preset</strong> by script, like this:</p>
 
 <pre><code>&lt;script&gt;
 var Meeko = window.Meeko || (window.Meeko = {});
@@ -554,7 +556,7 @@ Meeko.options = {
 - log 'info', 'warn' and 'error' messages
 - prevent automatic startup, and
 - when a manual start is requested to hide the page until all decor-resources are loaded <em>or</em>
-1000 milliseconds (1 second) have elapsed, whichever comes <em>first</em>.</p>
+    1000 milliseconds (1 second) have elapsed, whichever comes <em>first</em>.</p>
 
 <p>If autostart is turned off, HTMLDecor can be manually started by calling <code>Meeko.decor.start()</code>.</p>
 
@@ -706,12 +708,12 @@ The most useful of these are in the <code>Meeko.DOM</code> namespace, and includ
 
 <ul>
 <li><p><code>Meeko.DOM.URL</code>
-This provides overlapping functionality with the <a href="http://url.spec.whatwg.org/#api">proposed URL API</a>.
-`Meeko.DOM.URL(absoluteURL) will return a URL object with the following (read-only) fields:</p>
+This provides overlapping functionality with the <a href="http://url.spec.whatwg.org/#api">proposed URL API</a>. 
+<code>Meeko.DOM.URL(absoluteURL)</code> will return a URL object with the following (read-only) fields:  </p>
 
 <ul>
-<li><code>href</code>, <code>protocol</code>, <code>host</code>, <code>hostname</code>, <code>port</code>, <code>pathname</code>, <code>search</code>, <code>hash</code> <strong>(Standard)</strong></li>
-<li><code>nopathname</code>, <code>basepath</code>, <code>base</code>, <code>nosearch</code>, <code>nohash</code> <strong>(Extensions)</strong>
+<li><code>href</code>, <code>protocol</code>, <code>host</code>, <code>hostname</code>, <code>port</code>, <code>pathname</code>, <code>search</code>, <code>hash</code> <strong>(Standard)</strong>  </li>
+<li><code>nopathname</code>, <code>basepath</code>, <code>base</code>, <code>nosearch</code>, <code>nohash</code> <strong>(Extensions)</strong> <br />
 The URL object also has the <code>resolve(relativeURL)</code> method which performs a
 fast conversion of a relative URL to absolute, using itself for the <code>baseURL</code>.</li>
 </ul></li>
