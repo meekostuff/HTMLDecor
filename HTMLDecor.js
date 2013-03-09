@@ -1043,15 +1043,26 @@ onClick: function(e) {
 	// Shim the event to detect if external code has called preventDefault(), and to make sure we call it (but late as possible);
 	var defaultPrevented = false;
 	e._preventDefault = e.preventDefault;
-	e.preventDefault = function(event) { defaultPrevented = true; this._preventDefault(); }
+	e.preventDefault = function(event) { defaultPrevented = true; this._preventDefault(); } // TODO maybe we can just use defaultPrevented?
 	e._stopPropagation = e.stopPropagation;
-	e.stopPropagation = function() { this._preventDefault(); this._stopPropagation(); }
+	e.stopPropagation = function() { // WARNING this will fail to detect event.defaultPrevented if event.preventDefault() is called afterwards
+		if (this.defaultPrevented) defaultPrevented = true; // FIXME is defaultPrevented supported on pushState enabled browsers?
+		this._preventDefault();
+		this._stopPropagation();
+	}
 	if (e.stopImmediatePropagation) {
 		e._stopImmediatePropagation = e.stopImmediatePropagation;
-		e.stopImmediatePropagation = function() { this._preventDefault(); this._stopImmediatePropagation(); }
+		e.stopImmediatePropagation = function() {
+			if (this.defaultPrevented) defaultPrevented = true;
+			this._preventDefault();
+			this._stopImmediatePropagation();
+		}
 	}
 	
-	function backstop(event) { event._preventDefault(); }
+	function backstop(event) {
+		if (event.defaultPrevented)  defaultPrevented = true;
+		event._preventDefault();
+	}
 	window.addEventListener('click', backstop, false);
 	
 	delay(function() {
