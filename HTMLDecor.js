@@ -1020,8 +1020,7 @@ onClick: function(e) {
 	// Before panning to the next page, have to work out if that is appropriate
 	// `return` means ignore the click
 
-	var lookup = panner.options.lookup;
-	if (!lookup) return;
+	if (!decor.options.lookup) return; // no panning if can't lookup decor of next page
 	
 	if (e.button != 0) return; // FIXME what is the value for button in IE's W3C events model??
 	if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return; // FIXME do these always trigger modified click behavior??
@@ -1042,13 +1041,6 @@ onClick: function(e) {
 	// TODO perhaps should test same-site and same-page links
 	var isPageLink = (oURL.nohash == baseURL.nohash); // TODO what about page-links that match the current hash
 
-	// Now check if current decor can be used for the linked page
-	// TODO this won't be done when page-redecoration is implemented
-	if (!isPageLink) { 
-		var decorURL = decor.options.lookup(url);
-		if (typeof decorURL !== "string" || URL(document.URL).resolve(decorURL) !== decor.current.url) return;
-	}
-	
 	// From here on we effectively take over the default-action of the event
 	// Shim the event to detect if external code has called preventDefault(), and to make sure we call it (but late as possible);
 	// TODO add a field indicating HTMLDecor's intent to handle this click, and relevant details.
