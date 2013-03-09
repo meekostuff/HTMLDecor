@@ -6,28 +6,29 @@
 (function() {
 
 var defaults = { // NOTE defaults also define the type of the associated config option
-	"htmldecor_script": '{bootscriptdir}HTMLDecor.js',
-	"log_level": "warn",
 	"autostart": true,
+	"log_level": "warn",
 	"hidden_timeout": 3000,
 	"polling_interval": 50,
 	"html5_block_elements": 'article aside figcaption figure footer header hgroup main nav section',
 	"html5_inline_elements": 'abbr mark',
+	"htmldecor_script": '{bootscriptdir}HTMLDecor.js',
 	"config_script": '{bootscriptdir}config.js'
 }
-
-// Don't even load HTMLDecor if "nodecor" / "noboot" is one of the search options
-if (/(^\?|&)(no_?decor|no_?boot)($|&)/.test(location.search)) return;
-
-var document = window.document;
 
 var vendorPrefix = "Meeko";
 
 var Meeko = window.Meeko || (window.Meeko = {});
 
+// Don't even load HTMLDecor if "nodecor" / "noboot" is one of the search options (or true in Meeko.options)
+if (/(^\?|&)(no_?decor|no_?boot)($|&)/.test(location.search)) return;
+if (Meeko && Meeko.options && Meeko.options['no_boot']) return;
+
 /*
  ### JS utilities
  */
+var document = window.document;
+
 var some = function(a, fn, context) { 
 	for (var n=a.length, i=0; i<n; i++) {
 		if (fn.call(context, a[i], i, a)) return true; 
