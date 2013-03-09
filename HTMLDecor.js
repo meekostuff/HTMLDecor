@@ -521,21 +521,21 @@ var HTMLLoader = function(options) {
 
 extend(HTMLLoader.prototype, {
 
-load: async(function(url, data, settings, cb) {
+load: async(function(url, data, details, cb) {
 	var htmlLoader = this;
 	var xhr, doc;
 	
-	if (!settings.url) settings.url = url;
+	if (!details.url) details.url = url;
 	
 	queue([
 		async(function(qb) {
-			htmlLoader.request(url, data, settings, {
+			htmlLoader.request(url, data, details, {
 				onComplete: function(result) { doc = result; qb.complete(); },
 				onError: function(err) { logger.error(err); qb.error(err); }
 			});
 		}),
 		function() {
-			if (htmlLoader.normalize) htmlLoader.normalize(doc, settings);
+			if (htmlLoader.normalize) htmlLoader.normalize(doc, details);
 		}
 	], {
 		onComplete: function() { cb.complete(doc); },
@@ -543,14 +543,14 @@ load: async(function(url, data, settings, cb) {
 	});
 }),
 
-serialize: function(data, settings) { return ""; },  // TODO
+serialize: function(data, details) { return ""; },  // TODO
 
-request: async(function(url, data, settings, cb) {
-	var method = settings.method || 'GET';
+request: async(function(url, data, details, cb) {
+	var method = details.method || 'GET';
 	var sendText = null;
 	if (/POST/i.test(method)) {
 		throw "POST not supported"; // FIXME
-		sendText = this.serialize(data, settings);
+		sendText = this.serialize(data, details);
 	}
 	else if (/GET/i.test(method)) {
 		// no-op
@@ -558,15 +558,15 @@ request: async(function(url, data, settings, cb) {
 	else {
 		throw uc(method) + ' not supported';
 	}
-	doRequest(url, sendText, settings, cb);
+	doRequest(url, sendText, details, cb);
 }),
 
-normalize: function(doc, settings) {}
+normalize: function(doc, details) {}
 
 });
 
-var doRequest = async(function(url, sendText, settings, cb) {
-	var method = settings.method || 'GET';
+var doRequest = async(function(url, sendText, details, cb) {
+	var method = details.method || 'GET';
 	var xhr = window.XMLHttpRequest ?
 		new XMLHttpRequest() :
 		new ActiveXObject("Microsoft.XMLHTTP");
@@ -582,7 +582,7 @@ var doRequest = async(function(url, sendText, settings, cb) {
 		delay(onload); // Use delay to stop the readystatechange event interrupting other event handlers (on IE). 
 	}
 	function onload() { 
-		var doc = parseHTML(new String(xhr.responseText), settings.url);
+		var doc = parseHTML(new String(xhr.responseText), details.url);
 		cb.complete(doc);
 	}
 });
@@ -1020,6 +1020,9 @@ onClick: function(e) {
 	// Before panning to the next page, have to work out if that is appropriate
 	// `return` means ignore the click
 
+	var lookup = panner.options.lookup;
+	if (!lookup) return;
+	
 	if (e.button != 0) return; // FIXME what is the value for button in IE's W3C events model??
 	if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return; // FIXME do these always trigger modified click behavior??
 
@@ -1035,12 +1038,20 @@ onClick: function(e) {
 	var url = baseURL.resolve(href);
 	var oURL = URL(url);
 	if (oURL.nopathname != baseURL.nopathname) return; // no external urls
-	
+		
 	// TODO perhaps should test same-site and same-page links
 	var isPageLink = (oURL.nohash == baseURL.nohash); // TODO what about page-links that match the current hash
+
+	// Now check if current decor can be used for the linked page
+	// TODO this won't be done when page-redecoration is implemented
+	if (!isPageLink) { 
+		var decorURL = decor.options.lookup(url);
+		if (typeof decorURL !== "string" || URL(document.URL).resolve(decorURL) !== decor.current.url) return;
+	}
 	
 	// From here on we effectively take over the default-action of the event
 	// Shim the event to detect if external code has called preventDefault(), and to make sure we call it (but late as possible);
+	// TODO add a field indicating HTMLDecor's intent to handle this click, and relevant details.
 	var defaultPrevented = false;
 	e._preventDefault = e.preventDefault;
 	e.preventDefault = function(event) { defaultPrevented = true; this._preventDefault(); } // TODO maybe we can just use defaultPrevented?
@@ -1165,9 +1176,9 @@ function noop() {}
 decor.options = {
 	lookup: function(url) {},
 	detect: function(document) {},
-	load: async(function(url, data, settings, cb) {
+	load: async(function(url, data, details, cb) {
 		var loader = new HTMLLoader(decor.options);
-		loader.load(url, data, settings, cb);
+		loader.load(url, data, details, cb);
 	}),
 	decorIn: { before: noop, after: noop },
 	decorReady: noop, // TODO should this be decorIn:complete ??
@@ -1176,9 +1187,9 @@ decor.options = {
 
 panner.options = { 
 	duration: 0,
-	load: async(function(url, data, settings, cb) {
+	load: async(function(url, data, details, cb) {
 		var loader = new HTMLLoader(panner.options);
-		loader.load(url, data, settings, cb);
+		loader.load(url, data, details, cb);
 	}),
 	nodeRemoved: { before: hide, after: show },
 	nodeInserted: { before: hide, after: show },
