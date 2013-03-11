@@ -9,6 +9,14 @@ Meeko.decor.config({
 	detect: function(doc) { return getDecorURL(doc); }
 });
 
+Meeko.panner.config({ // Should be called in your decor-document. These are just fallbacks.
+	duration: 0,
+	nodeRemoved: { before: hide, after: show },
+	nodeInserted: { before: hide, after: show },
+	pageOut: { before: noop, after: noop },
+	pageIn: { before: noop, after: noop }
+});
+
 function getDecorURL(doc) {
 	var link = getDecorLink(doc);
 	if (!link) return null; // FIXME warning message
@@ -40,5 +48,9 @@ function getDecorLink(doc) {
 	});
 	return link;
 }
+
+function hide(msg) { msg.node.setAttribute("hidden", "hidden"); }
+function show(msg) { msg.node.removeAttribute("hidden"); }
+function noop(msg) { }
 
 })();

@@ -312,9 +312,9 @@ You could use it by placing something like the following in your **decor documen
 	function show(msg) { msg.node.removeAttribute("hidden"); }
 	function noop() {}
 
-These are actually the default options so there's no need to repeat these settings.
+These are actually the options set by the default `config.js`, so there's no need to repeat these settings.
 The method can be called at anytime. 
-Key / value pairs in the passed options object overwrite the matching internal setting.
+Key / value pairs in the passed options object overwrite the matching previous settings.
 
 **NOTE** There is not always a notification **after** `pageOut`.
 For instance, if the next page is ready before the transition duration has expired

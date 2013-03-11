@@ -1203,11 +1203,7 @@ navigate: async(function(options, callback) {
 /*
  Paging handlers are either a function, or an object with `before` and / or `after` listeners. 
  This means that before and after listeners are registered as a pair, which is desirable.
- FIXME pageOut and pageIn handlers should receive oldURL, newURL
 */
-function hide(msg) { msg.node.setAttribute("hidden", "hidden"); }
-function show(msg) { msg.node.removeAttribute("hidden"); }
-function noop() {}
 
 decor.options = {
 	lookup: function(url) {},
@@ -1215,10 +1211,12 @@ decor.options = {
 	load: async(function(url, data, details, cb) {
 		var loader = new HTMLLoader(decor.options);
 		loader.load(url, data, details, cb);
-	}),
+	})
+	/* The following options are also available (unless otherwise indicated) *
 	decorIn: { before: noop, after: noop },
-	decorReady: noop, // TODO should this be decorIn:complete ??
-	decorOut: { before: noop, after: noop } // TODO
+	decorOut: { before: noop, after: noop }, // TODO not called at all
+	decorReady: noop // TODO should this be decorIn:complete ??
+	/**/
 }
 
 panner.options = { 
@@ -1226,11 +1224,13 @@ panner.options = {
 	load: async(function(url, data, details, cb) {
 		var loader = new HTMLLoader(panner.options);
 		loader.load(url, data, details, cb);
-	}),
+	})
+	/* The following options are also available *
 	nodeRemoved: { before: hide, after: show },
 	nodeInserted: { before: hide, after: show },
 	pageOut: { before: noop, after: noop },
 	pageIn: { before: noop, after: noop }
+	/**/
 }
 
 var notify = function(msg) {

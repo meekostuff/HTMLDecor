@@ -326,9 +326,9 @@ function show(msg) { msg.node.removeAttribute("hidden"); }
 function noop() {}
 </code></pre>
 
-<p>These are actually the default options so there's no need to repeat these settings.
+<p>These are actually the options set by the default <code>config.js</code>, so there's no need to repeat these settings.
 The method can be called at anytime. 
-Key / value pairs in the passed options object overwrite the matching internal setting.</p>
+Key / value pairs in the passed options object overwrite the matching previous settings.</p>
 
 <p><strong>NOTE</strong> There is not always a notification <strong>after</strong> <code>pageOut</code>.
 For instance, if the next page is ready before the transition duration has expired
