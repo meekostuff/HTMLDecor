@@ -289,7 +289,7 @@ To enable author supplied animation of page transitions, HTMLDecor provides the 
 You could use it by placing something like the following in your **decor document**
 
 	Meeko.panner.config({
-		duration: 0, // minimum time (ms) between paging start and end
+		duration: 0, // minimum time (ms) between paging start and end. 
 		nodeRemoved: {
 			before: hide, // handler for before a content node leaves the page. Called at start of transition.
 			after: show // handler for after a content node leaves the page. Cannot be called before duration has expired. 
@@ -308,8 +308,8 @@ You could use it by placing something like the following in your **decor documen
 		}
 	});
 
-	function hide(node) { node.setAttribute("hidden", "hidden"); }
-	function show(node) { node.removeAttribute("hidden"); }
+	function hide(msg) { msg.node.setAttribute("hidden", "hidden"); }
+	function show(msg) { msg.node.removeAttribute("hidden"); }
 	function noop() {}
 
 These are actually the default options so there's no need to repeat these settings.
@@ -324,7 +324,7 @@ then the new nodes replace the old nodes directly, rather than transitioning thr
 
 	<script>
 	Meeko.panner.config({
-		duration: 500
+		duration: 500 // allows our fade-out to complete
 	});
 	</script>
 	<style>
@@ -349,7 +349,8 @@ the following will install them in the view-document when the page is panned in:
 	<script>
 	Meeko.panner.config({
 		pageIn: {
-			before: function(doc) {
+			before: function(msg) {
+				var doc = msg.node;
 				if (document == doc) return;
 				document.documentElement.className = doc.documentElement.className;
 				document.body.className = doc.body.className;
