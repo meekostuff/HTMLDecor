@@ -636,6 +636,7 @@ You can also make your landing-page download as HTML
 and thereafter request, say JSON, and build the primary-content HTML in the browser.
 Do this by providing a `request(url, data, details, callback)` function, where
 
++ **method** is the HTTP method for the request, which will be 'GET' or 'POST'. 
 + **url** is the URL of the page to be panned in
 + **data** is any form data (**WARNING** not implemented yet)
 + **details** is an object containing at least the `URL` and `method`
@@ -644,9 +645,10 @@ Do this by providing a `request(url, data, details, callback)` function, where
 An example of configuration might be
 
 		Meeko.panner.config({
-			request: function(url, data, details, callback) { // assumes 'GET'
+			request: function(method, url, data, details, callback) { // assumes 'GET'
+				if (!/GET/i.test(method)) throw "Only supporting GET requests";
 				var rq = new XMLHttpRequest;
-				rq.open('GET', url, true);
+				rq.open(method, url, true);
 				rq.setRequestHeader('Accept-Type', 'application/json');
 				rq.onreadystatechange = onchange;
 				rq.send();

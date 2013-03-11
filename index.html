@@ -669,6 +669,7 @@ and thereafter request, say JSON, and build the primary-content HTML in the brow
 Do this by providing a <code>request(url, data, details, callback)</code> function, where</p>
 
 <ul>
+<li><strong>method</strong> is the HTTP method for the request, which will be 'GET' or 'POST'. </li>
 <li><strong>url</strong> is the URL of the page to be panned in</li>
 <li><strong>data</strong> is any form data (<strong>WARNING</strong> not implemented yet)</li>
 <li><strong>details</strong> is an object containing at least the <code>URL</code> and <code>method</code></li>
@@ -678,9 +679,10 @@ Do this by providing a <code>request(url, data, details, callback)</code> functi
 <p>An example of configuration might be</p>
 
 <pre><code>    Meeko.panner.config({
-        request: function(url, data, details, callback) { // assumes 'GET'
+        request: function(method, url, data, details, callback) { // assumes 'GET'
+            if (!/GET/i.test(method)) throw "Only supporting GET requests";
             var rq = new XMLHttpRequest;
-            rq.open('GET', url, true);
+            rq.open(method, url, true);
             rq.setRequestHeader('Accept-Type', 'application/json');
             rq.onreadystatechange = onchange;
             rq.send();

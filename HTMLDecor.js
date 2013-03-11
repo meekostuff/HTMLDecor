@@ -501,9 +501,8 @@ return URL;
 
 var loadHTML = async(function(url, cb) { // WARN only performs GET
 	var htmlLoader = new HTMLLoader();
-	htmlLoader.load(url, null, {
-		url: url
-	}, cb);
+	var method = 'GET';
+	htmlLoader.load(method, url, null, { method: method, url: url }, cb);
 });
 
 var HTMLLoader = (function() {
@@ -521,7 +520,7 @@ var HTMLLoader = function(options) {
 
 extend(HTMLLoader.prototype, {
 
-load: async(function(url, data, details, cb) {
+load: async(function(method, url, data, details, cb) {
 	var htmlLoader = this;
 	var xhr, doc;
 	
@@ -529,7 +528,7 @@ load: async(function(url, data, details, cb) {
 	
 	queue([
 		async(function(qb) {
-			htmlLoader.request(url, data, details, {
+			htmlLoader.request(method, url, data, details, {
 				onComplete: function(result) { doc = result; qb.complete(); },
 				onError: function(err) { logger.error(err); qb.error(err); }
 			});
@@ -545,8 +544,7 @@ load: async(function(url, data, details, cb) {
 
 serialize: function(data, details) { return ""; },  // TODO
 
-request: async(function(url, data, details, cb) {
-	var method = details.method || 'GET';
+request: async(function(method, url, data, details, cb) {
 	var sendText = null;
 	if (/POST/i.test(method)) {
 		throw "POST not supported"; // FIXME
@@ -558,15 +556,14 @@ request: async(function(url, data, details, cb) {
 	else {
 		throw uc(method) + ' not supported';
 	}
-	doRequest(url, sendText, details, cb);
+	doRequest(method, url, sendText, details, cb);
 }),
 
 normalize: function(doc, details) {}
 
 });
 
-var doRequest = async(function(url, sendText, details, cb) {
-	var method = details.method || 'GET';
+var doRequest = async(function(method, url, sendText, details, cb) {
 	var xhr = window.XMLHttpRequest ?
 		new XMLHttpRequest() :
 		new ActiveXObject("Microsoft.XMLHTTP");
@@ -898,7 +895,8 @@ decorate: async(function(decorURL, callback) {
 	queue([
 
 	async(function(cb) {
-		decor.options.load(decorURL, null, { method: 'GET' }, {
+		var method = 'GET';
+		decor.options.load(method, decorURL, null, { method: method, url: decorURL }, {
 			onComplete: function(result) {
 				doc = result;
 				cb.complete(doc);
@@ -1138,7 +1136,8 @@ onPopState: function(e) {
 	if (newURL != panner.contentURL) {
 		scrollToId();
 		var loader = async(function(cb) {
-			panner.options.load(newURL, null, { method: 'GET' }, cb);
+			var method = 'GET';
+			panner.options.load(method, newURL, null, { method: method, url: newURL }, cb);
 		});
 		page(loader);
 		panner.contentURL = newURL;
@@ -1179,7 +1178,8 @@ navigate: async(function(options, callback) {
 	}
 
 	var loader = async(function(cb) {
-		panner.options.load(url, null, { method: 'GET' }, cb);
+		var method = 'GET';
+		panner.options.load(method, url, null, { method: method, url: url }, cb);
 	});
 
 	page(loader, {
@@ -1208,9 +1208,9 @@ navigate: async(function(options, callback) {
 decor.options = {
 	lookup: function(url) {},
 	detect: function(document) {},
-	load: async(function(url, data, details, cb) {
+	load: async(function(method, url, data, details, cb) {
 		var loader = new HTMLLoader(decor.options);
-		loader.load(url, data, details, cb);
+		loader.load(method, url, data, details, cb);
 	})
 	/* The following options are also available (unless otherwise indicated) *
 	decorIn: { before: noop, after: noop },
@@ -1221,9 +1221,9 @@ decor.options = {
 
 panner.options = { 
 	duration: 0,
-	load: async(function(url, data, details, cb) {
+	load: async(function(method, url, data, details, cb) {
 		var loader = new HTMLLoader(panner.options);
-		loader.load(url, data, details, cb);
+		loader.load(method, url, data, details, cb);
 	})
 	/* The following options are also available *
 	nodeRemoved: { before: hide, after: show },
