@@ -920,18 +920,45 @@ decorate: async(function(decorURL, callback) {
 	
 	/* Now merge decor into page */
 	function() {
-		decor_notify("before", "decorIn", document);
+		notify({
+			module: "decor",
+			stage: "before",
+			type: "decorIn",
+			node: doc,
+		});
 		mergeHead(doc, true);
 	},
 	function() { return wait(function() { return scriptQueue.isEmpty(); }); }, 
 	function() {
 		contentStart = document.body.firstChild;
 		decor_insertBody(doc);
-		decor_notify("after", "decorIn", document);
-		wait(function() { return checkStyleSheets(); }, function() { decorReady = true; decor_notify("after", "decorReady", document); });
+		notify({
+			module: "decor",
+			stage: "after",
+			type: "decorIn",
+			node: doc
+		});
+		wait(
+			 function() { return checkStyleSheets(); },
+			 function() {
+				decorReady = true;
+				notify({
+					module: "decor",
+					stage: "after",
+					type: "decorReady",
+					node: doc
+				});
+			}
+		);
 		decorEnd = document.createTextNode("");
 		document.body.insertBefore(decorEnd, contentStart);
-		notify("before", "pageIn", document, document); // TODO perhaps this should be stalled until scriptQueue.isEmpty() (or a config option)
+		notify({
+			module: "panner",
+			stage: "before",
+			type: "pageIn",
+			node: document,
+			target: document
+		}); // TODO perhaps this should be stalled until scriptQueue.isEmpty() (or a config option)
 	},
 	function() {
 		return until(
@@ -944,12 +971,24 @@ decorate: async(function(decorURL, callback) {
 					contentStart,
 					function(node, target) {
 						decor.placeHolders[target.id] = target;
-						notify("before", "nodeInserted", document.body, node);
+						notify({
+							module: "panner",
+							stage: "before",
+							type: "nodeInserted",
+							target: document.body,
+							node: node
+						});
 					},
 					function(node) {
 						nodeList.push(node.id);
 						delay(function() {
-							notify("after", "nodeInserted", document.body, node);
+							notify({
+								module: "panner",
+								stage: "after",
+								type: "nodeInserted",
+								target: document.body,
+								node: node
+							});
 							remove(nodeList, node.id);
 							if (!nodeList.length && DOM.isContentLoaded()) complete = true;
 						});
@@ -999,7 +1038,12 @@ decorate: async(function(decorURL, callback) {
 		});
 	},
 	function() {
-		notify("after", "pageIn", document);
+		notify({
+			module: "panner",
+			stage: "after",
+			type: "pageIn",
+			target: document
+		});
 		scrollToId(location.hash && location.hash.substr(1));
 	},
 	function() { return wait(function() { return decorReady; }); }
@@ -1161,8 +1205,8 @@ navigate: async(function(options, callback) {
  This means that before and after listeners are registered as a pair, which is desirable.
  FIXME pageOut and pageIn handlers should receive oldURL, newURL
 */
-function hide(node) { node.setAttribute("hidden", "hidden"); }
-function show(node) { node.removeAttribute("hidden"); }
+function hide(msg) { msg.node.setAttribute("hidden", "hidden"); }
+function show(msg) { msg.node.removeAttribute("hidden"); }
 function noop() {}
 
 decor.options = {
@@ -1189,29 +1233,31 @@ panner.options = {
 	pageIn: { before: noop, after: noop }
 }
 
-var decor_notify = function(phase, type, target, detail) {
-	var handler = decor.options[type];
+var notify = function(msg) {
+	var module = Meeko[msg.module];
+	var handler = module.options[msg.type];
 	if (!handler) return;
 	var listener;
-	if (handler[phase]) listener = handler[phase];
-	else listener =
-		(type == "decorOut") ?
-			(phase == "before") ? handler : null :
-			(phase == "after") ? handler : null;
-	if (typeof listener == "function") isolate(function() { listener(detail); }); // TODO isFunction(listener)
-}
 
-var notify = function(phase, type, target, detail) {
-	var handler = panner.options[type];
-	if (!handler) return;
-	if ((type == "nodeRemoved" || type == "nodeInserted") && target != document.body) return; // ignoring mutations in head
-	var listener;
-	if (handler[phase]) listener = handler[phase];
-	else listener =
-		(type == "nodeRemoved" || type == "pageOut") ?
-			(phase == "before") ? handler : null :
-			(phase == "after") ? handler : null;
-	if (typeof listener == "function") isolate(function() { listener(detail); }); // TODO isFunction(listener)
+	if (handler[msg.stage]) listener = handler[msg.stage];
+
+	else switch(msg.module) {
+	case "panner":
+		listener =	(msg.type == "nodeRemoved" || msg.type == "pageOut") ?
+			(msg.stage == "before") ? handler : null :
+			(msg.stage == "after") ? handler : null;
+		break;
+	case "decor":
+		listener = (msg.type == "decorOut") ?
+			(msg.stage == "before") ? handler : null :
+			(msg.stage == "after") ? handler : null;
+		break;
+	default:
+		throw msg.module + " is invalid module";
+		break;
+	}
+
+	if (typeof listener == "function") isolate(function() { listener(msg); }); // TODO isFunction(listener)
 }
 
 var page = async(function(loader, callback) {
@@ -1247,20 +1293,42 @@ var page = async(function(loader, callback) {
 var pageOut = async(function(cb) {
 	if (!getDecorMeta()) throw "Cannot page if the document has not been decorated";
 
-	notify("before", "pageOut", document);
+	notify({
+		module: "panner",
+		stage: "before",
+		type: "pageOut",
+		target: document
+	});
 
 	each(decor.placeHolders, function(id, node) {
 		var target = $id(id);
-		notify("before", "nodeRemoved", document.body, target);
+		notify({
+			module: "panner",
+			stage: "before",
+			type: "nodeRemoved",
+			target: document.body,
+			node: target // TODO rename `target` variable
+		});
 	});
 
 	delay(function() { // NOTE external context can abort this delayed call with cb.abort();
 		each(decor.placeHolders, function(id, node) {
 			var target = $id(id);
 			replaceNode(target, node);
-			notify("after", "nodeRemoved", document.body, target);
+			notify({
+				module: "panner",
+				stage: "after",
+				type: "nodeRemoved",
+				target: document.body,
+				node: target
+			});
 		});
-		notify("after", "pageOut", document);
+		notify({
+			module: "panner",
+			stage: "after",
+			type: "pageOut",
+			target: document
+		});
 	}, panner.options.duration, cb);
 });
 
@@ -1269,7 +1337,13 @@ var pageIn = async(function(doc, cb) {
 	queue([
 
 	function() {
-		notify("before", "pageIn", document, doc);
+		notify({
+			module: "panner",
+			stage: "before",
+			type: "pageIn",
+			target: document,
+			node: doc
+		});
 		page_prepare(doc);
 	},
 	function() {
@@ -1279,11 +1353,25 @@ var pageIn = async(function(doc, cb) {
 		var nodeList = [];
 		var contentStart = doc.body.firstChild;
 		if (contentStart) placeContent(contentStart,
-			function(node) { notify("before", "nodeInserted", document.body, node); },
+			function(node) {
+				notify({
+					module: "panner",
+					stage: "before",
+					type: "nodeInserted",
+					target: document.body,
+					node: node
+				});
+			},
 			function(node) {
 				nodeList.push(node);
 				delay(function() {
-					notify("after", "nodeInserted", document.body, node);
+					notify({
+						module: "panner",
+						stage: "after",
+						type: "nodeInserted",
+						target: document.body,
+						node: node
+					});
 					remove(nodeList, node);
 					if (!nodeList.length) cb.complete();
 				});
@@ -1293,7 +1381,12 @@ var pageIn = async(function(doc, cb) {
 	function() { return wait(function() { return scriptQueue.isEmpty(); }); },
 	function() {
 		scrollToId(location.hash && location.hash.substr(1));
-		notify("after", "pageIn", document);
+		notify({
+			module: "panner",
+			stage: "after",
+			type: "pageIn",
+			target: document
+		});
 	}
 
 	], cb);
