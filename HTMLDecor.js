@@ -1170,7 +1170,7 @@ navigate: async(function(options, callback) {
 	var decorURL = decor.options.lookup(url);
 	if (typeof decorURL !== "string" || URL(document.URL).resolve(decorURL) !== decor.current.url) {
 		removeEvent(window, "unload", panner.onUnload);
-		addEvent(window, "unload", noop); // Disable bfcache
+		addEvent(window, "unload", function() {}); // Disable bfcache
 		var modifier = options.replace ? "replace" : "assign";
 		location[modifier](url);
 		callback.complete(msg);	// TODO should this be an error??
