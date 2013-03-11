@@ -1173,7 +1173,7 @@ navigate: async(function(options, callback) {
 		addEvent(window, "unload", function() {}); // Disable bfcache
 		var modifier = options.replace ? "replace" : "assign";
 		location[modifier](url);
-		callback.complete(msg);	// TODO should this be an error??
+		callback.complete();	// TODO should this be an error??
 		return;
 	}
 
