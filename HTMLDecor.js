@@ -922,7 +922,7 @@ decorate: async(function(decorURL, callback) {
 			module: "decor",
 			stage: "before",
 			type: "decorIn",
-			node: doc,
+			node: doc
 		});
 		mergeHead(doc, true);
 	},
