@@ -141,9 +141,19 @@ else isolate = function(fn) {
 return isolate;
 })();
 
-var Callback = function() {
+var Callback = function(handlers) {
+	if (!(this instanceof Callback)) return new Callback(handlers);
 	this.isAsync = true;
 	this.called = false;
+	switch (typeof handlers) {
+	case "object":
+		extend(this, handlers); // TODO should check fields
+		break;
+	case "function":
+		this.onComplete = handlers;
+		break;
+	default: break; // TODO
+	}
 }
 
 extend(Callback.prototype, {
@@ -528,10 +538,12 @@ load: async(function(method, url, data, details, cb) {
 	
 	queue([
 		async(function(qb) {
-			htmlLoader.request(method, url, data, details, {
-				onComplete: function(result) { doc = result; qb.complete(); },
-				onError: function(err) { logger.error(err); qb.error(err); }
-			});
+			htmlLoader.request(method, url, data, details,
+				new Callback({
+					onComplete: function(result) { doc = result; qb.complete(); },
+					onError: function(err) { logger.error(err); qb.error(err); }
+				})
+			);
 		}),
 		function() {
 			if (htmlLoader.normalize) htmlLoader.normalize(doc, details);
@@ -544,7 +556,7 @@ load: async(function(method, url, data, details, cb) {
 
 serialize: function(data, details) { return ""; },  // TODO
 
-request: async(function(method, url, data, details, cb) {
+request: function(method, url, data, details, cb) {
 	var sendText = null;
 	if (/POST/i.test(method)) {
 		throw "POST not supported"; // FIXME
@@ -557,7 +569,7 @@ request: async(function(method, url, data, details, cb) {
 		throw uc(method) + ' not supported';
 	}
 	doRequest(method, url, sendText, details, cb);
-}),
+},
 
 normalize: function(doc, details) {}
 
