@@ -649,7 +649,7 @@ An example of configuration might be
 				if (!/GET/i.test(method)) throw "Only supporting GET requests";
 				var rq = new XMLHttpRequest;
 				rq.open(method, url, true);
-				rq.setRequestHeader('Accept-Type', 'application/json');
+				rq.setRequestHeader('Accept', 'application/json');
 				rq.onreadystatechange = onchange;
 				rq.send();
 				function onchange() {
