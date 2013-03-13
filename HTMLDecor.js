@@ -44,13 +44,9 @@ var remove = function(a, item) {
 		return;
 	}	
 }
-var forEach = ([].forEach) ?  // TODO is this feature detection worth-while?
-function(a, fn, context) { return [].forEach.call(a, fn, context); } :
-function(a, fn, context) { for (var n=a.length, i=0; i<n; i++) fn.call(context, a[i], i, a); }
+var forEach = function(a, fn, context) { for (var n=a.length, i=0; i<n; i++) fn.call(context, a[i], i, a); }
 
-var every = ([].every) ?  // TODO is this feature detection worth-while?
-function(a, fn, context) { return [].every.call(a, fn, context); } :
-function(a, fn, context) { 
+var every = function(a, fn, context) { 
 	for (var n=a.length, i=0; i<n; i++) {
 		if (!fn.call(context, a[i], i, a)) return false; 
 	}
@@ -60,16 +56,12 @@ function(a, fn, context) {
 var words = function(text) { return text.split(/\s+/); }
 
 var each = (Object.keys) ? // TODO is this feature detection worth-while?
-function(object, fn) {
-	var keys = Object.keys(object);
-	for (var n=keys.length, i=0; i<n; i++) {
-		var key = keys[i];
-		fn(key, object[key]);
-	}
+function(object, fn, context) {
+	forEach(Object.keys(object), function(key) { fn.call(context, key, object[key], object); });
 } : 
-function(object, fn) {
+function(object, fn, context) { // WARN won't work on native objects in old IE
 	for (slot in object) {
-		if (object.hasOwnProperty && object.hasOwnProperty(slot)) fn(slot, object[slot]);
+		if (object.hasOwnProperty && object.hasOwnProperty(slot)) fn.call(context, slot, object[slot], object);
 	}
 }
 
