@@ -382,7 +382,7 @@ if (timeout > 0) {
 var config = function() {
 	Meeko.DOM.isContentLoaded = isContentLoaded;
 	Meeko.DOM.HTMLParser.prototype.prepare = html5prepare;
-	Meeko.async.pollingInterval = bootOptions["polling_interval"];
+	Meeko.Async.pollingInterval = bootOptions["polling_interval"];
 	Meeko.decor.config({
 		decorReady: Viewport.unhide
 	});

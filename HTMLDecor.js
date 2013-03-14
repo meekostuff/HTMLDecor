@@ -135,7 +135,7 @@ return isolate;
 
 var Callback = function(handlers) {
 	if (!(this instanceof Callback)) return new Callback(handlers);
-	this.isAsync = true;
+	this.isCallback = true;
 	this.called = false;
 	switch (typeof handlers) {
 	case "object":
@@ -170,8 +170,8 @@ abort: function() { // NOTE abort could trigger an error, but there is an expect
 
 });
 
-function isAsync(obj) {
-	return (obj && obj.isAsync);
+function isCallback(obj) {
+	return (obj && obj.isCallback);
 }
 
 var async = function(fn) {
@@ -179,7 +179,7 @@ var async = function(fn) {
 		var nParams = fn.length, nArgs = arguments.length;
 		if (nArgs > nParams) throw "Too many parameters in async call";
 		var inCB = arguments[nParams - 1], cb;
-		if (isAsync(inCB)) cb = inCB;
+		if (isCallback(inCB)) cb = inCB;
 		else switch (typeof inCB) {
 			case "undefined": case "null":
 				cb = new Callback();
@@ -206,7 +206,6 @@ var async = function(fn) {
 		if (result) delay(function() { cb.complete(result) });
 		return cb;
 	}
-	wrapper.isAsync = true;
 	return wrapper;
 }
 
@@ -239,7 +238,7 @@ function waitback() {
 var wait = async(function(fn, waitCB) {
 	waitCB.hook = fn;
 	callbacks.push(waitCB);
-	if (!timerId) timerId = window.setInterval(waitback, async.pollingInterval); // NOTE polling-interval is configured below
+	if (!timerId) timerId = window.setInterval(waitback, Async.pollingInterval); // NOTE polling-interval is configured below
 	waitCB.onAbort = function() { remove(callbacks, waitCB); }
 });
 
@@ -278,7 +277,7 @@ var queue = async(function(fnList, queueCB) {
 				queueCB.error();
 				return;
 			}
-			if (isAsync(innerCB)) {
+			if (isCallback(innerCB)) {
 				innerCB.onComplete = queueback;
 				innerCB.onError = function() { queueCB.error(); }
 				return;
@@ -287,18 +286,18 @@ var queue = async(function(fnList, queueCB) {
 		queueCB.complete();
 	}
 	queueCB.onAbort = function() {
-		if (isAsync(innerCB)) innerCB.abort();
+		if (isCallback(innerCB)) innerCB.abort();
 		list = [];
 	}
 	queueback();
 });
 
-async.pollingInterval = defaults['polling_interval'];
+var Async = Meeko.Async || (Meeko.Async = {});
+Async.pollingInterval = defaults['polling_interval'];
 
-extend(async, {
-	isAsync: isAsync, Callback: Callback, delay: delay, wait: wait, until: until, queue: queue
+extend(Async, {
+	isCallback: isCallback, Callback: Callback, wrap: async, delay: delay, wait: wait, until: until, queue: queue
 });
-Meeko.async = async;
 
 /*
  ### DOM utility functions
@@ -567,7 +566,7 @@ normalize: function(doc, details) {}
 
 });
 
-var doRequest = async(function(method, url, sendText, details, cb) {
+var doRequest = function(method, url, sendText, details, cb) {
 	var xhr = window.XMLHttpRequest ?
 		new XMLHttpRequest() :
 		new ActiveXObject("Microsoft.XMLHTTP");
@@ -586,7 +585,7 @@ var doRequest = async(function(method, url, sendText, details, cb) {
 		var doc = parseHTML(new String(xhr.responseText), details.url);
 		cb.complete(doc);
 	}
-});
+}
 
 return HTMLLoader;
 
@@ -1563,4 +1562,3 @@ function getDecorMeta(doc) {
 // end decor defn
 
 })();
-
