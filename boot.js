@@ -35,7 +35,7 @@ var some = function(a, fn, context) {
 	}
 	return false;
 }
-var forEach = some; // some() is forEach() if fn() always returns falsish
+var forEach = some; // WARN some() is forEach() ONLY IF fn() always returns falsish (including nothing)
 
 var words = function(text) { return text.split(/\s+/); }
 
