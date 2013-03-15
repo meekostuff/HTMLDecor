@@ -231,6 +231,9 @@ Any `<link rel="stylesheet">` or `<style>` elements that have `@title="nodecor"`
 will be removed from the page before the decor document is applied, e.g.
 
 	<style title="nodecor">body { max-width: 72ex; }</style>
+	
+**NOTE:** this is done in the default `config.js`.
+If you want to remove or modify this behavior then do so in your site-specific `config.js`.
 
 ### Auxiliary content
 

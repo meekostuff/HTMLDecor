@@ -913,7 +913,6 @@ decorate: async(function(decorURL, callback) {
 	},
 	function() {
 		if (panner.options.normalize) isolate(function() { panner.options.normalize(document, { url: document.URL }); });
-		page_prepare(document);
 		marker = document.createElement("meta");
 		marker.name = "meeko-decor";
 		document.head.insertBefore(marker, document.head.firstChild);
@@ -1347,9 +1346,6 @@ var pageIn = async(function(doc, cb) {
 			target: document,
 			node: doc
 		});
-		page_prepare(doc);
-	},
-	function() {
 		mergeHead(doc, false);
 	},
 	async(function(cb) {
@@ -1448,19 +1444,6 @@ function mergeHead(doc, isDecor) {
 	});
 	// allow scripts to run
 	forEach($$("script", dstHead), function(script) { scriptQueue.push(script); }); // FIXME this breaks if a script inserts other scripts
-}
-
-function page_prepare(doc) {
-	var srcHead = doc.head;
-	forSiblings ("starting", srcHead.firstChild, function(node) { // remove nodes that match specified conditions
-		switch(tagName(node)) { 
-		case "style": case "link":
-			if (node.title.match(/^\s*nodecor\s*$/i)) break;
-			return;
-		default: return;
-		}
-		srcHead.removeChild(node);
-	});
 }
 
 function placeContent(content, beforeReplace, afterReplace) { // this should work for content from both internal and external documents

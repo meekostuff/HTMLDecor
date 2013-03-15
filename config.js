@@ -4,12 +4,48 @@ var logger = Meeko.logger;
 var _ = Meeko.stuff;
 var DOM = Meeko.DOM, $id = DOM.$id, $$ = DOM.$$;
 var URL = DOM.URL, baseURL = URL(document.URL);
+function toArray(list) { return [].slice.call(list, 0); }
 
 Meeko.decor.config({
+	/*
+	You SHOULD REMOVE the `detect(doc)` option and
+	REPLACE IT WITH a `lookup(url)` option:
+	
+		lookup: function(url) { return decorURL; }
+		
+	The decorURL can be dependent on anything, for-instance
+	+ device / window dimensions
+		- to provide optimal layout
+	+ browser
+		- to give minimal support to old browsers
+	+ a theme setting from cookie or localStorage
+		- allows you to test a decor-document on the live site
+	 */
+	
 	detect: function(doc) { return getDecorURL(doc); }
 });
 
-Meeko.panner.config({ // Should be called in your decor-document. These are just fallbacks.
+Meeko.panner.config({
+	normalize: function(doc, details) { // details contains the request `url` and `method`
+		
+		// This removes fallback <style> and <link>, determined by their @title
+		var nodecorTitle = 'nodecor'; // This is the (case-insensitive) value for the fallback @title
+		var srcHead = doc.head;
+		_.forEach(toArray(srcHead.childNodes), function(node) { // remove nodes that match specified conditions
+			switch(DOM.tagName(node)) { 
+			case "style": case "link":
+				var title = _.lc(_.trim(node.title));
+				if (title != nodecorTitle) return;
+				break;
+			default: return;
+			}
+			srcHead.removeChild(node);
+		});
+		
+		// YOUR NORMALIZE CODE GOES HERE
+	},
+	
+	// These SHOULD be set by your decor-document(s). This is just for backwards compat
 	duration: 0,
 	nodeRemoved: { before: hide, after: show },
 	nodeInserted: { before: hide, after: show },
