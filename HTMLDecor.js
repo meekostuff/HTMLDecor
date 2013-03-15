@@ -871,7 +871,6 @@ start: function() {
 	},
 	function() {
 		panner.contentURL = URL(document.URL).nohash;
-		addEvent(window, "unload", panner.onUnload);
 		
 		if (!history.pushState) return;
 		
@@ -1149,10 +1148,6 @@ onPopState: function(e) {
 	}
 },
 
-onUnload: function(e) {
-	pageOut();
-},
-
 assign: function(url, callback) {
 	panner.navigate({
 		url: url,
@@ -1171,8 +1166,6 @@ navigate: async(function(options, callback) {
 	var url = options.url;
 	var decorURL = decor.options.lookup(url);
 	if (typeof decorURL !== "string" || URL(document.URL).resolve(decorURL) !== decor.current.url) {
-		removeEvent(window, "unload", panner.onUnload);
-		addEvent(window, "unload", function() {}); // Disable bfcache
 		var modifier = options.replace ? "replace" : "assign";
 		location[modifier](url);
 		callback.complete();	// TODO should this be an error??
