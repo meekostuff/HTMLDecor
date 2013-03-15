@@ -85,7 +85,21 @@ this.LOG_LEVEL = levels[defaults['log_level']]; // DEFAULT. Options are read lat
 
 function $$(selector) { return document.getElementsByTagName(selector); }
 
-function getCurrentScript() { // TODO this won't work if script is dynamically inserted (or async / defer)
+document.head = $$('head')[0]; // FIXME should abort if there is no <head>
+
+function getBootScript() {
+	var script = document.currentScript;
+	if (script) return script;
+	/*
+	WARN this assumes boot-script is the last in the document 
+	This is guaranteed for the normal usage of:
+	- the boot-script is in the markup of the document
+	- the page is loaded normally
+	- the script DOES NOT have @async or @defer
+	In other cases - dynamic-insertion, document.write into an iframe -
+	the inserting code must ensure the script is last in document. 
+	This defeats the purpose of the Viewport hiding
+	*/
 	var allScripts = $$('script');
 	var script = allScripts[allScripts.length - 1];
 	return script;
@@ -141,7 +155,7 @@ function delay(callback, timeout) {
 
 var queue = (function() {
 
-var head = $$("head")[0]; // TODO is there always a <head>?
+var head = document.head;
 var marker = head.firstChild;
 
 function prepareScript(url, onload, onerror) {
@@ -304,7 +318,7 @@ var inlineTags = words(bootOptions['html5_inline_elements']);
 
 if (blockTags.length) { // FIXME add a test for html5 support. TODO what about inline tags?
 
-var head = $$("head")[0];
+var head = document.head;
 var fragment = document.createDocumentFragment();
 var style = document.createElement("style");
 fragment.appendChild(style); // NOTE on IE this realizes style.styleSheet 
@@ -333,7 +347,7 @@ return html5prepare;
  */
 var Viewport = (function() {
 
-var head = $$("head")[0];
+var head = document.head;
 var fragment = document.createDocumentFragment();
 var style = document.createElement("style");
 fragment.appendChild(style); // NOTE on IE this realizes style.styleSheet 
@@ -373,6 +387,13 @@ if (log_index != null) logger.LOG_LEVEL = log_index;
 
 html5prepare(document);
 
+var bootScript;
+if (Meeko.bootScript) bootScript = Meeko.bootScript; // hook for meeko-panner
+else {
+	bootScript = Meeko.bootScript = getBootScript();
+	if (document.body) logger.warn("Bootscript SHOULD be in <head> and MUST NOT have @async or @defer");
+}
+
 var timeout = bootOptions["hidden_timeout"];
 if (timeout > 0) {
 	Viewport.hide();
@@ -394,7 +415,7 @@ var start = function() {
 }
 
 var urlParams = {
-	bootscriptdir: getCurrentScript().src.replace(/\/[^\/]*$/, '/')
+	bootscriptdir: bootScript.src.replace(/\/[^\/]*$/, '/') // TODO this assumes no ?search or #hash
 }
 var htmldecor_script = bootOptions['htmldecor_script'];
 if (!htmldecor_script) throw "HTMLDecor script URL is not configured";

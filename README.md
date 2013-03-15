@@ -71,6 +71,11 @@ Installation
 3. Source the HTMLDecor boot-script into your pages, with this line in the `<head>` of each page 
 	
 		`<script src="/path/to/HTMLDecor/boot.js"></script>`
+		
+	The boot-script 
+	- MUST be in the `<head>` of the page
+	- MUST NOT have `@async` or `@defer`
+	- SHOULD be before any stylesheets - `<link rel="stylesheet" />` or `<style>`
 
 
 Quick Start

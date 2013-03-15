@@ -76,7 +76,15 @@ for your obligations if you intend to modify or distribute HTMLDecor or part the
 <li><p>Source the HTMLDecor boot-script into your pages, with this line in the <code>&lt;head&gt;</code> of each page </p>
 
 <pre><code>`&lt;script src="/path/to/HTMLDecor/boot.js"&gt;&lt;/script&gt;`
-</code></pre></li>
+</code></pre>
+
+<p>The boot-script </p>
+
+<ul>
+<li>MUST be in the <code>&lt;head&gt;</code> of the page</li>
+<li>MUST NOT have <code>@async</code> or <code>@defer</code></li>
+<li>SHOULD be before any stylesheets - <code>&lt;link rel="stylesheet" /&gt;</code> or <code>&lt;style&gt;</code></li>
+</ul></li>
 </ol>
 
 <h2>Quick Start</h2>
