@@ -400,7 +400,24 @@ if (timeout > 0) {
 	delay(Viewport.unhide, timeout);
 }
 
-var config = function() {
+var urlParams = {
+	bootscriptdir: bootScript.src.replace(/\/[^\/]*$/, '/') // TODO this assumes no ?search or #hash
+}
+
+function resolveScript(script) {
+	switch (typeof script) {
+	case "string": return resolveURL(script, urlParams);
+	case "function": return script;
+	default: return function() { /* dummy */ };
+	}
+}
+
+
+var htmldecor_script = bootOptions['htmldecor_script'];
+if (typeof htmldecor_script !== 'string') throw 'HTMLDecor script URL is not configured';
+htmldecor_script = bootOptions['htmldecor_script'] = resolveURL(htmldecor_script, urlParams);
+
+function config() {
 	Meeko.DOM.isContentLoaded = isContentLoaded;
 	Meeko.DOM.HTMLParser.prototype.prepare = html5prepare;
 	Meeko.Async.pollingInterval = bootOptions["polling_interval"];
@@ -409,25 +426,27 @@ var config = function() {
 	});
 }
 
-var start = function() {
+var config_script = bootOptions['config_script'];
+if (config_script instanceof Array) forEach(config_script, function(script, i, list) {
+	list[i] = resolveScript(script, urlParams);
+});
+else {
+	config_script = [ resolveScript(config_script) ];
+	bootOptions['config_script'] = config_script;
+}
+
+function start() {
 	if (bootOptions["autostart"]) Meeko.decor.start();
 	else Viewport.unhide();
 }
 
-var urlParams = {
-	bootscriptdir: bootScript.src.replace(/\/[^\/]*$/, '/') // TODO this assumes no ?search or #hash
-}
-var htmldecor_script = bootOptions['htmldecor_script'];
-if (!htmldecor_script) throw "HTMLDecor script URL is not configured";
-htmldecor_script = resolveURL(htmldecor_script, urlParams);
-var config_script = bootOptions['config_script'];
-if (config_script && typeof config_script == 'string') config_script = resolveURL(config_script, urlParams);
+var startupSequence = [].concat(
+	htmldecor_script,
+	config,
+	config_script,
+	start
+);
 
-queue([
-htmldecor_script,
-config,
-config_script || function() {},
-start
-], null, Viewport.unhide);
+queue(startupSequence, null, Viewport.unhide);
 
 })();
