@@ -4,7 +4,7 @@ var logger = Meeko.logger;
 var _ = Meeko.stuff;
 var DOM = Meeko.DOM, $id = DOM.$id, $$ = DOM.$$;
 var URL = DOM.URL, baseURL = URL(document.URL);
-function toArray(list) { return [].slice.call(list, 0); }
+function toArray(list) { var a = []; for (var n=list.length, i=0; i<n; i++) a[i] = list[i]; return a; }
 
 Meeko.decor.config({
 	/*
