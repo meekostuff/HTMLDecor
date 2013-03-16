@@ -158,11 +158,15 @@ var queue = (function() {
 var head = document.head;
 var marker = head.firstChild;
 
+var testScript = document.createElement('script');
+var supportsOnLoad = ('onload' in testScript) ||
+	(testScript.setAttribute('onload', 'void(0)'), typeof testScript.onload === 'function');
+
 function prepareScript(url, onload, onerror) {
 	var script = document.createElement('script');
 	script.onerror = onerror;
 	var loaded = false;
-	if ('onload' in script) script.onload = onload;
+	if (supportsOnLoad) script.onload = onload;
 	else if (script.readyState) script.onreadystatechange = function() { // WARN this was firing early in IE10. Luckily can use script.onload
 		if (loaded) return;
 		if (!script.parentNode) return; // onreadystatechange will always fire after insertion, but can fire before which messes up the queue
