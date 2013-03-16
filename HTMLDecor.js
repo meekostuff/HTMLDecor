@@ -105,7 +105,7 @@ if (window.dispatchEvent) {
 	window.addEventListener(evType, wrapper, false);
 	isolate = function(fn) {
 		testFn = fn;
-		var e = document.createEvent("CustomEvent");
+		var e = document.createEvent("Event");
 		e.initEvent("meeko-isolate", true, true);
 		window.dispatchEvent(e);
 		return complete.pop();
