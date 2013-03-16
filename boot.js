@@ -162,14 +162,15 @@ function prepareScript(url, onload, onerror) {
 	var script = document.createElement('script');
 	script.onerror = onerror;
 	var loaded = false;
-	if (script.readyState) script.onreadystatechange = function() {
+	if ('onload' in script) script.onload = onload;
+	else if (script.readyState) script.onreadystatechange = function() { // WARN this was firing early in IE10. Luckily can use script.onload
 		if (loaded) return;
 		if (!script.parentNode) return; // onreadystatechange will always fire after insertion, but can fire before which messes up the queue
-		if (script.readyState != "loaded" && script.readyState != "complete") return;
+		if (script.readyState != "loaded" && script.readyState != "complete") return; 
 		loaded = true;
 		onload();
 	}
-	else script.onload = onload;
+	else throw "Scripts don't support onload notifications in this browser"; // FIXME
 	script.src = url;
 	
 	if (script.async == true) {
