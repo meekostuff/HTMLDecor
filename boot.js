@@ -24,6 +24,9 @@ var Meeko = window.Meeko || (window.Meeko = {});
 if (/(^\?|&)(no_?decor|no_?boot)($|&)/.test(location.search)) return;
 if (Meeko && Meeko.options && Meeko.options['no_boot']) return;
 
+// TODO up-front feature testing to prevent boot on unsupportable platorms
+// e.g. where script.onload can't be used or faked
+
 /*
  ### JS utilities
  */
@@ -246,40 +249,31 @@ return queue;
  ### Get options
 */
 
+Meeko.cookieStorage = {
+
+getItem: function(sKey) { // See https://developer.mozilla.org/en-US/docs/DOM/Storage
+	  return unescape(document.cookie.replace(new RegExp("(?:^|.*;\\s*)" + escape(sKey).replace(/[\-\.\+\*]/g, "\\$&") + "\\s*\\=\\s*((?:[^;](?!;))*[^;]?).*"), "$1")); // TODO decodeURIComponent??
+}
+
+}
+
 var dataSources = [];
 
-try {
-	if (window.sessionStorage) {
-		var sessionOptions = parseJSON(sessionStorage.getItem(vendorPrefix + ".options"));
-		if (sessionOptions) dataSources.push( function(name) { return sessionOptions[name]; } );
+function addDataSource(name) {
+	try { // NOTE IE10 can throw on `localStorage.getItem()` - see http://stackoverflow.com/questions/13102116/access-denied-for-localstorage-in-ie10
+		// Also Firefox on `window.localStorage` - see http://meyerweb.com/eric/thoughts/2012/04/25/firefox-failing-localstorage/
+		var source = window[name] || Meeko[name];
+		if (!source) return;
+		var options = parseJSON(source.getItem(vendorPrefix + ".options"));
+		if (options) dataSources.push( function(name) { return options[name]; } );
+	} catch(error) {
+		logger.warn(name + ' inaccessible');
 	}
-} catch(error) {
-	logger.warn('sessionStorage defined but inaccessible');
 }
 
-if (!Meeko.options || !Meeko.options['ignore_cookie_options']) {
-	
-try {
-    function getCookieItem(sKey) { // See https://developer.mozilla.org/en-US/docs/DOM/Storage
-      return unescape(document.cookie.replace(new RegExp("(?:^|.*;\\s*)" + escape(sKey).replace(/[\-\.\+\*]/g, "\\$&") + "\\s*\\=\\s*((?:[^;](?!;))*[^;]?).*"), "$1")); // TODO decodeURIComponent??
-    }
-	var cookieOptions = parseJSON(getCookieItem(vendorPrefix + ".options"));
-	if (cookieOptions) dataSources.push( function(name) { return cookieOptions[name]; } );
-} catch(error) {
-	logger.warn('cookies inaccessible');
-}
-
-}
-
-try { // NOTE initial testing on IE10 showed attempting to get localStorage throws an access error
-	if (window.localStorage) {
-		var localOptions = parseJSON(localStorage.getItem(vendorPrefix + ".options"));
-		if (localOptions) dataSources.push( function(name) { return localOptions[name]; } );
-	}
-} catch(error) {
-	logger.warn('localStorage defined but inaccessible');	
-}
-
+addDataSource('sessionStorage');
+if (!Meeko.options || !Meeko.options['ignore_cookie_options']) addDataSource('cookieStorage');
+addDataSource('localStorage');
 if (Meeko.options) dataSources.push( function(name) { return Meeko.options[name]; } )
 
 var getData = function(name, type) {
