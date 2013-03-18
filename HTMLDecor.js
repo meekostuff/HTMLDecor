@@ -3,14 +3,15 @@
  * Mozilla Public License v2.0 (http://mozilla.org/MPL/2.0/)
  */
 
-// TODO substantial error handling and notification needs to be added
-// Also more isolation.
-// <link rel="self" />
-// Would be nice if more of the internal functions were called as method, eg DOM.isContentLoaded()...
-// ... this would allow the boot-script to modify them as appropriate
-
-// FIXME Is javascript even supported for different media devices? 
-// e.g. will <link rel="meeko-decor" media="print" /> even work?
+/* TODO
+    + substantial error handling and notification needs to be added
+    + more isolation
+    + <link rel="self" />
+    + Would be nice if more of the internal functions were called as method, eg DOM.isContentLoaded()...
+        this would allow the boot-script to modify them as appropriate
+    + Up-front feature testing to prevent boot on unsupportable platorms...
+        e.g. can't create HTML documents
+ */
 
 // FIXME for IE7, IE8 sometimes XMLHttpRequest is in a detectable but not callable state
 // This is usually fixed by refreshing, or by the following work-around.
@@ -397,14 +398,14 @@ var copyAttributes = function(node, srcNode) { // implements srcNode.cloneNode(f
 	return node;
 }
 
-var createDocument =
-document.implementation.createHTMLDocument && function() {
+var createDocument = // TODO this doesn't handle old non-IE browsers
+document.implementation.createHTMLDocument && function() { // modern browsers
 	var doc = document.implementation.createHTMLDocument("");
 	doc.removeChild(doc.documentElement);
 	return doc;
 } ||
 document.createDocumentFragment().getElementById && function() { return document.createDocumentFragment(); } || // IE <= 8 
-function() { return document.cloneNode(false); } 
+function() { return document.cloneNode(false); }  // old IE
 
 var scrollToId = function(id) {
 	if (id) {
