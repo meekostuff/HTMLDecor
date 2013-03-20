@@ -875,13 +875,12 @@ start: function() {
 		
 		if (!history.pushState) return;
 		
-		history.replaceState({"meeko-decor": true }, null); // otherwise there will be no popstate when returning to original URL
-		window.addEventListener("hashchange", function(e) {
-			history.replaceState({"meeko-decor": true }, null);
-		}, true);
 		// NOTE fortuitously all the browsers that support pushState() also support addEventListener() and dispatchEvent()
 		window.addEventListener("click", function(e) { panner.onClick(e); }, true);
 		window.addEventListener("popstate", function(e) { panner.onPopState(e); }, true);
+
+		panner.replaceState(); // otherwise there will be no popstate when returning to original URL
+		window.addEventListener('scroll', function(e) { panner.saveScroll(); });
 	}
 		
 	]);
@@ -1044,7 +1043,7 @@ decorate: async(function(decorURL, callback) {
 			type: "pageIn",
 			target: document
 		});
-		scrollToId(location.hash && location.hash.substr(1));
+		// scrollToId(location.hash && location.hash.substr(1));
 	},
 	function() { return wait(function() { return decorReady; }); }
 
@@ -1121,8 +1120,9 @@ onClick: function(e) {
 },
 
 onPageLink: function(url) {	// TODO Need to handle anchor links. The following just replicates browser behavior
-	history.pushState({"meeko-decor": true}, null, url);
+	panner.pushState(url);
 	scrollToId(URL(url).hash.substr(1));
+	panner.saveScroll();
 },
 
 onSiteLink: function(url) {	// Now attempt to pan
@@ -1130,22 +1130,25 @@ onSiteLink: function(url) {	// Now attempt to pan
 },
 
 onPopState: function(e) {
-	if (!e.state || !e.state["meeko-decor"]) return;
+	var state = e.state;
+	if (!state || !state["meeko-panner"]) return;
 	if (e.stopImmediatePropagation) e.stopImmediatePropagation();
 	else e.stopPropagation();
 	// NOTE there is no default-action for popstate
+	
 	var newURL = URL(document.URL).nohash;
 	if (newURL != panner.contentURL) {
-		scrollToId();
 		var loader = async(function(cb) {
 			var method = 'GET';
 			panner.options.load(method, newURL, null, { method: method, url: newURL }, cb);
 		});
-		page(loader);
+		page(loader, function() {
+			panner.restoreScroll(state);
+		});
 		panner.contentURL = newURL;
 	}
 	else {
-		scrollToId(location.hash && location.hash.substr(1));
+		panner.restoreScroll(state);
 	}
 },
 
@@ -1181,7 +1184,10 @@ navigate: async(function(options, callback) {
 	page(loader, {
 		
 	onComplete: function(msg) {
-		panner.contentURL = URL(document.URL).nohash;
+		var oURL = URL(document.URL);
+		panner.contentURL = oURL.nohash;
+		scrollToId(oURL.hash && oURL.hash.substr(1));
+		panner.saveScroll();
 		callback.complete(msg);
 	}
 	
@@ -1191,8 +1197,26 @@ navigate: async(function(options, callback) {
 	// This happens after the page load has initiated and after the pageOut.before handler
 	// TODO
 	var modifier = options.replace ? "replaceState" : "pushState";
-	history[modifier]({"meeko-decor": true }, null, url);	
-})
+	panner[modifier](url);
+}),
+
+pushState: function(url) {
+	history.pushState({ 'meeko-panner': true, pageXOffset: 0, pageYOffset: 0 }, null, url || null);
+},
+
+replaceState: function(url) {
+	history.replaceState({ 'meeko-panner': true, pageXOffset: 0, pageYOffset: 0 }, null, url || null);
+},
+
+saveScroll: function() {
+	history.replaceState({ 'meeko-panner': true, pageXOffset: window.pageXOffset, pageYOffset: window.pageYOffset }, null);	
+},
+
+restoreScroll: function(state) {
+	if (!state) state = history.state;
+	// if (!state['meeko-panner']) return;
+	window.scroll(state.pageXOffset, state.pageYOffset);
+}
 
 });
 
@@ -1275,9 +1299,6 @@ var page = async(function(loader, callback) {
 		}
 	}),
 	function() { return wait(function() { return ready; }); },
-	function() {
-		scrollToId();
-	},
 	// we don't get to here if location.replace() was called
 	function() {
 		return pageIn(doc);
@@ -1373,7 +1394,6 @@ var pageIn = async(function(doc, cb) {
 	}),
 	function() { return wait(function() { return scriptQueue.isEmpty(); }); },
 	function() {
-		scrollToId(location.hash && location.hash.substr(1));
 		notify({
 			module: "panner",
 			stage: "after",
