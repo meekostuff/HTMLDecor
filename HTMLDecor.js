@@ -413,7 +413,6 @@ var scrollToId = function(id) {
 		if (el) el.scrollIntoView(true);
 	}
 	else window.scroll(0, 0);
-	document.documentElement.scrollHeight; // force page reflow
 }
 
 var addEvent = 
@@ -871,6 +870,7 @@ start: function() {
 		return decor.decorate(decorURL); // FIXME what if decorate fails??
 	},
 	function() {
+		scrollToId(location.hash && location.hash.substr(1));
 		panner.contentURL = URL(document.URL).nohash;
 		
 		if (!history.pushState) return;
@@ -879,8 +879,22 @@ start: function() {
 		window.addEventListener("click", function(e) { panner.onClick(e); }, true);
 		window.addEventListener("popstate", function(e) { panner.onPopState(e); }, true);
 
-		panner.replaceState(); // otherwise there will be no popstate when returning to original URL
-		window.addEventListener('scroll', function(e) { panner.saveScroll(); });
+		window.addEventListener('scroll', function(e) { panner.saveScroll(); }, false); // NOTE first scroll after popstate might be cancelled
+		/*
+			If this is the landing page then `history.state` will be null.
+			But if there was a navigation back / forwards sequence then there could be `state`.
+			Ideally the page would be in bfcache and this startup wouldn't even run,
+			but that doesn't seem to work on Chrome & IE10.
+		*/
+		var state = history.state;
+		if (panner.ownsState(state)) {
+			panner.updateState(state);
+			panner.restoreScroll(state);
+		}
+		else {
+			panner.replaceState(); // otherwise there will be no popstate when returning to original URL
+			panner.saveScroll();
+		}
 	}
 		
 	]);
@@ -1043,7 +1057,6 @@ decorate: async(function(decorURL, callback) {
 			type: "pageIn",
 			target: document
 		});
-		// scrollToId(location.hash && location.hash.substr(1));
 	},
 	function() { return wait(function() { return decorReady; }); }
 
@@ -1122,7 +1135,6 @@ onClick: function(e) {
 onPageLink: function(url) {	// TODO Need to handle anchor links. The following just replicates browser behavior
 	panner.pushState(url);
 	scrollToId(URL(url).hash.substr(1));
-	panner.saveScroll();
 },
 
 onSiteLink: function(url) {	// Now attempt to pan
@@ -1131,11 +1143,12 @@ onSiteLink: function(url) {	// Now attempt to pan
 
 onPopState: function(e) {
 	var state = e.state;
-	if (!state || !state["meeko-panner"]) return;
+	if (!panner.ownsState(state)) return;
 	if (e.stopImmediatePropagation) e.stopImmediatePropagation();
 	else e.stopPropagation();
 	// NOTE there is no default-action for popstate
 	
+	var complete = false;
 	var newURL = URL(document.URL).nohash;
 	if (newURL != panner.contentURL) {
 		var loader = async(function(cb) {
@@ -1144,11 +1157,35 @@ onPopState: function(e) {
 		});
 		page(loader, function() {
 			panner.restoreScroll(state);
+			complete = true;
 		});
 		panner.contentURL = newURL;
 	}
-	else {
+	else delay(function() {
 		panner.restoreScroll(state);
+		complete = true;
+	}, Async.pollingInterval);
+	
+	/*
+	  All browsers seem to scroll the page around the popstate event.
+	  This causes the page to jump at popstate, as though the content of the incoming state is already present.
+	  There is an associated scroll event within a couple of milliseconds,
+	  so the following listens for that event and restores the page offsets from the outgoing state.
+	  If there is no scroll event then it is effectively a no-op. 
+	*/
+	var oldState = panner.state;
+	panner.updateState(state);
+	window.scroll(oldState.pageXOffset, oldState.pageYOffset); // TODO IE10 sometimes scrolls visibly before `scroll` event. This might help.
+	window.addEventListener('scroll', undoScroll, true);
+	var count = 0;
+	function undoScroll(scrollEv) { // undo the popstate triggered scroll if appropriate
+		if (complete) {
+			window.removeEventListener('scroll', undoScroll, true);
+			return;
+		}
+		scrollEv.stopPropagation(); // prevent the saveScroll function
+		scrollEv.preventDefault(); // TODO should really use this
+		window.scroll(oldState.pageXOffset, oldState.pageYOffset);
 	}
 },
 
@@ -1187,7 +1224,6 @@ navigate: async(function(options, callback) {
 		var oURL = URL(document.URL);
 		panner.contentURL = oURL.nohash;
 		scrollToId(oURL.hash && oURL.hash.substr(1));
-		panner.saveScroll();
 		callback.complete(msg);
 	}
 	
@@ -1200,16 +1236,30 @@ navigate: async(function(options, callback) {
 	panner[modifier](url);
 }),
 
+ownsState: function(state) {
+	if (!state) state = history.state;
+	if (!state) return false;
+	return !!state['meeko-panner'];
+},
+
 pushState: function(url) {
-	history.pushState({ 'meeko-panner': true, pageXOffset: 0, pageYOffset: 0 }, null, url || null);
+	panner.state = { 'meeko-panner': true, pageXOffset: 0, pageYOffset: 0 };
+	history.pushState(panner.state, null, url || null);
 },
 
 replaceState: function(url) {
-	history.replaceState({ 'meeko-panner': true, pageXOffset: 0, pageYOffset: 0 }, null, url || null);
+	panner.state = { 'meeko-panner': true, pageXOffset: 0, pageYOffset: 0 };
+	history.replaceState(panner.state, null, url || null);
+},
+
+updateState: function(state) { // called from popstate
+	if (!state) state = history.state;
+	panner.state = extend({}, state);	
 },
 
 saveScroll: function() {
-	history.replaceState({ 'meeko-panner': true, pageXOffset: window.pageXOffset, pageYOffset: window.pageYOffset }, null);	
+	panner.state = { 'meeko-panner': true, pageXOffset: window.pageXOffset, pageYOffset: window.pageYOffset };
+	history.replaceState(panner.state, null);	
 },
 
 restoreScroll: function(state) {
