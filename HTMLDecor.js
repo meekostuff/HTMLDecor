@@ -1341,7 +1341,7 @@ var page = async(function(loader, callback) {
 	async(function(cb) {
 		if (typeof loader == "function") loader({
 			onComplete: function(result) { doc = result; if (!outCB.called) outCB.abort(); cb.complete(); },
-			onError: function() { logger.error("HTMLLoader failed for " + url); cb.error(); }		
+			onError: function() { logger.error("HTMLLoader failed"); cb.error(); }		
 		});
 		else {
 			doc = loader;
@@ -1548,35 +1548,23 @@ function decor_insertBody(doc) {
 }
 
 var scriptQueue = new function() {
+
+/*
+ We want <script>s to execute in document order (unless @async present)
+ but also want <script src>s to download in parallel.
+ The script queue inserts scripts until it is paused on a blocking script.
+ The onload (or equivalent) or onerror handlers of the blocking script restart the queue.
+ Inline <script> and <script src="..." async> are never blocking.
+ Sync <script src> are blocking, but if `script.async=false` is supported by the browser
+ then only the last <script src> (in a series of sync scripts) needs to pause the queue. See
+	http://wiki.whatwg.org/wiki/Dynamic_Script_Execution_Order#My_Solution
+ Script preloading is always performed, even if the browser doesn't support it. See
+	http://wiki.whatwg.org/wiki/Dynamic_Script_Execution_Order#readyState_.22preloading.22
+*/
+var queue = [],
+	pending = false,
+	blockingScript;
 	
-var queue = [], pending = false, blockingScript, onClose;
-
-var queueScript = function(script, node) {
-	queue.push({ script: script, node: node });
-	if (blockingScript) return;
-	processQueue();
-}
-
-var processQueue = function() {
-	if (pending) return;
-	delay(_processQueue);
-	pending = true;
-}
-
-var _processQueue = function() {
-	pending = false;
-	blockingScript = null;
-	while (!blockingScript && queue.length > 0) {
-		var spec = queue.shift(), script = spec.script, node = spec.node;
-		if (script.src && !script.getAttribute("async")) {
-			blockingScript = spec;
-			addEvent(script, "load", processQueue); // FIXME need onreadystatechange in IE
-			addEvent(script, "error", processQueue);
-		}
-		replaceNode(node, script);
-	}
-}
-
 this.push = function(node) {
 	if (!/^text\/javascript\?disabled$/i.test(node.type)) return;
 	var script = document.createElement("script");
@@ -1592,6 +1580,64 @@ this.push = function(node) {
 
 this.isEmpty = function() {
 	return (queue.length <= 0 && !blockingScript);
+}
+
+var testScript = document.createElement('script'),
+	supportsOnLoad = (testScript.setAttribute('onload', 'void(0)'), typeof testScript.onload === 'function'),
+	supportsSync = (testScript.async === true);
+
+var queueScript = function(script, node) {
+	queue.push({ script: script, node: node });
+	if (blockingScript) return;
+	processQueue();
+}
+
+var processQueue = function(e) {
+	if (e) {
+		var script = e.target || e.srcElement;
+		removeListeners(script);
+	}
+	if (pending) return;
+	delay(_processQueue);
+	pending = true;
+}
+
+var _processQueue = function() {
+	pending = false;
+	blockingScript = null;
+	while (!blockingScript && queue.length > 0) {
+		var spec = queue.shift(), script = spec.script, node = spec.node, nextScript = queue.length && queue[0].script;
+		if (script.src && !script.getAttribute("async") && (!supportsSync || !nextScript || !nextScript.src || nextScript.getAttribute("async"))) {
+			blockingScript = spec;
+			addListeners(script);
+		}
+		if (supportsSync && !script.getAttribute('async')) script.async = false;
+		replaceNode(node, script);
+	}
+}
+
+function addListeners(script) {
+	if (supportsOnLoad) addEvent(script, "load", processQueue);
+	else addEvent(script, 'readystatechange', readyStateHandler);
+	addEvent(script, "error", processQueue); // TODO error message? browser generates one	
+}
+
+function removeListeners(script) {
+	if (supportsOnLoad) removeEvent(script, 'load', processQueue);
+	else removeEvent(script, 'readystatechange', readyStateHandler);
+	removeEvent(script, 'error', processQueue);		
+}
+
+function readyStateHandler(e) { // for IE <= 8 which don't support script.onload
+	var script = e.target || e.srcElement;
+	if (script.complete) return;
+	switch (script.readyState) {
+	case "loaded": case "complete":
+		script.complete = true;
+		processQueue(e);
+		break;
+	default: break;
+	}	
 }
 
 }
