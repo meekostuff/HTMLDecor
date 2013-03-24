@@ -32,7 +32,13 @@ if (Meeko && Meeko.options && Meeko.options['no_boot']) return;
  */
 var document = window.document;
 
-var some = function(a, fn, context) { 
+function each(object, fn, context) { // WARN won't work on native objects in old IE
+	for (slot in object) {
+		if (object.hasOwnProperty && object.hasOwnProperty(slot)) fn.call(context, slot, object[slot], object);
+	}
+}
+
+function some(a, fn, context) { 
 	for (var n=a.length, i=0; i<n; i++) {
 		if (fn.call(context, a[i], i, a)) return true; 
 	}
@@ -40,7 +46,7 @@ var some = function(a, fn, context) {
 }
 var forEach = some; // WARN some() is forEach() ONLY IF fn() always returns falsish (including nothing)
 
-var words = function(text) { return text.split(/\s+/); }
+function words(text) { return text.split(/\s+/); }
 
 var parseJSON = function(text) { // NOTE this allows code to run. This is a feature, not a bug. I think.
 	try { return ( Function('return ( ' + text + ' );') )(); }
@@ -123,26 +129,51 @@ var addEvent =
 	document.attachEvent && function(node, event, fn) { return node.attachEvent("on" + event, fn); } ||
 	function(node, event, fn) { node["on" + event] = fn; }
 
+var removeEvent = 
+	document.removeEventListener && function(node, event, fn) { return node.removeEventListener(event, fn, false); } ||
+	document.detachEvent && function(node, event, fn) { return node.detachEvent("on" + event, fn); } ||
+	function(node, event, fn) { if (node["on" + event] == fn) node["on" + event] = null; }
+
 var isContentLoaded = (function() { // TODO perhaps remove listeners after load detected
 // WARN this function assumes the script is included in the page markup so it will run before DOMContentLoaded, etc
 
 var loaded = false;
+
+function isContentLoaded() {
+	return loaded;
+}
+
+(function() { 
+	
+var listeners = {
+	'readystatechange': onChange,
+	'DOMContentLoaded': onLoaded,
+	'load': onLoaded
+}
+
+addListeners(document);
+
 function onLoaded(e) {
 	if (e.target == document) loaded = true;
 	if (document.readyState == "complete") loaded = true;
+	if (loaded) removeListeners(document);
 }
+
 function onChange(e) {
 	var readyState = document.readyState;
 	if (readyState == "loaded" || readyState == "complete") loaded = true;
+	if (loaded) removeListeners(document);
 }
 
-addEvent(document, "readystatechange", onChange); 
-addEvent(document, "DOMContentLoaded", onLoaded);
-addEvent(document, "load", onLoaded);
-
-var isContentLoaded = function() {
-	return loaded;
+function addListeners(node) {
+	each(listeners, function(type, handler) { addEvent(node, type, handler); });
 }
+
+function removeListeners(node) {
+	each(listeners, function(type, handler) { removeEvent(node, type, handler); });
+}
+
+})();
 
 return isContentLoaded;
 
@@ -161,23 +192,9 @@ var queue = (function() {
 var head = document.head;
 var marker = head.firstChild;
 
-var testScript = document.createElement('script');
-var supportsOnLoad = ('onload' in testScript) ||
-	(testScript.setAttribute('onload', 'void(0)'), typeof testScript.onload === 'function');
-
 function prepareScript(url, onload, onerror) {
 	var script = document.createElement('script');
-	script.onerror = onerror;
-	var loaded = false;
-	if (supportsOnLoad) script.onload = onload;
-	else if (script.readyState) script.onreadystatechange = function() { // WARN this was firing early in IE10. Luckily can use script.onload
-		if (loaded) return;
-		if (!script.parentNode) return; // onreadystatechange will always fire after insertion, but can fire before which messes up the queue
-		if (script.readyState != "loaded" && script.readyState != "complete") return; 
-		loaded = true;
-		onload();
-	}
-	else throw "Scripts don't support onload notifications in this browser"; // FIXME
+	addListeners(script, onload, onerror);
 	script.src = url;
 	
 	if (script.async == true) {
@@ -239,6 +256,46 @@ function queue(fnList, oncomplete, onerror) {
 		if (oncomplete) oncomplete();
 		return;
 	}
+}
+
+var testScript = document.createElement('script');
+var supportsOnLoad = ('onload' in testScript) ||
+	(testScript.setAttribute('onload', 'void(0)'), typeof testScript.onload === 'function');
+
+if (!supportsOnLoad && !testScript.readyState) throw "script.onload not supported in this browser";
+
+function addListeners(script, onload, onerror) {
+	script.onerror = onError;
+	if (supportsOnLoad) script.onload = onLoad;
+	else script.onreadystatechange = onChange;
+
+	function onLoad() {
+		removeListeners(script);
+		onload();
+	}
+	
+	function onError() {
+		removeListeners(script);
+		onerror();
+	}
+	
+	function onChange() { // for IE <= 8 which don't support script.onload
+		if (!script.parentNode) return;
+		switch (script.readyState) {
+		case "loaded": case "complete":
+			removeListeners(script);
+			onload();
+			break;
+		default: break;
+		}	
+	}
+
+	function removeListeners(script) {
+		script.onerror = null;
+		if (supportsOnLoad) script.onload = null;
+		else script.onreadystatechange = null;
+	}
+	
 }
 
 return queue;

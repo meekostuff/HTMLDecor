@@ -1633,7 +1633,7 @@ function readyStateHandler(e) { // for IE <= 8 which don't support script.onload
 	if (script.complete) return;
 	switch (script.readyState) {
 	case "loaded": case "complete":
-		script.complete = true;
+		script.complete = true; // TODO probably not necessary if removeListeners() here
 		processQueue(e);
 		break;
 	default: break;
