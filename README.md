@@ -81,7 +81,7 @@ Installation
 Quick Start
 -----------
 
-**This is the old way of specifying decor, but is conceptually easiest to understand.**
+**This is no longer the preferred way of specifying decor, but is conceptually easiest to understand.**
 **If you are new to HTMLDecor then read this documentation straight through.**
 **Otherwise feel free to skip to the [Configuration](#configuration) section first.**
 
@@ -393,10 +393,10 @@ or with `history.replaceState()` behavior:
 `<script>` handling
 -------------------
 
-- Scripts in the page are not handled by HTMLDecor - they execute at the expected time in the browser's script handling.
-The page does not need and SHOULD NOT have scripts - they SHOULD all be part of the decor. 
+- Scripts in the landing-page are not handled by HTMLDecor - they execute at the expected time in the browser's script handling.
+**RECOMMENDATION:** The page does not need and SHOULD NOT have scripts - they SHOULD all be part of the decor. 
 
-- All scripts which are not in the initial page (that is, decor content or panned page content) are executed via dynamic script insertion, 
+- All scripts which are not in the landing-page (that is, decor content or panned page content) are executed via dynamic script insertion, 
 but behave **like** scripts that are part of the page content. Page content is not blocked, but earlier scripts block later scripts 
 unless the earlier script has the `src` and `async` attributes. 
 
@@ -411,7 +411,7 @@ but BEFORE the page content is MERGED WITH the decor.
 
 - When panning occurs, scripts in the `<head>` of the next page are **enabled** AFTER all the content in the `<head>` of the next page is MERGED WITH the page. 
 Scripts in the `<body>` of the next page are **enabled** AFTER the content in the `<body>` of the next page is MERGED WITH the page.
-You do not need and SHOULD NOT have scripts in any page (other than the decor document). 
+**RECOMMENDATION:** You do not need and SHOULD NOT have scripts in any page (other than the decor document). 
 
 
 Debugging
@@ -512,7 +512,7 @@ The boot-script has the following options (default values in **bold**).
 - autostart: **true**, false
 - hidden_timeout: **3000** (milliseconds)
 - html5\_block\_elements: **"article aside figcaption figure footer header hgroup main nav section"**
-- html5\_inline\_elements: **"abbr mark"**
+- html5\_inline\_elements: **"abbr mark output"**
 - config_script: **"{bootscriptdir}config.js"**
 
 Sources for options are detailed below. 

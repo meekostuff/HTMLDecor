@@ -11,7 +11,7 @@ var defaults = { // NOTE defaults also define the type of the associated config 
 	"hidden_timeout": 3000,
 	"polling_interval": 50,
 	"html5_block_elements": 'article aside figcaption figure footer header hgroup main nav section',
-	"html5_inline_elements": 'abbr mark',
+	"html5_inline_elements": 'abbr mark output',
 	"htmldecor_script": '{bootscriptdir}HTMLDecor.js',
 	"config_script": '{bootscriptdir}config.js'
 }

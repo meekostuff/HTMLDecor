@@ -89,7 +89,7 @@ for your obligations if you intend to modify or distribute HTMLDecor or part the
 
 <h2>Quick Start</h2>
 
-<p><strong>This is the old way of specifying decor, but is conceptually easiest to understand.</strong>
+<p><strong>This is no longer the preferred way of specifying decor, but is conceptually easiest to understand.</strong>
 <strong>If you are new to HTMLDecor then read this documentation straight through.</strong>
 <strong>Otherwise feel free to skip to the <a href="#configuration">Configuration</a> section first.</strong></p>
 
@@ -412,9 +412,9 @@ the decor document is used as the waiting page. </p>
 <h2><code>&lt;script&gt;</code> handling</h2>
 
 <ul>
-<li><p>Scripts in the page are not handled by HTMLDecor - they execute at the expected time in the browser's script handling.
-The page does not need and SHOULD NOT have scripts - they SHOULD all be part of the decor. </p></li>
-<li><p>All scripts which are not in the initial page (that is, decor content or panned page content) are executed via dynamic script insertion, 
+<li><p>Scripts in the landing-page are not handled by HTMLDecor - they execute at the expected time in the browser's script handling.
+<strong>RECOMMENDATION:</strong> The page does not need and SHOULD NOT have scripts - they SHOULD all be part of the decor. </p></li>
+<li><p>All scripts which are not in the landing-page (that is, decor content or panned page content) are executed via dynamic script insertion, 
 but behave <strong>like</strong> scripts that are part of the page content. Page content is not blocked, but earlier scripts block later scripts 
 unless the earlier script has the <code>src</code> and <code>async</code> attributes. </p>
 
@@ -429,7 +429,7 @@ unless the earlier script has the <code>src</code> and <code>async</code> attrib
 but BEFORE the page content is MERGED WITH the decor.</p></li>
 <li><p>When panning occurs, scripts in the <code>&lt;head&gt;</code> of the next page are <strong>enabled</strong> AFTER all the content in the <code>&lt;head&gt;</code> of the next page is MERGED WITH the page. 
 Scripts in the <code>&lt;body&gt;</code> of the next page are <strong>enabled</strong> AFTER the content in the <code>&lt;body&gt;</code> of the next page is MERGED WITH the page.
-You do not need and SHOULD NOT have scripts in any page (other than the decor document). </p></li>
+<strong>RECOMMENDATION:</strong> You do not need and SHOULD NOT have scripts in any page (other than the decor document). </p></li>
 </ul>
 
 <h2>Debugging</h2>
@@ -544,7 +544,7 @@ The boot-script has the following options (default values in <strong>bold</stron
 <li>autostart: <strong>true</strong>, false</li>
 <li>hidden_timeout: <strong>3000</strong> (milliseconds)</li>
 <li>html5_block_elements: <strong>"article aside figcaption figure footer header hgroup main nav section"</strong></li>
-<li>html5_inline_elements: <strong>"abbr mark"</strong></li>
+<li>html5_inline_elements: <strong>"abbr mark output"</strong></li>
 <li>config_script: <strong>"{bootscriptdir}config.js"</strong></li>
 </ul>
 
