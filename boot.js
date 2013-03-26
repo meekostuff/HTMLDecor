@@ -32,16 +32,12 @@ if (Meeko && Meeko.options && Meeko.options['no_boot']) return;
  */
 var document = window.document;
 
-function each(object, fn, context) { // WARN won't work on native objects in old IE
-	for (slot in object) {
-		if (object.hasOwnProperty && object.hasOwnProperty(slot)) fn.call(context, slot, object[slot], object);
-	}
+function each(object, fn, context) { // WARN doesn't check hasOwnProperty()
+	for (slot in object) fn.call(context, slot, object[slot], object);
 }
 
 function some(a, fn, context) { 
-	for (var n=a.length, i=0; i<n; i++) {
-		if (fn.call(context, a[i], i, a)) return true; 
-	}
+	for (var n=a.length, i=0; i<n; i++) if (fn.call(context, a[i], i, a)) return true;
 	return false;
 }
 var forEach = some; // WARN some() is forEach() ONLY IF fn() always returns falsish (including nothing)
@@ -106,11 +102,10 @@ function getBootScript() {
 	- the page is loaded normally
 	- the script DOES NOT have @async or @defer
 	In other cases - dynamic-insertion, document.write into an iframe -
-	the inserting code must ensure the script is last in document. 
-	This defeats the purpose of the Viewport hiding
+	the inserting code must ensure the script is last in document.
 	*/
 	var allScripts = $$('script');
-	var script = allScripts[allScripts.length - 1];
+	script = allScripts[allScripts.length - 1];
 	return script;
 }
 
@@ -306,7 +301,7 @@ return queue;
  ### Get options
 */
 
-Meeko.cookieStorage = {
+Meeko.cookieStorage = { // TODO should be under Meeko.DOM
 
 getItem: function(sKey) { // See https://developer.mozilla.org/en-US/docs/DOM/Storage
 	  return unescape(document.cookie.replace(new RegExp("(?:^|.*;\\s*)" + escape(sKey).replace(/[\-\.\+\*]/g, "\\$&") + "\\s*\\=\\s*((?:[^;](?!;))*[^;]?).*"), "$1")); // TODO decodeURIComponent??
