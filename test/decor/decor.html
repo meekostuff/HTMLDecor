@@ -7,10 +7,33 @@
 .style-fail { display: none; }
 
 body { background-color: #ffffff; }
+nav ul { margin: 0; padding: 0; }
+nav li { display: inline; list-style: outside none; margin: 0.1em; padding: 0.25em 1em; background-color: #dddddd; }
+#panner { background-color: #77ff77; color: #ffffff; text-align: center; }
+.hidden { display: none; }
 </style>
+<script>
+Meeko.decor.config({ // this will over-ride the <link rel="meeko-decor"> detect and enable panning
+	lookup: function(url) { return 'decor/decor.html'; }
+});
+Meeko.panner.config({
+	pageOut: function(msg) { document.getElementById('panner').className = ''; }
+});
+</script>
 </head>
 <body>
-<h1>This is the normal decor</h1>
+<h1>HTMLDecor Tests</h1>
+<nav>
+<ul>
+	<li><a href="../normal.html">normal</a></li>
+	<li><a href="../get.html">get</a></li>
+	<li><a href="../post.html">post</a></li>
+</ul>
+</nav>
+
+<hr />
+
+<p id="panner" class="hidden"><b>pushState Assisted Navigation</b> is active</p>
 
 <div class="style-fail" style="background-color: red;">
 If you can see this then &lt;style&gt; elements
