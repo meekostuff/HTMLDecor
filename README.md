@@ -390,6 +390,23 @@ or with `history.replaceState()` behavior:
 	Meeko.panner.replace(newURL)
 
 
+`<form>` handling
+-----------------
+
+HTMLDecor ONLY handles forms where `@method="GET"`.
+
+All other forms are NOT handled, which means the native browser behavior will apply
+unless external code prevents the default-action and implements a different behavior.
+
+You are encouraged to handle other forms in a site-specific manner. 
+
+### @method = GET
+
+The form's `@action` and input values are processed to generate a query URL
+which is then used to perform pushState assisted navigaion. 
+This mimics standard browser behavior.
+
+
 `<script>` handling
 -------------------
 

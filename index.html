@@ -409,6 +409,21 @@ the decor document is used as the waiting page. </p>
 <pre><code>Meeko.panner.replace(newURL)
 </code></pre>
 
+<h2><code>&lt;form&gt;</code> handling</h2>
+
+<p>HTMLDecor ONLY handles forms where <code>@method="GET"</code>.</p>
+
+<p>All other forms are NOT handled, which means the native browser behavior will apply
+unless external code prevents the default-action and implements a different behavior.</p>
+
+<p>You are encouraged to handle other forms in a site-specific manner. </p>
+
+<h3>@method = GET</h3>
+
+<p>The form's <code>@action</code> and input values are processed to generate a query URL
+which is then used to perform pushState assisted navigaion. 
+This mimics standard browser behavior.</p>
+
 <h2><code>&lt;script&gt;</code> handling</h2>
 
 <ul>
