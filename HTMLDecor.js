@@ -440,6 +440,40 @@ var isContentLoaded = function() { // WARN this assumes that document.readyState
 	return loaded;
 }
 
+var overrideDefaultAction = function(e, fn) {
+	// Shim the event to detect if external code has called preventDefault(), and to make sure we call it (but late as possible);
+	e['meeko-panner'] = true;
+	var defaultPrevented = false;
+	e._preventDefault = e.preventDefault;
+	e.preventDefault = function(event) { defaultPrevented = true; this._preventDefault(); } // TODO maybe we can just use defaultPrevented?
+	e._stopPropagation = e.stopPropagation;
+	e.stopPropagation = function() { // WARNING this will fail to detect event.defaultPrevented if event.preventDefault() is called afterwards
+		if (this.defaultPrevented) defaultPrevented = true; // FIXME is defaultPrevented supported on pushState enabled browsers?
+		this._preventDefault();
+		this._stopPropagation();
+	}
+	if (e.stopImmediatePropagation) {
+		e._stopImmediatePropagation = e.stopImmediatePropagation;
+		e.stopImmediatePropagation = function() {
+			if (this.defaultPrevented) defaultPrevented = true;
+			this._preventDefault();
+			this._stopImmediatePropagation();
+		}
+	}
+	
+	function backstop(event) {
+		if (event.defaultPrevented)  defaultPrevented = true;
+		event._preventDefault();
+	}
+	window.addEventListener(e.type, backstop, false);
+	
+	delay(function() {
+		window.removeEventListener(e.type, backstop, false);
+		if (defaultPrevented) return;
+		fn(e);
+	});
+}
+
 var URL = (function() {
 
 var URL = function(str) {
@@ -502,7 +536,7 @@ return URL;
 
 var loadHTML = async(function(url, cb) { // WARN only performs GET
 	var htmlLoader = new HTMLLoader();
-	var method = 'GET';
+	var method = 'get';
 	htmlLoader.load(method, url, null, { method: method, url: url }, cb);
 });
 
@@ -549,11 +583,12 @@ serialize: function(data, details) { return ""; },  // TODO
 
 request: function(method, url, data, details, cb) {
 	var sendText = null;
-	if (/POST/i.test(method)) {
+	method = lc(method);
+	if ('post' == method) {
 		throw "POST not supported"; // FIXME
 		sendText = this.serialize(data, details);
 	}
-	else if (/GET/i.test(method)) {
+	else if ('get' == method) {
 		// no-op
 	}
 	else {
@@ -805,9 +840,9 @@ var polyfill = function(doc) { // NOTE more stuff could be added here if *necess
 var DOM = Meeko.DOM || (Meeko.DOM = {});
 extend(DOM, {
 	$id: $id, $$: $$, tagName: tagName, forSiblings: forSiblings, matchesElement: matchesElement, firstChild: firstChild,
-	replaceNode: replaceNode, copyAttributes: copyAttributes, scrollToId: scrollToId,
-	addEvent: addEvent, removeEvent: removeEvent, createDocument: createDocument, isContentLoaded: isContentLoaded, URL: URL,
-	HTMLLoader: HTMLLoader, HTMLParser: HTMLParser, loadHTML: loadHTML, parseHTML: parseHTML,
+	replaceNode: replaceNode, copyAttributes: copyAttributes, scrollToId: scrollToId, createDocument: createDocument,
+	addEvent: addEvent, removeEvent: removeEvent, isContentLoaded: isContentLoaded, overrideDefaultAction: overrideDefaultAction,
+	URL: URL, HTMLLoader: HTMLLoader, HTMLParser: HTMLParser, loadHTML: loadHTML, parseHTML: parseHTML,
 	polyfill: polyfill
 });
 
@@ -912,7 +947,7 @@ decorate: async(function(decorURL, callback) {
 	queue([
 
 	async(function(cb) {
-		var method = 'GET';
+		var method = 'get';
 		decor.options.load(method, decorURL, null, { method: method, url: decorURL }, {
 			onComplete: function(result) {
 				doc = result;
@@ -1099,35 +1134,7 @@ onClick: function(e) {
 	var isPageLink = (oURL.nohash == baseURL.nohash); // TODO what about page-links that match the current hash
 
 	// From here on we effectively take over the default-action of the event
-	// Shim the event to detect if external code has called preventDefault(), and to make sure we call it (but late as possible);
-	// TODO add a field indicating HTMLDecor's intent to handle this click, and relevant details.
-	var defaultPrevented = false;
-	e._preventDefault = e.preventDefault;
-	e.preventDefault = function(event) { defaultPrevented = true; this._preventDefault(); } // TODO maybe we can just use defaultPrevented?
-	e._stopPropagation = e.stopPropagation;
-	e.stopPropagation = function() { // WARNING this will fail to detect event.defaultPrevented if event.preventDefault() is called afterwards
-		if (this.defaultPrevented) defaultPrevented = true; // FIXME is defaultPrevented supported on pushState enabled browsers?
-		this._preventDefault();
-		this._stopPropagation();
-	}
-	if (e.stopImmediatePropagation) {
-		e._stopImmediatePropagation = e.stopImmediatePropagation;
-		e.stopImmediatePropagation = function() {
-			if (this.defaultPrevented) defaultPrevented = true;
-			this._preventDefault();
-			this._stopImmediatePropagation();
-		}
-	}
-	
-	function backstop(event) {
-		if (event.defaultPrevented)  defaultPrevented = true;
-		event._preventDefault();
-	}
-	window.addEventListener('click', backstop, false);
-	
-	delay(function() {
-		window.removeEventListener('click', backstop, false);
-		if (defaultPrevented) return;
+	overrideDefaultAction(e, function(event) {
 		if (isPageLink) panner.onPageLink(url);
 		else panner.onSiteLink(url);
 	});
@@ -1158,50 +1165,22 @@ onSubmit: function(e) {
 	var oURL = URL(url);
 	if (oURL.nopathname != baseURL.nopathname) return; // no external urls
 	
-	var method = uc(form.method);
+	var method = lc(form.method);
 	switch(method) {
-	case 'GET': break;
+	case 'get': break;
 	default: return; // TODO handle POST
 	}
 	
 	// From here on we effectively take over the default-action of the event
-	// Shim the event to detect if external code has called preventDefault(), and to make sure we call it (but late as possible);
-	// TODO add a field indicating HTMLDecor's intent to handle this event, and relevant details.
-	var defaultPrevented = false;
-	e._preventDefault = e.preventDefault;
-	e.preventDefault = function(event) { defaultPrevented = true; this._preventDefault(); } // TODO maybe we can just use defaultPrevented?
-	e._stopPropagation = e.stopPropagation;
-	e.stopPropagation = function() { // WARNING this will fail to detect event.defaultPrevented if event.preventDefault() is called afterwards
-		if (this.defaultPrevented) defaultPrevented = true; // FIXME is defaultPrevented supported on pushState enabled browsers?
-		this._preventDefault();
-		this._stopPropagation();
-	}
-	if (e.stopImmediatePropagation) {
-		e._stopImmediatePropagation = e.stopImmediatePropagation;
-		e.stopImmediatePropagation = function() {
-			if (this.defaultPrevented) defaultPrevented = true;
-			this._preventDefault();
-			this._stopImmediatePropagation();
-		}
-	}
-	
-	function backstop(event) {
-		if (event.defaultPrevented)  defaultPrevented = true;
-		event._preventDefault();
-	}
-	window.addEventListener('submit', backstop, false);
-	
-	delay(function() {
-		window.removeEventListener('submit', backstop, false);
-		if (defaultPrevented) return;
+	overrideDefaultAction(e, function() {
 		panner.onForm(form);
 	});
 },
 
 onForm: function(form) {
-	var method = uc(form.method);
+	var method = lc(form.method);
 	switch(method) {
-	case 'GET':
+	case 'get':
 		var baseURL = URL(document.URL);
 		var action = baseURL.resolve(form.action); // TODO probably not needed on browsers that support pushState
 		var oURL = URL(action);
@@ -1233,7 +1212,7 @@ onPopState: function(e) {
 	var newURL = URL(document.URL).nohash;
 	if (newURL != panner.contentURL) {
 		var loader = async(function(cb) {
-			var method = 'GET';
+			var method = 'get';
 			panner.options.load(method, newURL, null, { method: method, url: newURL }, cb);
 		});
 		page(loader, function() {
@@ -1295,7 +1274,7 @@ navigate: async(function(options, callback) {
 	}
 
 	var loader = async(function(cb) {
-		var method = 'GET';
+		var method = 'get';
 		panner.options.load(method, url, null, { method: method, url: url }, cb);
 	});
 
