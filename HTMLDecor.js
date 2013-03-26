@@ -877,6 +877,7 @@ start: function() {
 		
 		// NOTE fortuitously all the browsers that support pushState() also support addEventListener() and dispatchEvent()
 		window.addEventListener("click", function(e) { panner.onClick(e); }, true);
+		window.addEventListener("submit", function(e) { panner.onSubmit(e); }, true);
 		window.addEventListener("popstate", function(e) { panner.onPopState(e); }, true);
 
 		window.addEventListener('scroll', function(e) { panner.saveScroll(); }, false); // NOTE first scroll after popstate might be cancelled
@@ -1090,7 +1091,7 @@ onClick: function(e) {
 	// test hyperlinks
 	if (target.target) return; // no iframe
 	var baseURL = URL(document.URL);
-	var url = baseURL.resolve(href);
+	var url = baseURL.resolve(href); // TODO probably don't need to resolve on browsers that support pushstate
 	var oURL = URL(url);
 	if (oURL.nopathname != baseURL.nopathname) return; // no external urls
 		
@@ -1139,6 +1140,86 @@ onPageLink: function(url) {	// TODO Need to handle anchor links. The following j
 
 onSiteLink: function(url) {	// Now attempt to pan
 	panner.assign(url);
+},
+
+onSubmit: function(e) {
+	// NOTE only pushState enabled browsers use this
+	// We want panning to be the default behavior for <form> submission
+	// Before panning to the next page, have to work out if that is appropriate
+	// `return` means ignore the submit
+
+	if (!decor.options.lookup) return; // no panning if can't lookup decor of next page
+	
+	// test submit
+	var form = e.target;
+	if (form.target) return; // no iframe
+	var baseURL = URL(document.URL);
+	var url = baseURL.resolve(form.action); // TODO probably don't need to resolve on browsers that support pushstate
+	var oURL = URL(url);
+	if (oURL.nopathname != baseURL.nopathname) return; // no external urls
+	
+	var method = uc(form.method);
+	switch(method) {
+	case 'GET': break;
+	default: return; // TODO handle POST
+	}
+	
+	// From here on we effectively take over the default-action of the event
+	// Shim the event to detect if external code has called preventDefault(), and to make sure we call it (but late as possible);
+	// TODO add a field indicating HTMLDecor's intent to handle this event, and relevant details.
+	var defaultPrevented = false;
+	e._preventDefault = e.preventDefault;
+	e.preventDefault = function(event) { defaultPrevented = true; this._preventDefault(); } // TODO maybe we can just use defaultPrevented?
+	e._stopPropagation = e.stopPropagation;
+	e.stopPropagation = function() { // WARNING this will fail to detect event.defaultPrevented if event.preventDefault() is called afterwards
+		if (this.defaultPrevented) defaultPrevented = true; // FIXME is defaultPrevented supported on pushState enabled browsers?
+		this._preventDefault();
+		this._stopPropagation();
+	}
+	if (e.stopImmediatePropagation) {
+		e._stopImmediatePropagation = e.stopImmediatePropagation;
+		e.stopImmediatePropagation = function() {
+			if (this.defaultPrevented) defaultPrevented = true;
+			this._preventDefault();
+			this._stopImmediatePropagation();
+		}
+	}
+	
+	function backstop(event) {
+		if (event.defaultPrevented)  defaultPrevented = true;
+		event._preventDefault();
+	}
+	window.addEventListener('submit', backstop, false);
+	
+	delay(function() {
+		window.removeEventListener('submit', backstop, false);
+		if (defaultPrevented) return;
+		panner.onForm(form);
+	});
+},
+
+onForm: function(form) {
+	var method = uc(form.method);
+	switch(method) {
+	case 'GET':
+		var baseURL = URL(document.URL);
+		var action = baseURL.resolve(form.action); // TODO probably not needed on browsers that support pushState
+		var oURL = URL(action);
+		var query = encode(form);
+		var url = oURL.nosearch + (oURL.search || '?') + query + oURL.hash;
+		panner.onSiteLink(url);
+		break;
+	default: return; // TODO handle POST
+	}	
+
+	function encode(form) {
+		var data = [];
+		forEach(form.elements, function(el) {
+			if (!el.name) return;
+			data.push(el.name + '=' + encodeURIComponent(el.value));
+		});
+		return data.join('&');
+	}
 },
 
 onPopState: function(e) {
