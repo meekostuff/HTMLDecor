@@ -5,13 +5,16 @@ HTMLDecor
 > With CSS you can change the styling of a whole site with one stylesheet.
 > With HTMLDecor you can change everything -
 > banner, navbars, ads, page-layout and stylesheets.
-> Not only is it simple to setup and maintain, 
-> you'll cut the download time of every page,
+> This facilitates API-first / HTML-payload sites which are
+> simple, robust and low-bandwidth, 
 > plus "pushState assisted navigation" comes for free.
 
 HTMLDecor is a Javascript page decoration engine which runs in the browser.
-It allows your site to deliver real page content first (and fast).
-Your site decor can be placed in its own page and merged in the browser instead of on the server. 
+It allows your site to deliver real page content first and fast
+(think API-first with HTML-payloads).
+Your site decor can be placed in its own page and merged in the browser instead of on the server.
+Auxiliary content could also be conditionally loaded with AJAX
+(think inside-out iframes).
 
 A site decor page is similar to an external stylesheet in that it can be shared between several pages.
 Originally it was even referenced with a resource link, just like stylesheets:
@@ -20,14 +23,14 @@ Originally it was even referenced with a resource link, just like stylesheets:
 
 <small>**(This referencing method has been superceded by external configuration, which is less limiting.)**</small>
 
-As a bonus, when your site uses HTMLDecor, "pushState assisted navigation" requires no additional setup. 
+As a bonus, when your site uses HTMLDecor "pushState assisted navigation" requires no additional setup. 
 When someone viewing your page clicks on a link to another page that uses the same decor
-then HTMLDecor updates the real content
-and `history.pushState()` is used to update the browser URL. 
+then AJAX updates the real content
+and `history.pushState()` updates the browser URL. 
 
 HTMLDecor.js is less than 10kB when minified and gzipped.
 
-To see this in action visit my [blog](http://meekostuff.net/blog/) where I am dog-fooding this library.
+To see it in action visit my [blog](http://meekostuff.net/blog/).
 Make sure you view the page source and check that it is just raw content.
 The navbar and contact popup are all in the [site-decor page](http://meekostuff.net/blog/decor.html). 
 
@@ -37,7 +40,7 @@ For more info on the concept of HTMLDecor and its affinity with pushState assist
 - [Introducing HTMLDecor.js](http://meekostuff.net/blog/HTML-Decor-II/)
 - [pushState was made for HTMLDecor](http://meekostuff.net/blog/pushState-was-made-for-HTMLDecor/)
 
-More features are in the [road-map](https://github.com/meekostuff/HTMLDecor/wiki/Road-map).
+Also make sure you check the [wiki](https://github.com/meekostuff/HTMLDecor/wiki).
 
 If you have any questions or comments, don't hesitate to contact the author via
 [web](http://meekostuff.net/), [email](mailto:shogun70@gmail.com) or [twitter](http://twitter.com/meekostuff). 
