@@ -896,7 +896,7 @@ start: function() {
 		if (options.detect) return wait(function() { return !!document.body; });
 	},
 	function() {
-		if (!decorURL && options.detect) decorURL = options.detect(document); // FIXME this should wait until <head> is completely loaded
+		if (!decorURL && options.detect) decorURL = options.detect(document);
 		if (!decorURL) throw "No decor could be determined for this page";
 		decorURL = URL(document.URL).resolve(decorURL);
 		decor.current.url = decorURL;
@@ -906,16 +906,10 @@ start: function() {
 	},
 	function() {
 		scrollToId(location.hash && location.hash.substr(1));
-		panner.contentURL = URL(document.URL).nohash;
-		
-		if (!history.pushState) return;
-		
-		// NOTE fortuitously all the browsers that support pushState() also support addEventListener() and dispatchEvent()
-		window.addEventListener("click", function(e) { panner.onClick(e); }, true);
-		window.addEventListener("submit", function(e) { panner.onSubmit(e); }, true);
-		window.addEventListener("popstate", function(e) { panner.onPopState(e); }, true);
 
-		window.addEventListener('scroll', function(e) { panner.saveScroll(); }, false); // NOTE first scroll after popstate might be cancelled
+		if (!history.pushState) return;
+
+		panner.replaceState(document.URL);		
 		/*
 			If this is the landing page then `history.state` will be null.
 			But if there was a navigation back / forwards sequence then there could be `state`.
@@ -928,9 +922,14 @@ start: function() {
 			panner.restoreScroll(state);
 		}
 		else {
-			panner.replaceState(); // otherwise there will be no popstate when returning to original URL
 			panner.saveScroll();
 		}
+
+		// NOTE fortuitously all the browsers that support pushState() also support addEventListener() and dispatchEvent()
+		window.addEventListener("click", function(e) { panner.onClick(e); }, true);
+		window.addEventListener("submit", function(e) { panner.onSubmit(e); }, true);
+		window.addEventListener("popstate", function(e) { panner.onPopState(e); }, true);
+		window.addEventListener('scroll', function(e) { panner.saveScroll(); }, false); // NOTE first scroll after popstate might be cancelled
 	}
 		
 	]);
@@ -1104,8 +1103,6 @@ decorate: async(function(decorURL, callback) {
 
 extend(panner, {
 
-contentURL: "",
-
 onClick: function(e) {
 	// NOTE only pushState enabled browsers use this
 	// We want panning to be the default behavior for clicks on hyperlinks - <a href>
@@ -1210,7 +1207,7 @@ onPopState: function(e) {
 	
 	var complete = false;
 	var newURL = URL(document.URL).nohash;
-	if (newURL != panner.contentURL) {
+	if (newURL != URL(panner.state.url).nohash) {
 		var loader = async(function(cb) {
 			var method = 'get';
 			panner.options.load(method, newURL, null, { method: method, url: newURL }, cb);
@@ -1219,7 +1216,6 @@ onPopState: function(e) {
 			panner.restoreScroll(state);
 			complete = true;
 		});
-		panner.contentURL = newURL;
 	}
 	else delay(function() {
 		panner.restoreScroll(state);
@@ -1282,7 +1278,6 @@ navigate: async(function(options, callback) {
 		
 	onComplete: function(msg) {
 		var oURL = URL(document.URL);
-		panner.contentURL = oURL.nohash;
 		scrollToId(oURL.hash && oURL.hash.substr(1));
 		callback.complete(msg);
 	}
@@ -1296,29 +1291,44 @@ navigate: async(function(options, callback) {
 	panner[modifier](url);
 }),
 
+resetState: function(options) {
+	panner.state = {
+		'meeko-panner': true,
+		pageXOffset: 0,
+		pageYOffset: 0,
+		url: null
+	};
+	panner.configState(options);
+},
+
+configState: function(options) {
+	if (options) config(panner.state, options);
+	history.replaceState(panner.state, null);
+},
+
 ownsState: function(state) {
 	if (!state) state = history.state;
 	if (!state) return false;
 	return !!state['meeko-panner'];
 },
 
-pushState: function(url) {
-	panner.state = { 'meeko-panner': true, pageXOffset: 0, pageYOffset: 0 };
-	history.pushState(panner.state, null, url || null);
-},
+pushState: (history.pushState) ? function(url) {
+	history.pushState({}, null, url || null);
+	panner.resetState({ url: url });
+} : null,
 
-replaceState: function(url) {
-	panner.state = { 'meeko-panner': true, pageXOffset: 0, pageYOffset: 0 };
-	history.replaceState(panner.state, null, url || null);
-},
+replaceState: (history.replaceState) ? function(url) {
+	history.replaceState({}, null, url || null);
+	panner.resetState({ url: url });
+} : null,
 
 updateState: function(state) { // called from popstate
 	if (!state) state = history.state;
-	panner.state = extend({}, state);	
+	panner.resetState(state);
 },
 
 saveScroll: function() {
-	panner.state = { 'meeko-panner': true, pageXOffset: window.pageXOffset, pageYOffset: window.pageYOffset };
+	panner.configState({pageXOffset: window.pageXOffset, pageYOffset: window.pageYOffset });
 	history.replaceState(panner.state, null);	
 },
 
