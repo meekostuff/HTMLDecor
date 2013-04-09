@@ -161,12 +161,6 @@ error: function() {
 	if (this.called) throw "Callback has already been called";
 	this.called = true;
 	if (this.onError) this.onError.apply(this, arguments);
-},
-
-abort: function() { // NOTE abort could trigger an error, but there is an expectation that whatever context calls abort will be handling that anyway
-	if (this.called) throw "Callback has already been called";
-	this.called = true;
-	if (this.onAbort) this.onAbort.apply(this, arguments); // TODO isolate
 }
 
 });
@@ -240,7 +234,6 @@ var wait = async(function(fn, waitCB) {
 	waitCB.hook = fn;
 	callbacks.push(waitCB);
 	if (!timerId) timerId = window.setInterval(waitback, Async.pollingInterval); // NOTE polling-interval is configured below
-	waitCB.onAbort = function() { remove(callbacks, waitCB); }
 });
 
 return wait;
@@ -261,7 +254,6 @@ var delay = async(function(fn, timeout, delayCB) {
 		}
 		else delayCB.complete(result);
 	}, timeout);
-	delayCB.onAbort = function() { window.clearTimeout(timerId); }
 });
 
 var queue = async(function(fnList, queueCB) {
@@ -285,10 +277,6 @@ var queue = async(function(fnList, queueCB) {
 			}
 		}
 		queueCB.complete();
-	}
-	queueCB.onAbort = function() {
-		if (isCallback(innerCB)) innerCB.abort();
-		list = [];
 	}
 	queueback();
 });
@@ -1401,16 +1389,35 @@ var notify = function(msg) {
 }
 
 var page = async(function(loader, callback) {
+	if (!getDecorMeta()) throw "Cannot page if the document has not been decorated";
+
 	var doc, ready = false;
-
-	var outCB = pageOut();
 	delay(function() { ready = true; }, panner.options.duration);
-
+	
 	queue([
+	
+	function() { // before pageOut / nodeRemoved
+		notify({
+			module: "panner",
+			stage: "before",
+			type: "pageOut",
+			target: document
+		});
+		each(decor.placeHolders, function(id, node) {
+			var target = $id(id);
+			notify({
+				module: "panner",
+				stage: "before",
+				type: "nodeRemoved",
+				target: document.body,
+				node: target // TODO rename `target` variable
+			});
+		});		
+	},
 
-	async(function(cb) {
+	async(function(cb) { // kickoff loading the next page
 		if (typeof loader == "function") loader({
-			onComplete: function(result) { doc = result; if (!outCB.called) outCB.abort(); cb.complete(); },
+			onComplete: function(result) { doc = result; cb.complete(); },
 			onError: function() { logger.error("HTMLLoader failed"); cb.error(); }		
 		});
 		else {
@@ -1418,37 +1425,13 @@ var page = async(function(loader, callback) {
 			return true;
 		}
 	}),
+
 	function() { return wait(function() { return ready; }); },
-	// we don't get to here if location.replace() was called
+
 	function() {
-		return pageIn(doc);
-	}
-	
-	], callback);	
-});
+		if (doc) return; // pageIn will take care of pageOut
 
-var pageOut = async(function(cb) {
-	if (!getDecorMeta()) throw "Cannot page if the document has not been decorated";
-
-	notify({
-		module: "panner",
-		stage: "before",
-		type: "pageOut",
-		target: document
-	});
-
-	each(decor.placeHolders, function(id, node) {
-		var target = $id(id);
-		notify({
-			module: "panner",
-			stage: "before",
-			type: "nodeRemoved",
-			target: document.body,
-			node: target // TODO rename `target` variable
-		});
-	});
-
-	delay(function() { // NOTE external context can abort this delayed call with cb.abort();
+		separateHead();
 		each(decor.placeHolders, function(id, node) {
 			var target = $id(id);
 			replaceNode(target, node);
@@ -1465,15 +1448,10 @@ var pageOut = async(function(cb) {
 			stage: "after",
 			type: "pageOut",
 			target: document
-		});
-	}, panner.options.duration, cb);
-});
-
-var pageIn = async(function(doc, cb) {
+		});		
+	},
 	
-	queue([
-
-	function() {
+	function() { // before pageIn
 		notify({
 			module: "panner",
 			stage: "before",
@@ -1483,7 +1461,8 @@ var pageIn = async(function(doc, cb) {
 		});
 		mergeHead(doc, false);
 	},
-	async(function(cb) {
+
+	async(function(cb) { // pageIn
 		var nodeList = [];
 		var contentStart = doc.body.firstChild;
 		if (contentStart) placeContent(contentStart,
@@ -1512,8 +1491,10 @@ var pageIn = async(function(doc, cb) {
 			}
 		);
 	}),
+	
 	function() { return wait(function() { return scriptQueue.isEmpty(); }); },
-	function() {
+	
+	function() { // after pageIn
 		notify({
 			module: "panner",
 			stage: "after",
@@ -1521,13 +1502,13 @@ var pageIn = async(function(doc, cb) {
 			target: document
 		});
 	}
+	
+	], callback);	
 
-	], cb);
 });
 
 
-function mergeHead(doc, isDecor) {
-	var baseURL = URL(document.URL);
+function separateHead(isDecor) {
 	var dstHead = document.head;
 	var marker = getDecorMeta();
 	if (!marker) throw "No meeko-decor marker found. ";
@@ -1536,7 +1517,16 @@ function mergeHead(doc, isDecor) {
 	forSiblings (isDecor ? "before" : "after", marker, function(node) {
 		if (tagName(node) == "script" && (!node.type || node.type.match(/^text\/javascript/i))) return;
 		dstHead.removeChild(node);
-	});
+	});	
+}
+
+function mergeHead(doc, isDecor) {
+	var baseURL = URL(document.URL);
+	var dstHead = document.head;
+	var marker = getDecorMeta();
+	if (!marker) throw "No meeko-decor marker found. ";
+
+	separateHead(isDecor);
 
 	// remove duplicate scripts from srcHead
 	var srcHead = doc.head;
