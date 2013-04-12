@@ -897,7 +897,6 @@ start: function() {
 
 		if (!history.pushState) return;
 
-		panner.replaceState(document.URL);		
 		/*
 			If this is the landing page then `history.state` will be null.
 			But if there was a navigation back / forwards sequence then there could be `state`.
@@ -906,10 +905,12 @@ start: function() {
 		*/
 		var state = history.state;
 		if (panner.ownsState(state)) {
-			panner.updateState(state);
+			panner.restoreState(state);
 			panner.restoreScroll(state);
 		}
 		else {
+			state = panner.createState({ url: document.URL });
+			panner.commitState(state, true); // replaceState
 			panner.saveScroll();
 		}
 
@@ -1126,7 +1127,8 @@ onClick: function(e) {
 },
 
 onPageLink: function(url) {	// TODO Need to handle anchor links. The following just replicates browser behavior
-	panner.pushState(url);
+	var state = panner.createState({ url: url });
+	panner.commitState(state, false); // pushState
 	scrollToId(URL(url).hash.substr(1));
 },
 
@@ -1187,26 +1189,23 @@ onForm: function(form) {
 },
 
 onPopState: function(e) {
-	var state = e.state;
-	if (!panner.ownsState(state)) return;
+	var newState = e.state;
+	if (!panner.ownsState(newState)) return;
 	if (e.stopImmediatePropagation) e.stopImmediatePropagation();
 	else e.stopPropagation();
 	// NOTE there is no default-action for popstate
-	
+
+	var oldState = panner.state;
 	var complete = false;
-	var newURL = URL(document.URL).nohash;
-	if (newURL != URL(panner.state.url).nohash) {
-		var loader = async(function(cb) {
-			var method = 'get';
-			panner.options.load(method, newURL, null, { method: method, url: newURL }, cb);
-		});
-		page(loader, function() {
-			panner.restoreScroll(state);
+	var newURL = URL(newState.url).nohash;
+	if (newURL != URL(oldState.url).nohash) {
+		page(oldState, newState, function() {
+			panner.restoreScroll(newState);
 			complete = true;
 		});
 	}
 	else delay(function() {
-		panner.restoreScroll(state);
+		panner.restoreScroll(newState);
 		complete = true;
 	}, Async.pollingInterval);
 	
@@ -1217,9 +1216,9 @@ onPopState: function(e) {
 	  so the following listens for that event and restores the page offsets from the outgoing state.
 	  If there is no scroll event then it is effectively a no-op. 
 	*/
-	var oldState = panner.state;
-	panner.updateState(state);
+	panner.restoreState(newState);
 	window.scroll(oldState.pageXOffset, oldState.pageYOffset); // TODO IE10 sometimes scrolls visibly before `scroll` event. This might help.
+	// var refresh = document.documentElement.scrollTop;
 	window.addEventListener('scroll', undoScroll, true);
 	var count = 0;
 	function undoScroll(scrollEv) { // undo the popstate triggered scroll if appropriate
@@ -1230,6 +1229,7 @@ onPopState: function(e) {
 		scrollEv.stopPropagation(); // prevent the saveScroll function
 		scrollEv.preventDefault(); // TODO should really use this
 		window.scroll(oldState.pageXOffset, oldState.pageYOffset);
+		// var refresh = document.documentElement.scrollTop;
 	}
 },
 
@@ -1257,36 +1257,42 @@ navigate: async(function(options, callback) {
 		return;
 	}
 
-	var loader = async(function(cb) {
-		var method = 'get';
-		panner.options.load(method, url, null, { method: method, url: url }, cb);
+	var oldState = panner.state;
+	var newState = panner.createState({ // FIXME
+		url: url
 	});
+	page(oldState, newState, {
+		onComplete: function(msg) {
+			var oURL = URL(newState.url);
+			scrollToId(oURL.hash && oURL.hash.substr(1));
 
-	page(loader, {
-		
-	onComplete: function(msg) {
-		var oURL = URL(document.URL);
-		scrollToId(oURL.hash && oURL.hash.substr(1));
-		callback.complete(msg);
-	}
-	
+			panner.saveScroll();
+
+			callback.complete(msg);
+		}
 	});
 	
 	// Change document.URL
-	// This happens after the page load has initiated and after the pageOut.before handler
-	// TODO
-	var modifier = options.replace ? "replaceState" : "pushState";
-	panner[modifier](url);
+	// FIXME When should this happen?
+	panner.commitState(newState, options.replace);
+	
 }),
 
-resetState: function(options) {
-	panner.state = {
+createState: function(options) {
+	var state = {
 		'meeko-panner': true,
 		pageXOffset: 0,
 		pageYOffset: 0,
 		url: null
 	};
-	panner.configState(options);
+	if (options) config(state, options);
+	return state;
+},
+
+commitState: function(state, replace) {
+	panner.state = state;
+	var modifier = replace ? 'replaceState' : 'pushState';
+	history[modifier](state, null, state.url);	
 },
 
 configState: function(options) {
@@ -1300,19 +1306,9 @@ ownsState: function(state) {
 	return !!state['meeko-panner'];
 },
 
-pushState: (history.pushState) ? function(url) {
-	history.pushState({}, null, url || null);
-	panner.resetState({ url: url });
-} : null,
-
-replaceState: (history.replaceState) ? function(url) {
-	history.replaceState({}, null, url || null);
-	panner.resetState({ url: url });
-} : null,
-
-updateState: function(state) { // called from popstate
+restoreState: function(state) { // called from popstate
 	if (!state) state = history.state;
-	panner.resetState(state);
+	panner.state = state;
 },
 
 saveScroll: function() {
@@ -1388,12 +1384,23 @@ var notify = function(msg) {
 	if (typeof listener == "function") isolate(function() { listener(msg); }); // TODO isFunction(listener)
 }
 
-var page = async(function(loader, callback) {
+var page = async(function(oldState, newState, callback) {
 	if (!getDecorMeta()) throw "Cannot page if the document has not been decorated";
 
 	var doc, ready = false;
+
 	delay(function() { ready = true; }, panner.options.duration);
 	
+	if (newState.document) doc = newState.document;
+	else {
+		var url = newState.url;
+		var method = 'get'; // newState.method
+		panner.options.load(method, url, null, { method: method, url: url }, {
+			onComplete: function(result) { doc = result; },
+			onError: function() { logger.error("HTMLLoader failed"); } // FIXME page() will stall. Need elegant error handling
+		});
+	}
+
 	queue([
 	
 	function() { // before pageOut / nodeRemoved
@@ -1414,17 +1421,6 @@ var page = async(function(loader, callback) {
 			});
 		});		
 	},
-
-	async(function(cb) { // kickoff loading the next page
-		if (typeof loader == "function") loader({
-			onComplete: function(result) { doc = result; cb.complete(); },
-			onError: function() { logger.error("HTMLLoader failed"); cb.error(); }		
-		});
-		else {
-			doc = loader;
-			return true;
-		}
-	}),
 
 	function() { return wait(function() { return ready; }); },
 
@@ -1450,7 +1446,9 @@ var page = async(function(loader, callback) {
 			target: document
 		});		
 	},
-	
+
+	function() { return wait(function() { return !!doc; }); },
+		
 	function() { // before pageIn
 		notify({
 			module: "panner",
@@ -1459,10 +1457,10 @@ var page = async(function(loader, callback) {
 			target: document,
 			node: doc
 		});
-		mergeHead(doc, false);
 	},
 
 	async(function(cb) { // pageIn
+		mergeHead(doc, false);
 		var nodeList = [];
 		var contentStart = doc.body.firstChild;
 		if (contentStart) placeContent(contentStart,
