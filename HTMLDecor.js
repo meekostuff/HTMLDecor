@@ -688,7 +688,6 @@ parse: function(html, url) {
 	forEach($$("style", iframeDoc.body), function(node) { // TODO support <style scoped>
 		iframeDoc.head.appendChild(node);
 	});
-	
 	var pseudoDoc = importDocument(iframeDoc);
 	docHead.removeChild(iframe);
 
@@ -1278,12 +1277,15 @@ navigate: async(function(options, callback) {
 	
 }),
 
+bfcache: {},
+
 createState: function(options) {
 	var state = {
 		'meeko-panner': true,
 		pageXOffset: 0,
 		pageYOffset: 0,
-		url: null
+		url: null,
+		timeStamp: +(new Date)
 	};
 	if (options) config(state, options);
 	return state;
@@ -1387,20 +1389,32 @@ var notify = function(msg) {
 var page = async(function(oldState, newState, callback) {
 	if (!getDecorMeta()) throw "Cannot page if the document has not been decorated";
 
-	var doc, ready = false;
-
+	var ready = false;
 	delay(function() { ready = true; }, panner.options.duration);
-	
-	if (newState.document) doc = newState.document;
-	else {
+
+	var oldDoc = panner.bfcache[oldState.timeStamp];
+	if (!oldDoc) {
+		oldDoc = document.implementation.createHTMLDocument(''); // FIXME
+		panner.bfcache[oldState.timeStamp] = oldDoc;
+	}
+	var oldDocSaved = false;
+
+	var newDoc = panner.bfcache[newState.timeStamp];
+	if (!newDoc) {
 		var url = newState.url;
 		var method = 'get'; // newState.method
 		panner.options.load(method, url, null, { method: method, url: url }, {
-			onComplete: function(result) { doc = result; },
+			onComplete: function(result) {
+				newDoc = result;
+				panner.bfcache[newState.timeStamp] = newDoc;
+			},
 			onError: function() { logger.error("HTMLLoader failed"); } // FIXME page() will stall. Need elegant error handling
 		});
 	}
 
+	var oldContent = getContent(oldDoc);
+	var newContent;
+	
 	queue([
 	
 	function() { // before pageOut / nodeRemoved
@@ -1425,12 +1439,15 @@ var page = async(function(oldState, newState, callback) {
 	function() { return wait(function() { return ready; }); },
 
 	function() {
-		if (doc) return; // pageIn will take care of pageOut
+		if (newDoc) return; // pageIn will take care of pageOut
 
-		separateHead();
+		separateHead(false, function(target) {
+			oldDoc.head.appendChild(target); // FIXME will need to use some of mergeHead()
+		});
 		each(decor.placeHolders, function(id, node) {
 			var target = $id(id);
 			replaceNode(target, node);
+			oldDoc.body.appendChild(target); // FIXME should use adoptNode()
 			notify({
 				module: "panner",
 				stage: "after",
@@ -1439,6 +1456,7 @@ var page = async(function(oldState, newState, callback) {
 				node: target
 			});
 		});
+		oldDocSaved = true;
 		notify({
 			module: "panner",
 			stage: "after",
@@ -1447,7 +1465,7 @@ var page = async(function(oldState, newState, callback) {
 		});		
 	},
 
-	function() { return wait(function() { return !!doc; }); },
+	function() { return wait(function() { return !!newDoc; }); },
 		
 	function() { // before pageIn
 		notify({
@@ -1455,16 +1473,19 @@ var page = async(function(oldState, newState, callback) {
 			stage: "before",
 			type: "pageIn",
 			target: document,
-			node: doc
+			node: newDoc
 		});
 	},
 
 	async(function(cb) { // pageIn
-		mergeHead(doc, false);
+		newContent = getContent(newDoc);
+		
+		mergeHead(newDoc, false, function(target) {
+			if (!oldDocSaved) oldDoc.head.appendChild(target);
+		});
 		var nodeList = [];
-		var contentStart = doc.body.firstChild;
-		if (contentStart) placeContent(contentStart,
-			function(node) {
+		placeContent(newContent, // FIXME uses locally-scoped implementation of placeContent()
+			function(node, target) {
 				notify({
 					module: "panner",
 					stage: "before",
@@ -1473,7 +1494,8 @@ var page = async(function(oldState, newState, callback) {
 					node: node
 				});
 			},
-			function(node) {
+			function(node, target) {
+				if (!oldDocSaved) oldDoc.body.appendChild(target);
 				nodeList.push(node);
 				delay(function() {
 					notify({
@@ -1501,12 +1523,36 @@ var page = async(function(oldState, newState, callback) {
 		});
 	}
 	
-	], callback);	
+	], callback);
+	
+	function getContent(doc) {
+		var content = {};
+		each(decor.placeHolders, function(id) {
+			content[id] = $id(id, doc);
+		});
+		return content;
+	}
 
+	function placeContent(content, beforeReplace, afterReplace) { // this should work for content from both internal and external documents
+		each(decor.placeHolders, function(id) {
+			var node = content[id];
+			if (!node) {
+				console.log(id + ' not found');
+				return;
+			}
+			var target = $id(id);
+			// TODO compat check between node and target
+			if (beforeReplace) beforeReplace(node, target);
+			replaceNode(target, node);
+			if (afterReplace) afterReplace(node, target);
+		});
+	}
+
+	
 });
 
 
-function separateHead(isDecor) {
+function separateHead(isDecor, afterRemove) { // FIXME more callback than just afterRemove?
 	var dstHead = document.head;
 	var marker = getDecorMeta();
 	if (!marker) throw "No meeko-decor marker found. ";
@@ -1515,16 +1561,17 @@ function separateHead(isDecor) {
 	forSiblings (isDecor ? "before" : "after", marker, function(node) {
 		if (tagName(node) == "script" && (!node.type || node.type.match(/^text\/javascript/i))) return;
 		dstHead.removeChild(node);
+		if (afterRemove) afterRemove(node);
 	});	
 }
 
-function mergeHead(doc, isDecor) {
+function mergeHead(doc, isDecor, afterRemove) { // FIXME more callback than just afterRemove?
 	var baseURL = URL(document.URL);
 	var dstHead = document.head;
 	var marker = getDecorMeta();
 	if (!marker) throw "No meeko-decor marker found. ";
 
-	separateHead(isDecor);
+	separateHead(isDecor, afterRemove);
 
 	// remove duplicate scripts from srcHead
 	var srcHead = doc.head;
