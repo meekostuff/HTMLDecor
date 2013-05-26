@@ -86,12 +86,39 @@ extend(Meeko.stuff, {
 });
 
 /*
- ### Async functions
-   wait(test) waits until test() returns true
-   until(test, fn) repeats call to fn() until test() returns true
-   delay(fn, timeout) makes one call to fn() after timeout ms
-   queue([fn1, fn2, ...]) will call (potentially async) functions sequentially
+ ### Task queuing and isolation
  */
+
+var queueTask = window.setImmediate || (function() {
+
+var taskQueue = [];
+var scheduled = false;
+
+function queueTask(fn) {
+	taskQueue.push(fn);
+	if (scheduled) return;
+	schedule(processTasks);
+	scheduled = true;
+}
+
+// NOTE schedule used to be approx: setImmediate || postMessage || setTimeout
+var schedule = window.setTimeout;
+
+function processTasks() {
+	var task;
+	while (taskQueue.length) {
+		task = taskQueue.shift();
+		if (typeof task !== 'function') continue;
+		var success = isolate(task);
+		// FIXME then what??
+	}
+	scheduled = false;
+}
+
+return queueTask;
+
+})();
+
 var isolate = (function() { // TODO maybe it isn't worth isolating on platforms that don't have dispatchEvent()
 
 var evType = vendorPrefix + "-isolate";
@@ -107,15 +134,15 @@ if (window.dispatchEvent) {
 	isolate = function(fn) {
 		testFn = fn;
 		var e = document.createEvent("Event");
-		e.initEvent("meeko-isolate", true, true);
+		e.initEvent(evType, true, true);
 		window.dispatchEvent(e);
 		return complete.pop();
 	}
 }
-else if ("onpropertychange" in document) {
+else if ("onpropertychange" in document) { // TODO this is for IE <= 8. Might be better with the re-throw solution
 	var meta = document.createElement("meta");
 	meta[evType] = 0;
-	meta.onpropertychange = wrapper;
+	meta.onpropertychange = function(e) { e = e || window.event; if (e.propertyName === evType) wrapper() }
 	isolate = function(fn) { // by inserting meta every time, it doesn't matter if some code removes meta
 		testFn = fn;
 		if (!meta.parentNode) document.head.appendChild(meta);
@@ -127,166 +154,343 @@ else if ("onpropertychange" in document) {
 else isolate = function(fn) {
 	var complete = false;
 	try { fn(); complete = true; }
-	catch(error) { }
+	catch(error) { setTimeout(function() { throw error; }); }
 	return complete;
 }
 
 return isolate;
 })();
 
-var Callback = function(handlers) {
-	if (!(this instanceof Callback)) return new Callback(handlers);
-	this.isCallback = true;
-	this.called = false;
-	switch (typeof handlers) {
-	case "object":
-		extend(this, handlers); // TODO should check fields
-		break;
-	case "function":
-		this.onComplete = handlers;
-		break;
-	default: break; // TODO
+
+/*
+ ### Future
+ */
+
+var Future = Meeko.Future = (function() {
+
+var Future = function(init) { // `init` is called as init.call(resolver)
+	// FIXME
+	if (!(this instanceof Future)) return new Future(init);
+	var future = this;
+	future.acceptCallbacks = [];
+	future.rejectCallbacks = [];
+	future.accepted = null;
+	future.result = null;
+	future.processing = false;
+	
+	var resolver = { // TODO should sync option be unavailable?? Or just not advertised??
+		accept: function(value, sync) { future.accept(value, sync); },
+		resolve: function(value, sync) { future.resolve(value, sync); },
+		reject: function(value, sync) { future.reject(value, sync); }
 	}
+	if (init === undefined) return;
+	try { init.call(resolver); }
+	catch(error) { resolver.reject(error); }
+	// NOTE future is returned by `new` invokation
 }
 
-extend(Callback.prototype, {
+extend(Future.prototype, {
 
-complete: function() {
-	if (this.called) throw "Callback has already been called";
-	this.called = true;
-	if (this.onComplete) this.onComplete.apply(this, arguments);
+accept: function(result, sync) { // NOTE equivalent to "accept algorithm". External calls MUST NOT use sync
+	var future = this;
+	if (future.accepted != null) return;
+	future.accepted = true;
+	future.result = result;
+	future.process(sync);
 },
 
-error: function() {
-	if (this.called) throw "Callback has already been called";
-	this.called = true;
-	if (this.onError) this.onError.apply(this, arguments);
+resolve: function(value, sync) { // NOTE equivalent to "resolve algorithm". External calls MUST NOT use sync
+	var future = this;
+	if (future.accepted != null) return;
+	if (value != null && typeof value.then === 'function') {
+		try {
+			value.then(
+				function(result) { future.resolve(result); },
+				function(error) { future.reject(error); }
+			);
+		}
+		catch(error) {
+			future.reject(error, sync);
+		}
+		return;
+	}
+	// else
+	future.accept(value, sync);
+},
+
+reject: function(error, sync) { // NOTE equivalent to "reject algorithm". External calls MUST NOT use sync
+	var future = this;
+	if (future.accepted != null) return;
+	future.accepted = false;
+	future.result = error;
+	future.process(sync);
+},
+
+process: function(sync) { // NOTE schedule callback processing. TODO may want to disable sync option
+	var future = this;
+	if (future.accepted == null) return;
+	if (future.processing) return;
+	if (sync) {
+		future.processing = true;
+		future._process();
+		future.processing = false;
+	}
+	else {
+		queueTask(function() {
+			future.processing = true;
+			future._process();
+			future.processing = false;
+		});
+	}
+},
+
+_process: function() { // NOTE process a futures callbacks
+	var future = this;
+	var result = future.result;
+	var callbacks, cb;
+	if (future.accepted) {
+		future.rejectCallbacks.length = 0;
+		callbacks = future.acceptCallbacks;
+	}
+	else {
+		future.acceptCallbacks.length = 0;
+		callbacks = future.rejectCallbacks;
+	}
+	while (callbacks.length) {
+		cb = callbacks.shift();
+		if (typeof cb === 'function') isolate(function() { cb(result); });
+	}
+},
+
+done: function(acceptCallback, rejectCallback) {
+	var future = this;
+	future.acceptCallbacks.push(acceptCallback);
+	future.rejectCallbacks.push(rejectCallback);
+	future.process();
+},
+
+thenfu: function(acceptCallback, rejectCallback) {
+	var future = this;
+	var newResolver, newFuture = new Future(function() { newResolver = this; });
+
+	var acceptWrapper = acceptCallback ?
+		wrapfuCallback(acceptCallback, newResolver) :
+		function(value) { newResolver.accept(value); }
+
+	var rejectWrapper = rejectCallback ? 
+		wrapfuCallback(rejectCallback, newResolver) :
+		function(error) { newResolver.reject(error); }
+
+	future.done(acceptWrapper, rejectWrapper);
+	
+	return newFuture;
+},
+
+catchfu: function(rejectCallback) {
+	var future = this;
+	return future.thenfu(null, rejectCallback);
+},
+
+then: function(acceptCallback, rejectCallback) {
+	var future = this;
+	var acceptWrapper = acceptCallback && wrapResolve(acceptCallback);
+	var rejectWrapper = rejectCallback && wrapResolve(rejectCallback);
+	return future.thenfu(acceptWrapper, rejectWrapper);
+},
+
+'catch': function(rejectCallback) { // FIXME 'catch'is unexpected identifier in IE8-
+	var future = this;
+	return future.then(null, rejectCallback);
 }
 
 });
 
-function isCallback(obj) {
-	return (obj && obj.isCallback);
-}
 
-var async = function(fn) {
-	var wrapper = function() {
-		var nParams = fn.length, nArgs = arguments.length;
-		if (nArgs > nParams) throw "Too many parameters in async call";
-		var inCB = arguments[nParams - 1], cb;
-		if (isCallback(inCB)) cb = inCB;
-		else switch (typeof inCB) {
-			case "undefined": case "null":
-				cb = new Callback();
-				break;
-			case "function":
-				cb = new Callback();
-				cb.onComplete = inCB;
-				break;
-			case "object":
-				if (inCB.onComplete) {
-					cb = new Callback();
-					cb.onComplete = inCB.onComplete;
-					cb.onError = inCB.onError;
-					break;
-				}
-				// else fall-thru to error
-			default:
-				throw "Invalid callback parameter in async call";
-				break;
-		}
-		var params = [].slice.call(arguments, 0);
-		params[nParams - 1] = cb;
-		var result = fn.apply(this, params); // FIXME result should never occur, right? Is it an async function or not!?
-		if (result) delay(function() { cb.complete(result) });
-		return cb;
+extend(Future, {
+
+accept: function(result) {
+	var resolver, future = new Future(function() { resolver = this; });
+	resolver.accept(result);
+	return future;
+},
+
+resolve: function(value) { // NOTE equivalent to "resolve wrap"
+	var resolver, future = new Future(function() { resolver = this; });
+	resolver.resolve(value);
+	return future;
+},
+
+reject: function(error) {
+	var resolver, future = new Future(function() { resolver = this; });
+	resolver.reject(error);
+	return future;
+},
+
+any: function() {
+	var resolver, future = new Future(function() { resolver = this; });
+	var countdown = arguments.length;
+	if (countdown <= 0) {
+		resolver.resolve(); // FIXME why isn't this accept??
+		return future;
 	}
-	return wrapper;
+	var resolveCallback = function(value) { resolver.resolve(value); }
+	var rejectCallback = function(error) { resolver.reject(error); }
+	forEach(arguments, function(value, i) {
+		var newFuture = Future.resolve(value);
+		newFuture.done(resolveCallback, rejectCallback);
+	});
+	return future;
+},
+
+every: function() {
+	var resolver, future = new Future(function() { resolver = this; });
+	var countdown = arguments.length;
+	if (countdown <= 0) {
+		resolver.resolve(); // FIXME why isn't this accept??
+		return future;
+	}
+	var args = [];
+	var rejectCallback = function(error) { resolver.reject(error); }
+	forEach(arguments, function(value, i) {
+		var resolveCallback = function(arg) {
+			args[i] = arg;
+			if (--countdown <= 0) resolver.resolve(args, true); // FIXME surely this should accept!!?? Should it be accept.apply(resolver, args)??
+		}
+		var newFuture = Future.resolve(value);
+		newFuture.done(resolveCallback, rejectCallback);
+	});
+	return future;
+},
+
+some: function() {
+	var resolver, future = new Future(function() { resolver = this; });
+	var countdown = arguments.length;
+	if (countdown <= 0) {
+		resolver.resolve(); // FIXME why isn't this accept??
+		return future;
+	}
+	var args = [];
+	var resolveCallback = function(value) { resolver.resolve(value); }
+	forEach(arguments, function(value, i) {
+		var rejectCallback = function(arg) {
+			args[i] = arg;
+			if (--countdown <= 0 ) resolver.reject(args, true);
+		}
+		var newFuture = Future.resolve(value);
+		newFuture.done(resolveCallback, rejectCallback);
+	});
+	return future;
 }
 
+});
+
+function wrapfuCallback(callback, resolver) {
+	return function() {
+		try {
+			callback.apply(resolver, arguments);
+		}
+		catch (error) {
+			resolver.reject(error, true);
+		}
+	}
+}
+
+function wrapResolve(callback) { // prewrap in .then() before passing to .thenfu() and thence to wrapfu
+	return function() {
+		var value = callback.apply(null, arguments); 
+		this.resolve(value, true);
+	}
+}
+
+	
+return Future;
+
+})();
+
+/*
+ ### Async functions
+   wait(test) waits until test() returns true
+   until(test, fn) repeats call to fn() until test() returns true
+   delay(fn, timeout) makes one call to fn() after timeout ms
+   pipefu([fn1, fn2, ...]) will call functions sequentially, passing a resolver object
+ */
 var wait = (function() {
 	
-var timerId, callbacks = [];
+var timerId, tests = [];
 
-function waitback() {
-	var waitCB, i = 0;
-	while ((waitCB = callbacks[i])) {
-		var hook = waitCB.hook;
-		var done, success;
-		success = isolate(function() { done = hook(); });
-		if (!success) {
-			callbacks.splice(i,1);
-			waitCB.error();
+function wait(fn) {
+	var resolver, future = new Future(function() { resolver = this; });
+	tests.push({
+		fn: fn,
+		resolver: resolver
+	});
+	if (!timerId) timerId = window.setInterval(poller, Future.pollingInterval); // NOTE polling-interval is configured below		
+	return future;
+}
+
+function poller() {
+	var test, i = 0;
+	while ((test = tests[i])) {
+		var fn = test.fn, resolver = test.resolver;
+		var done;
+		try {
+			done = fn();
+			if (done) {
+				tests.splice(i,1);
+				resolver.accept(done);
+			}
+			else i++;
 		}
-		else if (done) {
-			callbacks.splice(i,1);
-			waitCB.complete();
+		catch(error) {
+			tests.splice(i,1);
+			resolver.reject(error);
 		}
-		else i++;
 	}
-	if (!callbacks.length) {
+	if (tests.length <= 0) {
 		window.clearInterval(timerId); // FIXME probably shouldn't use intervals cause it may screw up debuggers
 		timerId = null;
 	}
 }
 
-var wait = async(function(fn, waitCB) {
-	waitCB.hook = fn;
-	callbacks.push(waitCB);
-	if (!timerId) timerId = window.setInterval(waitback, Async.pollingInterval); // NOTE polling-interval is configured below
-});
-
 return wait;
 
 })();
 
-var until = function(test, fn, untilCB) {
-	return wait(function() { var complete = test(); if (!complete) fn(); return complete; }, untilCB);
+function until(test, fn) {
+	return wait(function() { var complete = test(); if (!complete) fn(); return complete; });
 }
 
-var delay = async(function(fn, timeout, delayCB) {
-	var timerId = window.setTimeout(function() {
+function delay(fn, timeout) {
+	var resolver, future = new Future(function() { resolver = this; });
+	window.setTimeout(function() {
 		var result;
-		var success = isolate(function() { result = fn(); });
-		if (!success) {
-			delayCB.error();
-			return;
+		try {
+			result = fn();
+			resolver.accept(result);
 		}
-		else delayCB.complete(result);
+		catch(error) {
+			resolver.reject(error);
+		}
 	}, timeout);
-});
+	return future;
+}
 
-var queue = async(function(fnList, queueCB) {
-	var list = [], innerCB;
-	forEach(fnList, function(fn) {
-		if (typeof fn != "function") throw "Non-function passed to queue()";
-		list.push(fn);
-	});
-	var queueback = function() {
-		var fn;
-		while ((fn = list.shift())) {
-			var success = isolate(function() { innerCB = fn(); });
-			if (!success) {
-				queueCB.error();
-				return;
-			}
-			if (isCallback(innerCB)) {
-				innerCB.onComplete = queueback;
-				innerCB.onError = function() { queueCB.error(); }
-				return;
-			}
-		}
-		queueCB.complete();
+function pipefu(fnList, startValue) {
+	var future = Future.accept(startValue); // FIXME Future.resolve would allow pipefu() to receive a Future
+	while (list.length) { 
+		var fn = list.shift();
+		future = future.thenfu(fn);
 	}
-	queueback();
+	return future;
+}
+
+Future.pollingInterval = defaults['polling_interval'];
+
+extend(Future, {
+	isolate: isolate, queueTask: queueTask, delay: delay, wait: wait, until: until, pipefu: pipefu
 });
 
-var Async = Meeko.Async || (Meeko.Async = {});
-Async.pollingInterval = defaults['polling_interval'];
 
-extend(Async, {
-	isCallback: isCallback, Callback: Callback, wrap: async, delay: delay, wait: wait, until: until, queue: queue
-});
 
 /*
  ### DOM utility functions
@@ -522,11 +726,11 @@ return URL;
 
 })();
 
-var loadHTML = async(function(url, cb) { // WARN only performs GET
+var loadHTML = function(url) { // WARN only performs GET
 	var htmlLoader = new HTMLLoader();
 	var method = 'get';
-	htmlLoader.load(method, url, null, { method: method, url: url }, cb);
-});
+	return htmlLoader.load(method, url, null, { method: method, url: url });
+}
 
 var HTMLLoader = (function() {
 
@@ -543,33 +747,21 @@ var HTMLLoader = function(options) {
 
 extend(HTMLLoader.prototype, {
 
-load: async(function(method, url, data, details, cb) {
+load: function(method, url, data, details) {
 	var htmlLoader = this;
-	var xhr, doc;
 	
 	if (!details.url) details.url = url;
 	
-	queue([
-		async(function(qb) {
-			htmlLoader.request(method, url, data, details,
-				new Callback({
-					onComplete: function(result) { doc = result; qb.complete(); },
-					onError: function(err) { logger.error(err); qb.error(err); }
-				})
-			);
-		}),
-		function() {
-			if (htmlLoader.normalize) htmlLoader.normalize(doc, details);
-		}
-	], {
-		onComplete: function() { cb.complete(doc); },
-		onError: cb.onError
-	});
-}),
+	return htmlLoader.request(method, url, data, details) // NOTE this returns the future that .then returns
+		.then(
+			function(doc) { if (htmlLoader.normalize) htmlLoader.normalize(doc, details); return doc; },
+			function(err) { logger.error(err); throw (err); }
+		);
+},
 
 serialize: function(data, details) { return ""; },  // TODO
 
-request: function(method, url, data, details, cb) {
+request: function(method, url, data, details) {
 	var sendText = null;
 	method = lc(method);
 	if ('post' == method) {
@@ -582,14 +774,15 @@ request: function(method, url, data, details, cb) {
 	else {
 		throw uc(method) + ' not supported';
 	}
-	doRequest(method, url, sendText, details, cb);
+	return doRequest(method, url, sendText, details);
 },
 
 normalize: function(doc, details) {}
 
 });
 
-var doRequest = function(method, url, sendText, details, cb) {
+var doRequest = function(method, url, sendText, details) {
+	var r, future = new Future(function() { r = this; });
 	var xhr = window.XMLHttpRequest ?
 		new XMLHttpRequest() :
 		new ActiveXObject("Microsoft.XMLHTTP");
@@ -599,15 +792,16 @@ var doRequest = function(method, url, sendText, details, cb) {
 	function onchange() {
 		if (xhr.readyState != 4) return;
 		if (xhr.status != 200) {
-			cb.error(xhr.status); // FIXME what should status be??
+			r.reject(xhr.status); // FIXME what should status be??
 			return;
 		}
 		delay(onload); // Use delay to stop the readystatechange event interrupting other event handlers (on IE). 
 	}
-	function onload() { 
+	function onload() {
 		var doc = parseHTML(new String(xhr.responseText), details.url);
-		cb.complete(doc);
+		r.accept(doc);
 	}
+	return future;
 }
 
 return HTMLLoader;
@@ -875,23 +1069,22 @@ start: function() {
 	decor.started = true;
 	var options = decor.options;
 	var decorURL;
-	return queue([
-
-	function() {
+	return Future.accept()
+	.then(function() {
 		if (options.lookup) decorURL = options.lookup(document.URL);
 		if (decorURL) return;
 		if (options.detect) return wait(function() { return !!document.body; });
-	},
-	function() {
+	})
+	.then(function() {
 		if (!decorURL && options.detect) decorURL = options.detect(document);
 		if (!decorURL) throw "No decor could be determined for this page";
 		decorURL = URL(document.URL).resolve(decorURL);
 		decor.current.url = decorURL;
-	},
-	function() {
+	})
+	.then(function() {
 		return decor.decorate(decorURL); // FIXME what if decorate fails??
-	},
-	function() {
+	})
+	.then(function() {
 		scrollToId(location.hash && location.hash.substr(1));
 
 		if (!history.pushState) return;
@@ -918,12 +1111,10 @@ start: function() {
 		window.addEventListener("submit", function(e) { panner.onSubmit(e); }, true);
 		window.addEventListener("popstate", function(e) { panner.onPopState(e); }, true);
 		window.addEventListener('scroll', function(e) { panner.saveScroll(); }, false); // NOTE first scroll after popstate might be cancelled
-	}
-		
-	]);
+	});
 },
 
-decorate: async(function(decorURL, callback) {
+decorate: function(decorURL) {
 	var doc, complete = false;
 	var contentStart, decorEnd;
 	var placingContent = false;
@@ -931,31 +1122,29 @@ decorate: async(function(decorURL, callback) {
 
 	if (getDecorMeta()) throw "Cannot decorate a document that has already been decorated";
 
-	queue([
-
-	async(function(cb) {
+	return Future.accept()
+	.then(function() {
 		var method = 'get';
-		decor.options.load(method, decorURL, null, { method: method, url: decorURL }, {
-			onComplete: function(result) {
-				doc = result;
-				cb.complete(doc);
-			},
-			onError: function() { logger.error("HTMLLoader failed for " + decorURL); cb.error(); } // FIXME need decorError notification / handling
-		});
-	}),
-	function() {
+		var f = decor.options.load(method, decorURL, null, { method: method, url: decorURL });
+		f.done(
+			function(result) { doc = result; },
+			function(error) { logger.error("HTMLLoader failed for " + decorURL); } // FIXME need decorError notification / handling
+		);
+		return f;
+	})
+	.then(function() {
 		if (panner.options.normalize) return wait(function() { return DOM.isContentLoaded(); });
 		else return wait(function() { return !!document.body; });
-	},
-	function() {
+	})
+	.then(function() {
 		if (panner.options.normalize) isolate(function() { panner.options.normalize(document, { url: document.URL }); });
 		marker = document.createElement("meta");
 		marker.name = "meeko-decor";
 		document.head.insertBefore(marker, document.head.firstChild);
-	},
+	})
 	
 	/* Now merge decor into page */
-	function() {
+	.then(function() {
 		notify({
 			module: "decor",
 			stage: "before",
@@ -963,9 +1152,9 @@ decorate: async(function(decorURL, callback) {
 			node: doc
 		});
 		mergeHead(doc, true);
-	},
-	function() { return wait(function() { return scriptQueue.isEmpty(); }); }, 
-	function() {
+	})
+	.then(function() { return wait(function() { return scriptQueue.isEmpty(); }); })
+	.then(function() {
 		contentStart = document.body.firstChild;
 		decor_insertBody(doc);
 		notify({
@@ -974,9 +1163,8 @@ decorate: async(function(decorURL, callback) {
 			type: "decorIn",
 			node: doc
 		});
-		wait(
-			 function() { return checkStyleSheets(); },
-			 function() {
+		wait(function() { return checkStyleSheets(); })
+			.done(function() {
 				decorReady = true;
 				notify({
 					module: "decor",
@@ -984,8 +1172,7 @@ decorate: async(function(decorURL, callback) {
 					type: "decorReady",
 					node: doc
 				});
-			}
-		);
+			});
 		decorEnd = document.createTextNode("");
 		document.body.insertBefore(decorEnd, contentStart);
 		notify({
@@ -995,8 +1182,8 @@ decorate: async(function(decorURL, callback) {
 			node: document,
 			target: document
 		}); // TODO perhaps this should be stalled until scriptQueue.isEmpty() (or a config option)
-	},
-	function() {
+	})
+	.then(function() {
 		return until(
 			function() { return DOM.isContentLoaded() && placingContent; },
 			function() {
@@ -1032,9 +1219,9 @@ decorate: async(function(decorURL, callback) {
 				);
 			}
 		);
-	},
-	function() { return wait(function() { return complete && scriptQueue.isEmpty(); }); },
-	function() { // NOTE resolve URLs in landing page
+	})
+	.then(function() { return wait(function() { return complete && scriptQueue.isEmpty(); }); })
+	.then(function() { // NOTE resolve URLs in landing page
 		// TODO could be merged with code in parseHTML
 		var baseURL = URL(document.URL);
 		function _resolve(el, attrName) {
@@ -1072,19 +1259,18 @@ decorate: async(function(decorURL, callback) {
 			var tree = $(node.id);
 			resolveTree(tree, false);
 		});
-	},
-	function() {
+	})
+	.then(function() {
 		notify({
 			module: "panner",
 			stage: "after",
 			type: "pageIn",
 			target: document
 		});
-	},
-	function() { return wait(function() { return decorReady; }); }
+	})
+	.then(function() { return wait(function() { return decorReady; }); });
 
-	], callback);
-})
+}
 
 });
 
@@ -1206,7 +1392,7 @@ onPopState: function(e) {
 	else delay(function() {
 		panner.restoreScroll(newState);
 		complete = true;
-	}, Async.pollingInterval);
+	}, Future.pollingInterval);
 	
 	/*
 	  All browsers seem to scroll the page around the popstate event.
@@ -1232,27 +1418,28 @@ onPopState: function(e) {
 	}
 },
 
-assign: function(url, callback) {
-	panner.navigate({
+assign: function(url) {
+	return panner.navigate({
 		url: url,
 		replace: false
-	}, callback);
+	});
 },
 
-replace: function(url, callback) {
-	panner.navigate({
+replace: function(url) {
+	return panner.navigate({
 		url: url,
 		replace: true
-	}, callback);
+	});
 },
 
-navigate: async(function(options, callback) {
+navigate: function(options) {
+	var r, future = new Future(function() { r = this; });
 	var url = options.url;
 	var decorURL = decor.options.lookup(url);
 	if (typeof decorURL !== "string" || URL(document.URL).resolve(decorURL) !== decor.current.url) {
 		var modifier = options.replace ? "replace" : "assign";
 		location[modifier](url);
-		callback.complete();	// TODO should this be an error??
+		r.accept();	// TODO should this be an error??
 		return;
 	}
 
@@ -1260,22 +1447,23 @@ navigate: async(function(options, callback) {
 	var newState = panner.createState({ // FIXME
 		url: url
 	});
-	page(oldState, newState, {
-		onComplete: function(msg) {
-			var oURL = URL(newState.url);
-			scrollToId(oURL.hash && oURL.hash.substr(1));
 
-			panner.saveScroll();
+	page(oldState, newState)
+	.then(function(msg) {
+		var oURL = URL(newState.url);
+		scrollToId(oURL.hash && oURL.hash.substr(1));
 
-			callback.complete(msg);
-		}
+		panner.saveScroll();
+
+		r.accept(msg);
 	});
 	
 	// Change document.URL
 	// FIXME When should this happen?
 	panner.commitState(newState, options.replace);
 	
-}),
+	return future;
+},
 
 bfcache: {},
 
@@ -1334,10 +1522,10 @@ restoreScroll: function(state) {
 decor.options = {
 	lookup: function(url) {},
 	detect: function(document) {},
-	load: async(function(method, url, data, details, cb) {
+	load: function(method, url, data, details) {
 		var loader = new HTMLLoader(decor.options);
-		loader.load(method, url, data, details, cb);
-	})
+		return loader.load(method, url, data, details);
+	}
 	/* The following options are also available (unless otherwise indicated) *
 	decorIn: { before: noop, after: noop },
 	decorOut: { before: noop, after: noop }, // TODO not called at all
@@ -1347,10 +1535,10 @@ decor.options = {
 
 panner.options = { 
 	duration: 0,
-	load: async(function(method, url, data, details, cb) {
+	load: function(method, url, data, details) {
 		var loader = new HTMLLoader(panner.options);
-		loader.load(method, url, data, details, cb);
-	})
+		return loader.load(method, url, data, details);
+	}
 	/* The following options are also available *
 	nodeRemoved: { before: hide, after: show },
 	nodeInserted: { before: hide, after: show },
@@ -1386,8 +1574,8 @@ var notify = function(msg) {
 	if (typeof listener == "function") isolate(function() { listener(msg); }); // TODO isFunction(listener)
 }
 
-var page = async(function(oldState, newState, callback) {
-	if (!getDecorMeta()) throw "Cannot page if the document has not been decorated";
+var page = function(oldState, newState) {
+	if (!getDecorMeta()) throw "Cannot page if the document has not been decorated"; // FIXME r.reject()
 
 	var ready = false;
 	delay(function() { ready = true; }, panner.options.duration);
@@ -1403,21 +1591,22 @@ var page = async(function(oldState, newState, callback) {
 	if (!newDoc) {
 		var url = newState.url;
 		var method = 'get'; // newState.method
-		panner.options.load(method, url, null, { method: method, url: url }, {
-			onComplete: function(result) {
+		panner.options.load(method, url, null, { method: method, url: url })
+		.then(
+			function(result) {
 				newDoc = result;
 				panner.bfcache[newState.timeStamp] = newDoc;
 			},
-			onError: function() { logger.error("HTMLLoader failed"); } // FIXME page() will stall. Need elegant error handling
-		});
+			function(error) { logger.error("HTMLLoader failed"); } // FIXME page() will stall. Need elegant error handling
+		);
 	}
 
 	var oldContent = getContent(oldDoc);
 	var newContent;
 	
-	queue([
-	
-	function() { // before pageOut / nodeRemoved
+	return Future.accept()
+
+	.then(function() { // before pageOut / nodeRemoved
 		notify({
 			module: "panner",
 			stage: "before",
@@ -1434,11 +1623,11 @@ var page = async(function(oldState, newState, callback) {
 				node: target // TODO rename `target` variable
 			});
 		});		
-	},
+	})
 
-	function() { return wait(function() { return ready; }); },
+	.then(function() { return wait(function() { return ready; }); })
 
-	function() {
+	.then(function() {
 		if (newDoc) return; // pageIn will take care of pageOut
 
 		separateHead(false, function(target) {
@@ -1463,11 +1652,11 @@ var page = async(function(oldState, newState, callback) {
 			type: "pageOut",
 			target: document
 		});		
-	},
+	})
 
-	function() { return wait(function() { return !!newDoc; }); },
+	.then(function() { return wait(function() { return !!newDoc; }); })
 		
-	function() { // before pageIn
+	.then(function() { // before pageIn
 		notify({
 			module: "panner",
 			stage: "before",
@@ -1475,9 +1664,10 @@ var page = async(function(oldState, newState, callback) {
 			target: document,
 			node: newDoc
 		});
-	},
+	})
 
-	async(function(cb) { // pageIn
+	.thenfu(function() { // pageIn
+		var r = this;
 		newContent = getContent(newDoc);
 		
 		mergeHead(newDoc, false, function(target) {
@@ -1506,24 +1696,24 @@ var page = async(function(oldState, newState, callback) {
 						node: node
 					});
 					remove(nodeList, node);
-					if (!nodeList.length) cb.complete();
+					if (!nodeList.length) r.accept();
 				});
 			}
 		);
-	}),
+	})
 	
-	function() { return wait(function() { return scriptQueue.isEmpty(); }); },
+	.then(function() { return wait(function() { return scriptQueue.isEmpty(); }); })
 	
-	function() { // after pageIn
+	.then(function() { // after pageIn
 		notify({
 			module: "panner",
 			stage: "after",
 			type: "pageIn",
 			target: document
 		});
-	}
+	});
 	
-	], callback);
+	// NOTE page() returns now. The following functions are hoisted
 	
 	function getContent(doc) {
 		var content = {};
@@ -1549,7 +1739,7 @@ var page = async(function(oldState, newState, callback) {
 	}
 
 	
-});
+}
 
 
 function separateHead(isDecor, afterRemove) { // FIXME more callback than just afterRemove?

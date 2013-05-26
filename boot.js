@@ -471,7 +471,7 @@ htmldecor_script = bootOptions['htmldecor_script'] = resolveURL(htmldecor_script
 function config() {
 	Meeko.DOM.isContentLoaded = isContentLoaded;
 	Meeko.DOM.HTMLParser.prototype.prepare = html5prepare;
-	Meeko.Async.pollingInterval = bootOptions["polling_interval"];
+	Meeko.Future.pollingInterval = bootOptions["polling_interval"];
 	Meeko.decor.config({
 		decorReady: Viewport.unhide
 	});
