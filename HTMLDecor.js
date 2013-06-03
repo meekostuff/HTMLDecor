@@ -163,98 +163,104 @@ return isolate;
 
 
 /*
- ### Future
+ ### FutureFu - a base-class for Futures
  */
 
-var Future = Meeko.Future = (function() {
-
-var Future = function(init) { // `init` is called as init.call(resolver)
-	// FIXME
-	if (!(this instanceof Future)) return new Future(init);
-	var future = this;
-	future.acceptCallbacks = [];
-	future.rejectCallbacks = [];
-	future.accepted = null;
-	future.result = null;
-	future.processing = false;
+var FutureFu = Meeko.FutureFu = function(init) { // `init` is called as init.call(resolver)
+	if (!(this instanceof FutureFu)) return new FutureFu(init);
 	
-	var resolver = { // TODO should sync option be unavailable?? Or just not advertised??
-		accept: function(value, sync) { future.accept(value, sync); },
-		resolve: function(value, sync) { future.resolve(value, sync); },
-		reject: function(value, sync) { future.reject(value, sync); }
-	}
+	var future = this;
+	future._constructor = FutureFu;
+	future._initialize();
+
 	if (init === undefined) return;
+
+	var resolver = future._resolver;
 	try { init.call(resolver); }
-	catch(error) { resolver.reject(error); }
-	// NOTE future is returned by `new` invokation
+	catch(error) { future._reject(error); }
+	// NOTE future is returned by `new` invocation
 }
 
-extend(Future.prototype, {
+extend(FutureFu.prototype, {
 
-accept: function(result, sync) { // NOTE equivalent to "accept algorithm". External calls MUST NOT use sync
+_initialize: function() {
 	var future = this;
-	if (future.accepted != null) return;
-	future.accepted = true;
-	future.result = result;
-	future.process(sync);
+	future._acceptCallbacks = [];
+	future._rejectCallbacks = [];
+	future._accepted = null;
+	future._result = null;
+	future._processing = false;	
+	future._resolver = {
+		accept: function(value) { future._accept(value); },
+		resolve: function(value) { future._resolve(value); },
+		reject: function(value) { future._reject(value); }
+	}
 },
 
-resolve: function(value, sync) { // NOTE equivalent to "resolve algorithm". External calls MUST NOT use sync
+_accept: function(result, sync) { // NOTE equivalent to "accept algorithm". External calls MUST NOT use sync
 	var future = this;
-	if (future.accepted != null) return;
+	if (future._accepted != null) return;
+	future._accepted = true;
+	future._result = result;
+	future._requestProcessing(sync);
+},
+
+_resolve: function(value, sync) { // NOTE equivalent to "resolve algorithm". External calls MUST NOT use sync
+	var future = this;
+	if (future._accepted != null) return;
 	if (value != null && typeof value.then === 'function') {
 		try {
 			value.then(
-				function(result) { future.resolve(result); },
-				function(error) { future.reject(error); }
+				function(result) { future._resolve(result); },
+				function(error) { future._reject(error); }
 			);
 		}
 		catch(error) {
-			future.reject(error, sync);
+			future._reject(error, sync);
 		}
 		return;
 	}
 	// else
-	future.accept(value, sync);
+	future._accept(value, sync);
 },
 
-reject: function(error, sync) { // NOTE equivalent to "reject algorithm". External calls MUST NOT use sync
+_reject: function(error, sync) { // NOTE equivalent to "reject algorithm". External calls MUST NOT use sync
 	var future = this;
-	if (future.accepted != null) return;
-	future.accepted = false;
-	future.result = error;
-	future.process(sync);
+	if (future._accepted != null) return;
+	future._accepted = false;
+	future._result = error;
+	future._requestProcessing(sync);
 },
 
-process: function(sync) { // NOTE schedule callback processing. TODO may want to disable sync option
+_requestProcessing: function(sync) { // NOTE schedule callback processing. TODO may want to disable sync option
 	var future = this;
-	if (future.accepted == null) return;
-	if (future.processing) return;
+	if (future._accepted == null) return;
+	if (future._processing) return;
 	if (sync) {
-		future.processing = true;
+		future._processing = true;
 		future._process();
-		future.processing = false;
+		future._processing = false;
 	}
 	else {
 		queueTask(function() {
-			future.processing = true;
+			future._processing = true;
 			future._process();
-			future.processing = false;
+			future._processing = false;
 		});
 	}
 },
 
 _process: function() { // NOTE process a futures callbacks
 	var future = this;
-	var result = future.result;
+	var result = future._result;
 	var callbacks, cb;
-	if (future.accepted) {
-		future.rejectCallbacks.length = 0;
-		callbacks = future.acceptCallbacks;
+	if (future._accepted) {
+		future._rejectCallbacks.length = 0;
+		callbacks = future._acceptCallbacks;
 	}
 	else {
-		future.acceptCallbacks.length = 0;
-		callbacks = future.rejectCallbacks;
+		future._acceptCallbacks.length = 0;
+		callbacks = future._rejectCallbacks;
 	}
 	while (callbacks.length) {
 		cb = callbacks.shift();
@@ -264,33 +270,77 @@ _process: function() { // NOTE process a futures callbacks
 
 done: function(acceptCallback, rejectCallback) {
 	var future = this;
-	future.acceptCallbacks.push(acceptCallback);
-	future.rejectCallbacks.push(rejectCallback);
-	future.process();
+	future._acceptCallbacks.push(acceptCallback);
+	future._rejectCallbacks.push(rejectCallback);
+	future._requestProcessing();
 },
 
 thenfu: function(acceptCallback, rejectCallback) {
 	var future = this;
-	var newResolver, newFuture = new Future(function() { newResolver = this; });
-
+	var constructor = future._constructor; //  || future.constructor;
+	var newResolver, newFuture = new constructor(function() { newResolver = this; });
 	var acceptWrapper = acceptCallback ?
-		wrapfuCallback(acceptCallback, newResolver) :
-		function(value) { newResolver.accept(value); }
+		wrapfuCallback(acceptCallback, newResolver, newFuture) :
+		function(value) { newFuture._accept(value); }
 
 	var rejectWrapper = rejectCallback ? 
-		wrapfuCallback(rejectCallback, newResolver) :
-		function(error) { newResolver.reject(error); }
+		wrapfuCallback(rejectCallback, newResolver, newFuture) :
+		function(error) { newFuture._reject(error); }
 
 	future.done(acceptWrapper, rejectWrapper);
 	
 	return newFuture;
-},
+}
 
-catchfu: function(rejectCallback) {
+});
+
+/* Functional composition wrapper for `thenfu` */
+function wrapfuCallback(callback, resolver, future) {
+	return function() {
+		try {
+			callback.apply(resolver, arguments);
+		}
+		catch (error) {
+			future._reject(error, true);
+		}
+	}
+}
+
+
+/*
+ ### Future
+ */
+
+/* If you want to sub-class FutureFu then do it like this:
+
+var Future = Meeko.Future = function(init) { // `init` is called as init.call(resolver)
+	if (!(this instanceof Future)) return new Future(init);
+
 	var future = this;
-	return future.thenfu(null, rejectCallback);
-},
+	future._constructor = Future; // FutureFu#pipefu calls `new future._constructor( init )`. 
+	future._initialize();
 
+	if (init === undefined) return;
+
+	var resolver = future._resolver;
+	try { init.call(resolver); }
+	catch(error) { future._reject(error); }
+	// NOTE future is returned by `new` invokation
+}
+
+var _Future = function() {}
+_Future.prototype = FutureFu.prototype;
+Future.prototype = new _Future();
+
+*/
+/* If you just want to take-over FutureFu then do it this way: */
+
+var Future = Meeko.Future = FutureFu;
+
+/**/
+
+extend(Future.prototype, {
+	
 then: function(acceptCallback, rejectCallback) {
 	var future = this;
 	var acceptWrapper = acceptCallback && wrapResolve(acceptCallback);
@@ -298,121 +348,39 @@ then: function(acceptCallback, rejectCallback) {
 	return future.thenfu(acceptWrapper, rejectWrapper);
 },
 
-'catch': function(rejectCallback) { // FIXME 'catch'is unexpected identifier in IE8-
+'catch': function(rejectCallback) { // FIXME 'catch' is unexpected identifier in IE8-
 	var future = this;
 	return future.then(null, rejectCallback);
 }
 
 });
 
-
-extend(Future, {
-
-accept: function(result) {
-	var resolver, future = new Future(function() { resolver = this; });
-	resolver.accept(result);
-	return future;
-},
-
-resolve: function(value) { // NOTE equivalent to "resolve wrap"
-	var resolver, future = new Future(function() { resolver = this; });
-	resolver.resolve(value);
-	return future;
-},
-
-reject: function(error) {
-	var resolver, future = new Future(function() { resolver = this; });
-	resolver.reject(error);
-	return future;
-},
-
-any: function() {
-	var resolver, future = new Future(function() { resolver = this; });
-	var countdown = arguments.length;
-	if (countdown <= 0) {
-		resolver.resolve(); // FIXME why isn't this accept??
-		return future;
-	}
-	var resolveCallback = function(value) { resolver.resolve(value); }
-	var rejectCallback = function(error) { resolver.reject(error); }
-	forEach(arguments, function(value, i) {
-		var newFuture = Future.resolve(value);
-		newFuture.done(resolveCallback, rejectCallback);
-	});
-	return future;
-},
-
-every: function() {
-	var resolver, future = new Future(function() { resolver = this; });
-	var countdown = arguments.length;
-	if (countdown <= 0) {
-		resolver.resolve(); // FIXME why isn't this accept??
-		return future;
-	}
-	var args = [];
-	var rejectCallback = function(error) { resolver.reject(error); }
-	forEach(arguments, function(value, i) {
-		var resolveCallback = function(arg) {
-			args[i] = arg;
-			if (--countdown <= 0) resolver.resolve(args, true); // FIXME surely this should accept!!?? Should it be accept.apply(resolver, args)??
-		}
-		var newFuture = Future.resolve(value);
-		newFuture.done(resolveCallback, rejectCallback);
-	});
-	return future;
-},
-
-some: function() {
-	var resolver, future = new Future(function() { resolver = this; });
-	var countdown = arguments.length;
-	if (countdown <= 0) {
-		resolver.resolve(); // FIXME why isn't this accept??
-		return future;
-	}
-	var args = [];
-	var resolveCallback = function(value) { resolver.resolve(value); }
-	forEach(arguments, function(value, i) {
-		var rejectCallback = function(arg) {
-			args[i] = arg;
-			if (--countdown <= 0 ) resolver.reject(args, true);
-		}
-		var newFuture = Future.resolve(value);
-		newFuture.done(resolveCallback, rejectCallback);
-	});
-	return future;
-}
-
-});
-
-function wrapfuCallback(callback, resolver) {
-	return function() {
-		try {
-			callback.apply(resolver, arguments);
-		}
-		catch (error) {
-			resolver.reject(error, true);
-		}
-	}
-}
-
-function wrapResolve(callback) { // prewrap in .then() before passing to .thenfu() and thence to wrapfu
+/* Functional composition wrapper for `then` */
+function wrapResolve(callback) { // prewrap in .then() before passing to .pipefu() and thence to wrapfu
 	return function() {
 		var value = callback.apply(null, arguments); 
 		this.resolve(value, true);
 	}
 }
 
-	
-return Future;
 
-})();
+extend(Future, {
+
+resolve: function(value) { // NOTE equivalent to "resolve wrap"
+	var resolver, future = new Future(function() { resolver = this; });
+	resolver.resolve(value);
+	return future;
+}
+
+});
+
 
 /*
  ### Async functions
    wait(test) waits until test() returns true
    until(test, fn) repeats call to fn() until test() returns true
-   delay(fn, timeout) makes one call to fn() after timeout ms
-   pipefu([fn1, fn2, ...]) will call functions sequentially, passing a resolver object
+   delay(timeout, fn) makes one call to fn() after timeout ms
+   pipe(startValue, [fn1, fn2, ...]) will call functions sequentially
  */
 var wait = (function() {
 	
@@ -460,12 +428,12 @@ function until(test, fn) {
 	return wait(function() { var complete = test(); if (!complete) fn(); return complete; });
 }
 
-function delay(fn, timeout) {
+function delay(timeout, fn) { // NOTE fn is optional
 	var resolver, future = new Future(function() { resolver = this; });
 	window.setTimeout(function() {
 		var result;
 		try {
-			result = fn();
+			result = fn && fn();
 			resolver.accept(result);
 		}
 		catch(error) {
@@ -475,11 +443,11 @@ function delay(fn, timeout) {
 	return future;
 }
 
-function pipefu(fnList, startValue) {
-	var future = Future.accept(startValue); // FIXME Future.resolve would allow pipefu() to receive a Future
-	while (list.length) { 
-		var fn = list.shift();
-		future = future.thenfu(fn);
+function pipe(startValue, fnList) {
+	var future = Future.resolve(startValue); // FIXME Future.resolve would allow seriesfu() to receive a Future
+	while (fnList.length) { 
+		var fn = fnList.shift();
+		future = future.then(fn);
 	}
 	return future;
 }
@@ -487,7 +455,7 @@ function pipefu(fnList, startValue) {
 Future.pollingInterval = defaults['polling_interval'];
 
 extend(Future, {
-	isolate: isolate, queueTask: queueTask, delay: delay, wait: wait, until: until, pipefu: pipefu
+	isolate: isolate, queue: queueTask, delay: delay, wait: wait, until: until, pipe: pipe
 });
 
 
@@ -659,7 +627,7 @@ var overrideDefaultAction = function(e, fn) {
 	}
 	window.addEventListener(e.type, backstop, false);
 	
-	delay(function() {
+	delay(0, function() {
 		window.removeEventListener(e.type, backstop, false);
 		if (defaultPrevented) return;
 		fn(e);
@@ -795,7 +763,7 @@ var doRequest = function(method, url, sendText, details) {
 			r.reject(xhr.status); // FIXME what should status be??
 			return;
 		}
-		delay(onload); // Use delay to stop the readystatechange event interrupting other event handlers (on IE). 
+		delay(0, onload); // Use delay to stop the readystatechange event interrupting other event handlers (on IE). 
 	}
 	function onload() {
 		var doc = parseHTML(new String(xhr.responseText), details.url);
@@ -1069,22 +1037,23 @@ start: function() {
 	decor.started = true;
 	var options = decor.options;
 	var decorURL;
-	return Future.accept()
-	.then(function() {
+	return pipe(null, [
+		
+	function() {
 		if (options.lookup) decorURL = options.lookup(document.URL);
 		if (decorURL) return;
 		if (options.detect) return wait(function() { return !!document.body; });
-	})
-	.then(function() {
+	},
+	function() {
 		if (!decorURL && options.detect) decorURL = options.detect(document);
 		if (!decorURL) throw "No decor could be determined for this page";
 		decorURL = URL(document.URL).resolve(decorURL);
 		decor.current.url = decorURL;
-	})
-	.then(function() {
+	},
+	function() {
 		return decor.decorate(decorURL); // FIXME what if decorate fails??
-	})
-	.then(function() {
+	},
+	function() {
 		scrollToId(location.hash && location.hash.substr(1));
 
 		if (!history.pushState) return;
@@ -1111,19 +1080,22 @@ start: function() {
 		window.addEventListener("submit", function(e) { panner.onSubmit(e); }, true);
 		window.addEventListener("popstate", function(e) { panner.onPopState(e); }, true);
 		window.addEventListener('scroll', function(e) { panner.saveScroll(); }, false); // NOTE first scroll after popstate might be cancelled
-	});
+	}
+	
+	]);
 },
 
 decorate: function(decorURL) {
 	var doc, complete = false;
 	var contentStart, decorEnd;
 	var placingContent = false;
-	var decorReady = false;
+	var decorReady = false; // FIXME this should be a future
 
 	if (getDecorMeta()) throw "Cannot decorate a document that has already been decorated";
 
-	return Future.accept()
-	.then(function() {
+	return pipe(null, [
+
+	function() {
 		var method = 'get';
 		var f = decor.options.load(method, decorURL, null, { method: method, url: decorURL });
 		f.done(
@@ -1131,20 +1103,20 @@ decorate: function(decorURL) {
 			function(error) { logger.error("HTMLLoader failed for " + decorURL); } // FIXME need decorError notification / handling
 		);
 		return f;
-	})
-	.then(function() {
+	},
+	function() {
 		if (panner.options.normalize) return wait(function() { return DOM.isContentLoaded(); });
 		else return wait(function() { return !!document.body; });
-	})
-	.then(function() {
+	},
+	function() {
 		if (panner.options.normalize) isolate(function() { panner.options.normalize(document, { url: document.URL }); });
 		marker = document.createElement("meta");
 		marker.name = "meeko-decor";
 		document.head.insertBefore(marker, document.head.firstChild);
-	})
+	},
 	
 	/* Now merge decor into page */
-	.then(function() {
+	function() {
 		notify({
 			module: "decor",
 			stage: "before",
@@ -1152,9 +1124,9 @@ decorate: function(decorURL) {
 			node: doc
 		});
 		mergeHead(doc, true);
-	})
-	.then(function() { return wait(function() { return scriptQueue.isEmpty(); }); })
-	.then(function() {
+	},
+	function() { return wait(function() { return scriptQueue.isEmpty(); }); }, // FIXME this shouldn't have to poll
+	function() {
 		contentStart = document.body.firstChild;
 		decor_insertBody(doc);
 		notify({
@@ -1165,7 +1137,7 @@ decorate: function(decorURL) {
 		});
 		wait(function() { return checkStyleSheets(); })
 			.done(function() {
-				decorReady = true;
+				decorReady = true; // FIXME this should be a Future's accept
 				notify({
 					module: "decor",
 					stage: "after",
@@ -1182,8 +1154,8 @@ decorate: function(decorURL) {
 			node: document,
 			target: document
 		}); // TODO perhaps this should be stalled until scriptQueue.isEmpty() (or a config option)
-	})
-	.then(function() {
+	},
+	function() {
 		return until(
 			function() { return DOM.isContentLoaded() && placingContent; },
 			function() {
@@ -1204,7 +1176,7 @@ decorate: function(decorURL) {
 					},
 					function(node) {
 						nodeList.push(node.id);
-						delay(function() {
+						delay(0, function() {
 							notify({
 								module: "panner",
 								stage: "after",
@@ -1219,9 +1191,9 @@ decorate: function(decorURL) {
 				);
 			}
 		);
-	})
-	.then(function() { return wait(function() { return complete && scriptQueue.isEmpty(); }); })
-	.then(function() { // NOTE resolve URLs in landing page
+	},
+	function() { return wait(function() { return complete && scriptQueue.isEmpty(); }); }, // FIXME this shouldn't have to poll
+	function() { // NOTE resolve URLs in landing page
 		// TODO could be merged with code in parseHTML
 		var baseURL = URL(document.URL);
 		function _resolve(el, attrName) {
@@ -1259,17 +1231,18 @@ decorate: function(decorURL) {
 			var tree = $(node.id);
 			resolveTree(tree, false);
 		});
-	})
-	.then(function() {
+	},
+	function() {
 		notify({
 			module: "panner",
 			stage: "after",
 			type: "pageIn",
 			target: document
 		});
-	})
-	.then(function() { return wait(function() { return decorReady; }); });
+	},
+	function() { return wait(function() { return decorReady; }); }
 
+	]);
 }
 
 });
@@ -1389,7 +1362,7 @@ onPopState: function(e) {
 			complete = true;
 		});
 	}
-	else delay(function() {
+	else delay(0, function() {
 		panner.restoreScroll(newState);
 		complete = true;
 	}, Future.pollingInterval);
@@ -1578,7 +1551,7 @@ var page = function(oldState, newState) {
 	if (!getDecorMeta()) throw "Cannot page if the document has not been decorated"; // FIXME r.reject()
 
 	var ready = false;
-	delay(function() { ready = true; }, panner.options.duration);
+	delay(panner.options.duration, function() { ready = true; });
 
 	var oldDoc = panner.bfcache[oldState.timeStamp];
 	if (!oldDoc) {
@@ -1604,9 +1577,9 @@ var page = function(oldState, newState) {
 	var oldContent = getContent(oldDoc);
 	var newContent;
 	
-	return Future.accept()
-
-	.then(function() { // before pageOut / nodeRemoved
+	return pipe(null, [
+		
+	function() { // before pageOut / nodeRemoved
 		notify({
 			module: "panner",
 			stage: "before",
@@ -1623,11 +1596,11 @@ var page = function(oldState, newState) {
 				node: target // TODO rename `target` variable
 			});
 		});		
-	})
+	},
 
-	.then(function() { return wait(function() { return ready; }); })
+	function() { return wait(function() { return ready; }); },
 
-	.then(function() {
+	function() {
 		if (newDoc) return; // pageIn will take care of pageOut
 
 		separateHead(false, function(target) {
@@ -1652,11 +1625,11 @@ var page = function(oldState, newState) {
 			type: "pageOut",
 			target: document
 		});		
-	})
+	},
 
-	.then(function() { return wait(function() { return !!newDoc; }); })
+	function() { return wait(function() { return !!newDoc; }); },
 		
-	.then(function() { // before pageIn
+	function() { // before pageIn
 		notify({
 			module: "panner",
 			stage: "before",
@@ -1664,10 +1637,10 @@ var page = function(oldState, newState) {
 			target: document,
 			node: newDoc
 		});
-	})
+	},
 
-	.thenfu(function() { // pageIn
-		var r = this;
+	function() { // pageIn
+		var r, f = new Future(function() { r = this; });
 		newContent = getContent(newDoc);
 		
 		mergeHead(newDoc, false, function(target) {
@@ -1687,7 +1660,7 @@ var page = function(oldState, newState) {
 			function(node, target) {
 				if (!oldDocSaved) oldDoc.body.appendChild(target);
 				nodeList.push(node);
-				delay(function() {
+				delay(0, function() {
 					notify({
 						module: "panner",
 						stage: "after",
@@ -1700,18 +1673,20 @@ var page = function(oldState, newState) {
 				});
 			}
 		);
-	})
+	},
 	
-	.then(function() { return wait(function() { return scriptQueue.isEmpty(); }); })
+	function() { return wait(function() { return scriptQueue.isEmpty(); }); }, // FIXME scriptQueue should be synced with a Future
 	
-	.then(function() { // after pageIn
+	function() { // after pageIn
 		notify({
 			module: "panner",
 			stage: "after",
 			type: "pageIn",
 			target: document
 		});
-	});
+	}
+	
+	]);
 	
 	// NOTE page() returns now. The following functions are hoisted
 	
@@ -1893,7 +1868,7 @@ var processQueue = function(e) {
 		removeListeners(script);
 	}
 	if (pending) return;
-	delay(_processQueue);
+	delay(0, _processQueue);
 	pending = true;
 }
 
