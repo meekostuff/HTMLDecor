@@ -1089,7 +1089,7 @@ decorate: function(decorURL) {
 	var doc, complete = false;
 	var contentStart, decorEnd;
 	var placingContent = false;
-	var decorReady = false; // FIXME this should be a future
+	var decorReadyFu;
 
 	if (getDecorMeta()) throw "Cannot decorate a document that has already been decorated";
 
@@ -1125,7 +1125,7 @@ decorate: function(decorURL) {
 		});
 		mergeHead(doc, true);
 	},
-	function() { return wait(function() { return scriptQueue.isEmpty(); }); }, // FIXME this shouldn't have to poll
+	function() { return wait(function() { return scriptQueue.isEmpty(); }); }, // FIXME this should be in mergeHead
 	function() {
 		contentStart = document.body.firstChild;
 		decor_insertBody(doc);
@@ -1135,16 +1135,15 @@ decorate: function(decorURL) {
 			type: "decorIn",
 			node: doc
 		});
-		wait(function() { return checkStyleSheets(); })
-			.done(function() {
-				decorReady = true; // FIXME this should be a Future's accept
-				notify({
-					module: "decor",
-					stage: "after",
-					type: "decorReady",
-					node: doc
-				});
+		decorReadyFu = wait(function() { return checkStyleSheets(); });
+		decorReadyFu.done(function() {
+			notify({
+				module: "decor",
+				stage: "after",
+				type: "decorReady",
+				node: doc
 			});
+		});
 		decorEnd = document.createTextNode("");
 		document.body.insertBefore(decorEnd, contentStart);
 		notify({
@@ -1240,7 +1239,7 @@ decorate: function(decorURL) {
 			target: document
 		});
 	},
-	function() { return wait(function() { return decorReady; }); }
+	function() { return decorReadyFu; }
 
 	]);
 }
@@ -1357,7 +1356,8 @@ onPopState: function(e) {
 	var complete = false;
 	var newURL = URL(newState.url).nohash;
 	if (newURL != URL(oldState.url).nohash) {
-		page(oldState, newState, function() {
+		page(oldState, newState)
+		.done(function() {
 			panner.restoreScroll(newState);
 			complete = true;
 		});
@@ -1422,7 +1422,7 @@ navigate: function(options) {
 	});
 
 	page(oldState, newState)
-	.then(function(msg) {
+	.done(function(msg) {
 		var oURL = URL(newState.url);
 		scrollToId(oURL.hash && oURL.hash.substr(1));
 
@@ -1550,8 +1550,7 @@ var notify = function(msg) {
 var page = function(oldState, newState) {
 	if (!getDecorMeta()) throw "Cannot page if the document has not been decorated"; // FIXME r.reject()
 
-	var ready = false;
-	delay(panner.options.duration, function() { ready = true; });
+	var durationFu = delay(panner.options.duration);
 
 	var oldDoc = panner.bfcache[oldState.timeStamp];
 	if (!oldDoc) {
@@ -1560,12 +1559,14 @@ var page = function(oldState, newState) {
 	}
 	var oldDocSaved = false;
 
-	var newDoc = panner.bfcache[newState.timeStamp];
-	if (!newDoc) {
+	var newDoc, newDocFu;
+	newDoc = panner.bfcache[newState.timeStamp];
+	if (newDoc) newDocFu = Future.resolve(newDoc);
+	else {
 		var url = newState.url;
 		var method = 'get'; // newState.method
-		panner.options.load(method, url, null, { method: method, url: url })
-		.then(
+		newDocFu = panner.options.load(method, url, null, { method: method, url: url });
+		newDocFu.done(
 			function(result) {
 				newDoc = result;
 				panner.bfcache[newState.timeStamp] = newDoc;
@@ -1598,7 +1599,7 @@ var page = function(oldState, newState) {
 		});		
 	},
 
-	function() { return wait(function() { return ready; }); },
+	function() { return durationFu; },
 
 	function() {
 		if (newDoc) return; // pageIn will take care of pageOut
@@ -1627,7 +1628,7 @@ var page = function(oldState, newState) {
 		});		
 	},
 
-	function() { return wait(function() { return !!newDoc; }); },
+	function() { return newDocFu; },
 		
 	function() { // before pageIn
 		notify({
