@@ -129,13 +129,20 @@ var removeEvent =
 	document.detachEvent && function(node, event, fn) { return node.detachEvent("on" + event, fn); } ||
 	function(node, event, fn) { if (node["on" + event] == fn) node["on" + event] = null; }
 
-var isContentLoaded = (function() { // TODO perhaps remove listeners after load detected
+var domReady = (function() { // TODO perhaps remove listeners after load detected
 // WARN this function assumes the script is included in the page markup so it will run before DOMContentLoaded, etc
 
 var loaded = false;
+var queue = [];
 
-function isContentLoaded() {
-	return loaded;
+function domReady(fn) {
+	queue.push(fn);
+	if (loaded) processQueue();
+}
+
+function processQueue() {
+	forEach(queue, function(fn) { setTimeout(fn); });
+	queue.length = 0;
 }
 
 (function() { 
@@ -151,13 +158,17 @@ addListeners(document);
 function onLoaded(e) {
 	if (e.target == document) loaded = true;
 	if (document.readyState == "complete") loaded = true;
-	if (loaded) removeListeners(document);
+	if (!loaded) return;
+	removeListeners(document);
+	processQueue();
 }
 
 function onChange(e) {
 	var readyState = document.readyState;
 	if (readyState == "loaded" || readyState == "complete") loaded = true;
-	if (loaded) removeListeners(document);
+	if (!loaded) return;
+	removeListeners(document);
+	processQueue();
 }
 
 function addListeners(node) {
@@ -170,7 +181,7 @@ function removeListeners(node) {
 
 })();
 
-return isContentLoaded;
+return domReady;
 
 })();
 
@@ -469,7 +480,7 @@ if (typeof htmldecor_script !== 'string') throw 'HTMLDecor script URL is not con
 htmldecor_script = bootOptions['htmldecor_script'] = resolveURL(htmldecor_script, urlParams);
 
 function config() {
-	Meeko.DOM.isContentLoaded = isContentLoaded;
+	Meeko.DOM.ready = domReady;
 	Meeko.DOM.HTMLParser.prototype.prepare = html5prepare;
 	Meeko.Future.pollingInterval = bootOptions["polling_interval"];
 	Meeko.decor.config({

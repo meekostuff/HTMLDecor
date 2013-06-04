@@ -378,7 +378,6 @@ resolve: function(value) { // NOTE equivalent to "resolve wrap"
 /*
  ### Async functions
    wait(test) waits until test() returns true
-   until(test, fn) repeats call to fn() until test() returns true
    delay(timeout, fn) makes one call to fn() after timeout ms
    pipe(startValue, [fn1, fn2, ...]) will call functions sequentially
  */
@@ -424,10 +423,6 @@ return wait;
 
 })();
 
-function until(test, fn) {
-	return wait(function() { var complete = test(); if (!complete) fn(); return complete; });
-}
-
 function delay(timeout, fn) { // NOTE fn is optional
 	var resolver, future = new Future(function() { resolver = this; });
 	window.setTimeout(function() {
@@ -444,7 +439,7 @@ function delay(timeout, fn) { // NOTE fn is optional
 }
 
 function pipe(startValue, fnList) {
-	var future = Future.resolve(startValue); // FIXME Future.resolve would allow seriesfu() to receive a Future
+	var future = Future.resolve(startValue);
 	while (fnList.length) { 
 		var fn = fnList.shift();
 		future = future.then(fn);
@@ -455,7 +450,7 @@ function pipe(startValue, fnList) {
 Future.pollingInterval = defaults['polling_interval'];
 
 extend(Future, {
-	isolate: isolate, queue: queueTask, delay: delay, wait: wait, until: until, pipe: pipe
+	isolate: isolate, queue: queueTask, delay: delay, wait: wait, pipe: pipe
 });
 
 
@@ -593,12 +588,45 @@ var readyStateLookup = {
 	"complete": true
 }
 
-var isContentLoaded = function() { // WARN this assumes that document.readyState is valid or that content is ready...
-	// Change Meeko.DOM.isContentLoaded if you need something better
-	var readyState = document.readyState;
-	var loaded = !readyState || readyStateLookup[readyState];
-	return loaded;
+var domReady = (function() { // WARN this assumes that document.readyState is valid or that content is ready...
+
+var readyState = document.readyState;
+var loaded = readyState ? readyStateLookup[readyState] : true;
+var queue = [];
+
+function domReady(fn) {
+	queue.push(fn);
+	if (loaded) processQueue();
 }
+
+function processQueue() {
+	forEach(queue, setTimeout, window);
+	queue.length = 0;
+}
+
+if (!loaded) addListeners();
+
+return domReady;
+
+// NOTE the following functions are hoisted
+function onLoaded(e) {
+	loaded = true;
+	removeListeners();
+	processQueue();
+}
+
+function addListeners() {
+	addEvent(document, "DOMContentLoaded", onLoaded);
+	addEvent(window, "load", onLoaded);
+}
+
+function removeListeners() {
+	removeEvent(document, "DOMContentLoaded", onLoaded);
+	removeEvent(window, "load", onLoaded);
+}
+
+})();
+
 
 var overrideDefaultAction = function(e, fn) {
 	// Shim the event to detect if external code has called preventDefault(), and to make sure we call it (but late as possible);
@@ -990,7 +1018,7 @@ var DOM = Meeko.DOM || (Meeko.DOM = {});
 extend(DOM, {
 	$id: $id, $$: $$, tagName: tagName, forSiblings: forSiblings, matchesElement: matchesElement, firstChild: firstChild,
 	replaceNode: replaceNode, copyAttributes: copyAttributes, scrollToId: scrollToId, createDocument: createDocument,
-	addEvent: addEvent, removeEvent: removeEvent, isContentLoaded: isContentLoaded, overrideDefaultAction: overrideDefaultAction,
+	addEvent: addEvent, removeEvent: removeEvent, ready: domReady, overrideDefaultAction: overrideDefaultAction,
 	URL: URL, HTMLLoader: HTMLLoader, HTMLParser: HTMLParser, loadHTML: loadHTML, parseHTML: parseHTML,
 	polyfill: polyfill
 });
@@ -1087,9 +1115,14 @@ start: function() {
 
 decorate: function(decorURL) {
 	var doc, complete = false;
-	var contentStart, decorEnd;
-	var placingContent = false;
+	var decorEnd;
 	var decorReadyFu;
+	var domReadyFu = new Future(function() {
+		var r = this;
+		DOM.ready(function() { r.accept(); });
+	});
+	var contentLoaded = false;
+	domReadyFu.done(function() { contentLoaded = true; });
 
 	if (getDecorMeta()) throw "Cannot decorate a document that has already been decorated";
 
@@ -1105,7 +1138,7 @@ decorate: function(decorURL) {
 		return f;
 	},
 	function() {
-		if (panner.options.normalize) return wait(function() { return DOM.isContentLoaded(); });
+		if (panner.options.normalize) return domReadyFu;
 		else return wait(function() { return !!document.body; });
 	},
 	function() {
@@ -1127,7 +1160,7 @@ decorate: function(decorURL) {
 	},
 	function() { return wait(function() { return scriptQueue.isEmpty(); }); }, // FIXME this should be in mergeHead
 	function() {
-		contentStart = document.body.firstChild;
+		var contentStart = document.body.firstChild;
 		decor_insertBody(doc);
 		notify({
 			module: "decor",
@@ -1155,43 +1188,34 @@ decorate: function(decorURL) {
 		}); // TODO perhaps this should be stalled until scriptQueue.isEmpty() (or a config option)
 	},
 	function() {
-		return until(
-			function() { return DOM.isContentLoaded() && placingContent; },
-			function() {
-				placingContent = true;
-				var nodeList = [];
-				contentStart = decorEnd.nextSibling;
-				if (contentStart) placeContent(
-					contentStart,
-					function(node, target) {
-						decor.placeHolders[target.id] = target;
-						notify({
-							module: "panner",
-							stage: "before",
-							type: "nodeInserted",
-							target: document.body,
-							node: node
-						});
-					},
-					function(node) {
-						nodeList.push(node.id);
-						delay(0, function() {
-							notify({
-								module: "panner",
-								stage: "after",
-								type: "nodeInserted",
-								target: document.body,
-								node: node
-							});
-							remove(nodeList, node.id);
-							if (!nodeList.length && DOM.isContentLoaded()) complete = true;
-						});
-					}
-				);
-			}
-		);
+		return wait(function() {
+			var contentStart = decorEnd.nextSibling;
+			if (contentStart) placeContent(
+				contentStart,
+				function(node, target) {
+					decor.placeHolders[target.id] = target;
+					notify({
+						module: "panner",
+						stage: "before",
+						type: "nodeInserted",
+						target: document.body,
+						node: node
+					});
+				},
+				function(node) {
+					notify({
+						module: "panner",
+						stage: "after",
+						type: "nodeInserted",
+						target: document.body,
+						node: node
+					});
+				}
+			);
+			return contentLoaded;
+		});
 	},
-	function() { return wait(function() { return complete && scriptQueue.isEmpty(); }); }, // FIXME this shouldn't have to poll
+	function() { return wait(function() { return scriptQueue.isEmpty(); }); }, // FIXME this shouldn't have to poll
 	function() { // NOTE resolve URLs in landing page
 		// TODO could be merged with code in parseHTML
 		var baseURL = URL(document.URL);
@@ -1275,7 +1299,6 @@ onClick: function(e) {
 		
 	// TODO perhaps should test same-site and same-page links
 	var isPageLink = (oURL.nohash == baseURL.nohash); // TODO what about page-links that match the current hash
-
 	// From here on we effectively take over the default-action of the event
 	overrideDefaultAction(e, function(event) {
 		if (isPageLink) panner.onPageLink(url);
@@ -1406,7 +1429,7 @@ replace: function(url) {
 },
 
 navigate: function(options) {
-	var r, future = new Future(function() { r = this; });
+	var r, f = new Future(function() { r = this; });
 	var url = options.url;
 	var decorURL = decor.options.lookup(url);
 	if (typeof decorURL !== "string" || URL(document.URL).resolve(decorURL) !== decor.current.url) {
@@ -1435,7 +1458,7 @@ navigate: function(options) {
 	// FIXME When should this happen?
 	panner.commitState(newState, options.replace);
 	
-	return future;
+	return f;
 },
 
 bfcache: {},
