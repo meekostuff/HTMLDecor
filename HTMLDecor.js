@@ -778,7 +778,7 @@ normalize: function(doc, details) {}
 });
 
 var doRequest = function(method, url, sendText, details) {
-	var r, future = new Future(function() { r = this; });
+return new Future(function() { var r = this;
 	var xhr = window.XMLHttpRequest ?
 		new XMLHttpRequest() :
 		new ActiveXObject("Microsoft.XMLHTTP");
@@ -797,7 +797,7 @@ var doRequest = function(method, url, sendText, details) {
 		var doc = parseHTML(new String(xhr.responseText), details.url);
 		r.accept(doc);
 	}
-	return future;
+});
 }
 
 return HTMLLoader;
@@ -1117,8 +1117,7 @@ decorate: function(decorURL) {
 	var doc, complete = false;
 	var decorEnd;
 	var decorReadyFu;
-	var domReadyFu = new Future(function() {
-		var r = this;
+	var domReadyFu = new Future(function() { var r = this;
 		DOM.ready(function() { r.accept(); });
 	});
 	var contentLoaded = false;
@@ -1429,7 +1428,7 @@ replace: function(url) {
 },
 
 navigate: function(options) {
-	var r, f = new Future(function() { r = this; });
+return new Future(function() { var r = this;
 	var url = options.url;
 	var decorURL = decor.options.lookup(url);
 	if (typeof decorURL !== "string" || URL(document.URL).resolve(decorURL) !== decor.current.url) {
@@ -1457,8 +1456,8 @@ navigate: function(options) {
 	// Change document.URL
 	// FIXME When should this happen?
 	panner.commitState(newState, options.replace);
-	
-	return f;
+
+});
 },
 
 bfcache: {},
@@ -1664,13 +1663,11 @@ var page = function(oldState, newState) {
 	},
 
 	function() { // pageIn
-		var r, f = new Future(function() { r = this; });
 		newContent = getContent(newDoc);
 		
 		mergeHead(newDoc, false, function(target) {
 			if (!oldDocSaved) oldDoc.head.appendChild(target);
 		});
-		var nodeList = [];
 		placeContent(newContent, // FIXME uses locally-scoped implementation of placeContent()
 			function(node, target) {
 				notify({
@@ -1683,17 +1680,12 @@ var page = function(oldState, newState) {
 			},
 			function(node, target) {
 				if (!oldDocSaved) oldDoc.body.appendChild(target);
-				nodeList.push(node);
-				delay(0, function() {
-					notify({
-						module: "panner",
-						stage: "after",
-						type: "nodeInserted",
-						target: document.body,
-						node: node
-					});
-					remove(nodeList, node);
-					if (!nodeList.length) r.accept();
+				notify({
+					module: "panner",
+					stage: "after",
+					type: "nodeInserted",
+					target: document.body,
+					node: node
 				});
 			}
 		);
