@@ -655,7 +655,7 @@ var overrideDefaultAction = function(e, fn) {
 	}
 	window.addEventListener(e.type, backstop, false);
 	
-	delay(0, function() {
+	queueTask(function() {
 		window.removeEventListener(e.type, backstop, false);
 		if (defaultPrevented) return;
 		fn(e);
@@ -791,7 +791,7 @@ return new Future(function() { var r = this;
 			r.reject(xhr.status); // FIXME what should status be??
 			return;
 		}
-		delay(0, onload); // Use delay to stop the readystatechange event interrupting other event handlers (on IE). 
+		queueTask(onload); // Use delay to stop the readystatechange event interrupting other event handlers (on IE). 
 	}
 	function onload() {
 		var doc = parseHTML(new String(xhr.responseText), details.url);
@@ -1157,7 +1157,7 @@ decorate: function(decorURL) {
 		});
 		mergeHead(doc, true);
 	},
-	function() { return wait(function() { return scriptQueue.isEmpty(); }); }, // FIXME this should be in mergeHead
+	function() { return scriptQueue.empty(); }, // FIXME this should be in mergeHead
 	function() {
 		var contentStart = document.body.firstChild;
 		decor_insertBody(doc);
@@ -1184,7 +1184,7 @@ decorate: function(decorURL) {
 			type: "pageIn",
 			node: document,
 			target: document
-		}); // TODO perhaps this should be stalled until scriptQueue.isEmpty() (or a config option)
+		}); // TODO perhaps this should wait on scriptQueue.empty() (or a config option)
 	},
 	function() {
 		return wait(function() {
@@ -1214,7 +1214,7 @@ decorate: function(decorURL) {
 			return contentLoaded;
 		});
 	},
-	function() { return wait(function() { return scriptQueue.isEmpty(); }); }, // FIXME this shouldn't have to poll
+	function() { return scriptQueue.empty(); },
 	function() { // NOTE resolve URLs in landing page
 		// TODO could be merged with code in parseHTML
 		var baseURL = URL(document.URL);
@@ -1384,7 +1384,7 @@ onPopState: function(e) {
 			complete = true;
 		});
 	}
-	else delay(0, function() {
+	else queueTask(function() {
 		panner.restoreScroll(newState);
 		complete = true;
 	}, Future.pollingInterval);
@@ -1691,7 +1691,7 @@ var page = function(oldState, newState) {
 		);
 	},
 	
-	function() { return wait(function() { return scriptQueue.isEmpty(); }); }, // FIXME scriptQueue should be synced with a Future
+	function() { return scriptQueue.empty(); },
 	
 	function() { // after pageIn
 		notify({
@@ -1848,10 +1848,19 @@ var scriptQueue = new function() {
 	http://wiki.whatwg.org/wiki/Dynamic_Script_Execution_Order#readyState_.22preloading.22
 */
 var queue = [],
-	pending = false,
+	processing = false,
+	emptying = false,
 	blockingScript;
-	
+
+var testScript = document.createElement('script'),
+	supportsOnLoad = (testScript.setAttribute('onload', 'void(0)'), typeof testScript.onload === 'function'),
+	supportsSync = (testScript.async === true);
+
 this.push = function(node) {
+	if (emptying) throw 'Attempt to append script to scriptQueue while emptying';
+	
+	// TODO assert node is in document
+	
 	if (!/^text\/javascript\?disabled$/i.test(node.type)) return;
 	var script = document.createElement("script");
 	copyAttributes(script, node);
@@ -1864,13 +1873,14 @@ this.push = function(node) {
 	queueScript(script, node);
 }
 
-this.isEmpty = function() {
-	return (queue.length <= 0 && !blockingScript);
+this.empty = function() {
+	emptying = true;
+	return wait(function() {
+		if (queue.length || blockingScript) return false;
+		emptying = false;
+		return true;
+	});
 }
-
-var testScript = document.createElement('script'),
-	supportsOnLoad = (testScript.setAttribute('onload', 'void(0)'), typeof testScript.onload === 'function'),
-	supportsSync = (testScript.async === true);
 
 var queueScript = function(script, node) {
 	queue.push({ script: script, node: node });
@@ -1883,13 +1893,12 @@ var processQueue = function(e) {
 		var script = e.target || e.srcElement;
 		removeListeners(script);
 	}
-	if (pending) return;
-	delay(0, _processQueue);
-	pending = true;
+	if (processing) return;
+	queueTask(_processQueue);
+	processing = true;
 }
 
 var _processQueue = function() {
-	pending = false;
 	blockingScript = null;
 	while (!blockingScript && queue.length > 0) {
 		var spec = queue.shift(), script = spec.script, node = spec.node, nextScript = queue.length && queue[0].script;
@@ -1900,6 +1909,7 @@ var _processQueue = function() {
 		if (supportsSync && !script.getAttribute('async')) script.async = false;
 		replaceNode(node, script);
 	}
+	processing = false;
 }
 
 function addListeners(script) {
