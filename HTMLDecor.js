@@ -1003,7 +1003,7 @@ var checkStyleSheets = function() {
 			case "NS_ERROR_DOM_INVALID_ACCESS_ERR": case "InvalidAccessError":
 				return false;
 			default:
-				return true; // FIXME what if Firefox changes the name again??
+				return true;
 			}
 		} 
 	});
@@ -1888,7 +1888,9 @@ this.push = function(node) {
 
 	var script = document.createElement("script");
 
-	var preloadedRe, preloadedFu = new Future(function() { preloadedRe = this; });
+	// preloadedFu is needed for IE <= 8
+	// On other browsers (and for inline scripts) it is pre-accepted
+	var preloadedRe, preloadedFu = new Future(function() { preloadedRe = this; }); 
 	if (!script.src || supportsOnLoad) preloadedRe.accept();
 	if (script.src) addListeners();
 	
@@ -1906,11 +1908,12 @@ this.push = function(node) {
 	if (supportsSync && script.src && !script.getAttribute('async')) script.async = false;
 	script.type = "text/javascript";
 	
-	var enabledRe, enabledFu = new Future(function() { enabledRe = this; });
+	// enabledFu resolves after script is inserted
+	var enabledRe, enabledFu = new Future(function() { enabledRe = this; }); 
 	
 	var prev = queue[queue.length - 1], prevScript = prev && prev.script;
 	
-	var triggerFu;
+	var triggerFu; // triggerFu allows this script to be enabled, i.e. inserted
 	if (prev) {
 		if (prevScript.getAttribute('async') || supportsSync && !script.getAttribute('async')) triggerFu = prev.enabled;
 		else triggerFu = prev.complete;
