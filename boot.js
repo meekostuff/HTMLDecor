@@ -197,22 +197,76 @@ var queue = (function() {
 
 var head = document.head;
 var marker = head.firstChild;
+var testScript = document.createElement('script');
+var supportsOnLoad = (testScript.setAttribute('onload', 'void(0)'), typeof testScript.onload === 'function');
+var supportsSync = (testScript.async === true);
 
-function prepareScript(url, onload, onerror) {
+if (!supportsOnLoad && !testScript.readyState) throw "script.onload not supported in this browser";
+
+function prepareScript(url, onload, onerror) { // create script (and insert if supportsSync)
 	var script = document.createElement('script');
-	addListeners(script, onload, onerror);
+	script.onerror = onError;
+	script.onload = onLoad;
 	script.src = url;
-	
-	if (script.async == true) {
+	if (supportsSync) {
 		script.async = false;
 		marker.parentNode.insertBefore(script, marker);
 	}
 	return script;
+
+	// The following are hoisted
+	function onLoad() {
+		script.onerror = null;
+		script.onload = null;
+		onload();
+	}
+	
+	function onError() { 
+		script.onerror = null;
+		script.onload = null;
+		onerror();
+	}	
 }
 
-function enableScript(script) {
-	if (script.parentNode) return;
-	marker.parentNode.insertBefore(script, marker);
+function enableScript(script) { // insert script (if not already done). Insertion is delayed if preloading
+	// TODO assert (!!script.parentNode === supportsSync)
+	if (supportsSync) return;
+
+	if (supportsOnLoad) {
+		marker.parentNode.insertBefore(script, marker);
+		return;
+	}
+
+	/*
+		IE <= 8 don't implement script.onload, script.onerror.
+		But they do implement script preloading:
+			http://wiki.whatwg.org/wiki/Dynamic_Script_Execution_Order#readyState_.22preloading.22
+		Preloading starts as soon as `script.src` is set.
+		If the script isn't inserted then it completes when `script.readyState === 'loaded'`.
+		If the script is then inserted the readyState signals success as 'complete' and failure as 'loading'.
+	*/
+	script.onreadystatechange = onChange;
+	if (script.readyState == 'loaded') onChange();
+
+	function onChange() {
+		var readyState = script.readyState;
+		if (!script.parentNode) {
+			if (readyState === 'loaded') marker.parentNode.insertBefore(script, marker);
+			return;
+		}
+		switch (readyState) {
+		case "complete": // NOTE successfully loaded
+			script.onreadystatechange = null;
+			script.onload();
+			break;
+		case "loading": // NOTE load failure
+			script.onreadystatechange = null;
+			script.onerror();
+			break;
+		default: break;
+		}
+	}
+
 }
 
 function disableScript(script) {
@@ -236,23 +290,27 @@ function queue(fnList, oncomplete, onerror) {
 	});
 	queueback();
 
-	function errorback(err) {
-		logger.error(err);
+	function errorback() {
 		var fn;
 		while (fn = list.shift()) {
 			if (typeof fn == 'function') continue;
 			// NOTE the only other option is a prepared script
 			disableScript(fn);
 		}
-		if (onerror) onerror(err);
+		if (onerror) onerror();
 	}
 
 	function queueback() {
 		var fn;
-		while (fn = list.shift()) {
+		while (list.length) {
+			fn = list.shift();
 			if (typeof fn == "function") {
 				try { fn(); continue; }
-				catch(err) { errorback(err); return; }
+				catch(err) {
+					setTimeout(function() { throw err; });
+					errorback();
+					return;
+				}
 			}
 			else { // NOTE the only other option is a prepared script
 				enableScript(fn);
@@ -262,46 +320,6 @@ function queue(fnList, oncomplete, onerror) {
 		if (oncomplete) oncomplete();
 		return;
 	}
-}
-
-var testScript = document.createElement('script');
-var supportsOnLoad = ('onload' in testScript) ||
-	(testScript.setAttribute('onload', 'void(0)'), typeof testScript.onload === 'function');
-
-if (!supportsOnLoad && !testScript.readyState) throw "script.onload not supported in this browser";
-
-function addListeners(script, onload, onerror) {
-	script.onerror = onError;
-	if (supportsOnLoad) script.onload = onLoad;
-	else script.onreadystatechange = onChange;
-
-	function onLoad() {
-		removeListeners(script);
-		onload();
-	}
-	
-	function onError() {
-		removeListeners(script);
-		onerror();
-	}
-	
-	function onChange() { // for IE <= 8 which don't support script.onload
-		if (!script.parentNode) return;
-		switch (script.readyState) {
-		case "loaded": case "complete":
-			removeListeners(script);
-			onload();
-			break;
-		default: break;
-		}	
-	}
-
-	function removeListeners(script) {
-		script.onerror = null;
-		if (supportsOnLoad) script.onload = null;
-		else script.onreadystatechange = null;
-	}
-	
 }
 
 return queue;
