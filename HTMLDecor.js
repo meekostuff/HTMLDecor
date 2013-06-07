@@ -787,7 +787,7 @@ return new Future(function() { var r = this;
 	xhr.send(sendText);
 	function onchange() {
 		if (xhr.readyState != 4) return;
-		if (xhr.status != 200) {
+		if (xhr.status != 200) { // FIXME what about other status codes?
 			r.reject(xhr.status); // FIXME what should status be??
 			return;
 		}
@@ -956,7 +956,7 @@ function(srcDoc) {
 	return doc;
 }
 
-// FIXME should be called importSingleNode or something
+// FIXME should be named importSingleNode or something
 var importNode = document.importNode ? // NOTE only for single nodes, especially elements in <head>. 
 function(srcNode) { 
 	return document.importNode(srcNode, false);
@@ -1187,7 +1187,9 @@ decorate: function(decorURL) {
 		}); // TODO perhaps this should wait on scriptQueue.empty() (or a config option)
 	},
 	function() {
+		var afterInsertFu;
 		return wait(function() {
+			var nodeList = [];
 			var contentStart = decorEnd.nextSibling;
 			if (contentStart) placeContent(
 				contentStart,
@@ -1202,6 +1204,11 @@ decorate: function(decorURL) {
 					});
 				},
 				function(node) {
+					nodeList.push(node);
+				}
+			);
+			afterInsertFu = delay(0, function() {
+				forEach(nodeList, function(node) {
 					notify({
 						module: "panner",
 						stage: "after",
@@ -1209,10 +1216,11 @@ decorate: function(decorURL) {
 						target: document.body,
 						node: node
 					});
-				}
-			);
+				});
+			});
 			return contentLoaded;
-		});
+		})
+		.then(function() { return afterInsertFu; }); // this will be the last `afterInsertFu`
 	},
 	function() { return scriptQueue.empty(); },
 	function() { // NOTE resolve URLs in landing page
@@ -1664,7 +1672,8 @@ var page = function(oldState, newState) {
 
 	function() { // pageIn
 		newContent = getContent(newDoc);
-		
+		var nodeList = [];
+
 		mergeHead(newDoc, false, function(target) {
 			if (!oldDocSaved) oldDoc.head.appendChild(target);
 		});
@@ -1680,15 +1689,22 @@ var page = function(oldState, newState) {
 			},
 			function(node, target) {
 				if (!oldDocSaved) oldDoc.body.appendChild(target);
-				notify({ // FIXME this has to be delayed for styles to be applied from *before* nodeInserted 
+				nodeList.push(node);
+			}
+		);
+
+		var fu = delay(0, function() { // NOTE delayed to allow styles to be applied from *before* nodeInserted 
+			forEach(nodeList, function(node) {
+				notify({ 
 					module: "panner",
 					stage: "after",
 					type: "nodeInserted",
 					target: document.body,
 					node: node
 				});
-			}
-		);
+			});
+		});
+		return fu;
 	},
 	
 	function() { return scriptQueue.empty(); },
@@ -1836,6 +1852,10 @@ function decor_insertBody(doc) {
 var scriptQueue = new function() {
 
 /*
+ WARN: This description comment was from the former scriptQueue implementation.
+ It is still a correct description of behavior,
+ but doesn't give a great insight into the current Futures-based implementation.
+ 
  We want <script>s to execute in document order (unless @async present)
  but also want <script src>s to download in parallel.
  The script queue inserts scripts until it is paused on a blocking script.
@@ -1844,7 +1864,7 @@ var scriptQueue = new function() {
  Sync <script src> are blocking, but if `script.async=false` is supported by the browser
  then only the last <script src> (in a series of sync scripts) needs to pause the queue. See
 	http://wiki.whatwg.org/wiki/Dynamic_Script_Execution_Order#My_Solution
- Script preloading is always performed, even if the browser doesn't support it. See
+ Script preloading is always initiated, even if the browser doesn't support it. See
 	http://wiki.whatwg.org/wiki/Dynamic_Script_Execution_Order#readyState_.22preloading.22
 */
 var queue = [],
@@ -1916,11 +1936,14 @@ this.push = function(node) {
 		}
 	}
 	
-	function onload() {
+	function onLoad(e) {
+		removeListeners();
 		remove(queue, current);
 		completeRe.accept();
 	}
-	function onerror() {
+
+	function onError(e) {
+		removeListeners();
 		remove(queue, current);
 		completeRe.reject('NetworkError'); // FIXME throw DOMError()
 	}
@@ -1939,16 +1962,6 @@ this.push = function(node) {
 			removeEvent(script, "error", onError);
 		}
 		else removeEvent(script, 'readystatechange', onChange);
-	}
-	
-	function onLoad(e) {
-		removeListeners();
-		onload();
-	}
-	
-	function onError(e) {
-		removeListeners();
-		onerror();
 	}
 	
 	function onChange(e) { // for IE <= 8 which don't support script.onload
