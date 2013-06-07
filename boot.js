@@ -120,16 +120,16 @@ function resolveURL(url, params) { // works for all browsers including IE < 8
 }
 
 var addEvent = 
-	document.addEventListener && function(node, event, fn) { return node.addEventListener(event, fn, true); } || // NOTE using capture phase
+	document.addEventListener && function(node, event, fn) { return node.addEventListener(event, fn, false); } ||
 	document.attachEvent && function(node, event, fn) { return node.attachEvent("on" + event, fn); } ||
-	function(node, event, fn) { node["on" + event] = fn; }
+	function(node, event, fn) { node["on" + event] = fn; };
 
 var removeEvent = 
 	document.removeEventListener && function(node, event, fn) { return node.removeEventListener(event, fn, false); } ||
 	document.detachEvent && function(node, event, fn) { return node.detachEvent("on" + event, fn); } ||
-	function(node, event, fn) { if (node["on" + event] == fn) node["on" + event] = null; }
+	function(node, event, fn) { if (node["on" + event] == fn) node["on" + event] = null; };
 
-var domReady = (function() { // TODO perhaps remove listeners after load detected
+var domReady = (function() {
 // WARN this function assumes the script is included in the page markup so it will run before DOMContentLoaded, etc
 
 var loaded = false;
@@ -145,41 +145,35 @@ function processQueue() {
 	queue.length = 0;
 }
 
-(function() { 
-	
-var listeners = {
-	'readystatechange': onChange,
-	'DOMContentLoaded': onLoaded,
-	'load': onLoaded
+var events = {
+	'readystatechange': document,
+	'DOMContentLoaded': document,
+	'load': window
 }
 
-addListeners(document);
-
-function onLoaded(e) {
-	if (e.target == document) loaded = true;
-	if (document.readyState == "complete") loaded = true;
-	if (!loaded) return;
-	removeListeners(document);
-	processQueue();
-}
+addListeners(events, onChange);
 
 function onChange(e) {
-	var readyState = document.readyState;
-	if (readyState == "loaded" || readyState == "complete") loaded = true;
+	switch(e.type) {
+	case "DOMContentLoaded": case "load": 
+		loaded = true;
+		break;
+	case "readystatechange":
+		if (/loaded|complete/.test(document.readyState)) loaded = true;
+		break;
+	}
 	if (!loaded) return;
-	removeListeners(document);
+	removeListeners(events, onChange);
 	processQueue();
 }
 
-function addListeners(node) {
-	each(listeners, function(type, handler) { addEvent(node, type, handler); });
+function addListeners(events, handler) {
+	each(events, function(type, node) { addEvent(node, type, handler); });
 }
 
-function removeListeners(node) {
-	each(listeners, function(type, handler) { removeEvent(node, type, handler); });
+function removeListeners(node, types, handler) {
+	each(events, function(type, node) { removeEvent(node, type, handler); });
 }
-
-})();
 
 return domReady;
 
@@ -188,10 +182,6 @@ return domReady;
 /*
  ### async functions
  */
-
-function delay(callback, timeout) {
-	return window.setTimeout(callback, timeout);
-}
 
 var queue = (function() {
 
@@ -448,7 +438,7 @@ function unhide() {
 	// the stylesheet has been removed.
 	// The following forces the content to be revealed
 	document.body.style.visibility = "hidden";
-	delay(function() { document.body.style.visibility = ""; }, pollingInterval);
+	setTimeout(function() { document.body.style.visibility = ""; }, pollingInterval);
 }
 
 return {
@@ -477,7 +467,7 @@ else {
 var timeout = bootOptions["hidden_timeout"];
 if (timeout > 0) {
 	Viewport.hide();
-	delay(Viewport.unhide, timeout);
+	setTimeout(Viewport.unhide, timeout);
 }
 
 var urlParams = {
