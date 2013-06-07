@@ -1680,7 +1680,7 @@ var page = function(oldState, newState) {
 			},
 			function(node, target) {
 				if (!oldDocSaved) oldDoc.body.appendChild(target);
-				notify({
+				notify({ // FIXME this has to be delayed for styles to be applied from *before* nodeInserted 
 					module: "panner",
 					stage: "after",
 					type: "nodeInserted",
@@ -1848,9 +1848,7 @@ var scriptQueue = new function() {
 	http://wiki.whatwg.org/wiki/Dynamic_Script_Execution_Order#readyState_.22preloading.22
 */
 var queue = [],
-	processing = false,
-	emptying = false,
-	blockingScript;
+	emptying = false;
 
 var testScript = document.createElement('script'),
 	supportsOnLoad = (testScript.setAttribute('onload', 'void(0)'), typeof testScript.onload === 'function'),
@@ -1860,83 +1858,143 @@ this.push = function(node) {
 	if (emptying) throw 'Attempt to append script to scriptQueue while emptying';
 	
 	// TODO assert node is in document
-	
-	if (!/^text\/javascript\?disabled$/i.test(node.type)) return;
+
+	var completeRe, completeFu = new Future(function() { completeRe = this; });	
+
+	if (!/^text\/javascript\?disabled$/i.test(node.type)) {
+		completeRe.reject("Unsupported script-type " + node.type);
+		return completeFu;
+	}
+
 	var script = document.createElement("script");
-	copyAttributes(script, node);
-	script.type = "text/javascript";
+
+	var preloadedRe, preloadedFu = new Future(function() { preloadedRe = this; });
+	if (!script.src || supportsOnLoad) preloadedRe.accept();
+	if (script.src) addListeners();
 	
+	copyAttributes(script, node);
+
 	// FIXME is this comprehensive?
 	try { script.innerHTML = node.innerHTML; }
 	catch (error) { script.text = node.text; }
+
+	if (script.getAttribute('defer')) {
+		script.removeAttribute('defer');
+		script.setAttribute('async', '');
+		logger.warn('@defer not supported on scripts');
+	}
+	if (supportsSync && script.src && !script.getAttribute('async')) script.async = false;
+	script.type = "text/javascript";
 	
-	queueScript(script, node);
+	var enabledRe, enabledFu = new Future(function() { enabledRe = this; });
+	
+	var prev = queue[queue.length - 1], prevScript = prev && prev.script;
+	
+	var triggerFu;
+	if (prev) {
+		if (prevScript.getAttribute('async') || supportsSync && !script.getAttribute('async')) triggerFu = prev.enabled;
+		else triggerFu = prev.complete;
+	}
+	else triggerFu = Future.resolve();
+	
+	triggerFu.then(enable, enable);
+
+	var current = { script: script, node: node, complete: completeFu, enabled: enabledFu };
+	queue.push(current);
+	return completeFu;
+
+	// The following are hoisted
+	function enable() {
+		preloadedFu.then(_enable, function(err) { logger.error('Script preloading failed'); });
+	}
+	function _enable() {
+		replaceNode(node, script);
+		enabledRe.accept();
+		if (!script.src) {
+			remove(queue, current);
+			completeRe.accept();
+		}
+	}
+	
+	function onload() {
+		remove(queue, current);
+		completeRe.accept();
+	}
+	function onerror() {
+		remove(queue, current);
+		completeRe.reject('NetworkError'); // FIXME throw DOMError()
+	}
+
+	function addListeners() {
+		if (supportsOnLoad) {
+			addEvent(script, "load", onLoad);
+			addEvent(script, "error", onError);
+		}
+		else addEvent(script, 'readystatechange', onChange);
+	}
+	
+	function removeListeners() {
+		if (supportsOnLoad) {
+			removeEvent(script, "load", onLoad);
+			removeEvent(script, "error", onError);
+		}
+		else removeEvent(script, 'readystatechange', onChange);
+	}
+	
+	function onLoad(e) {
+		removeListeners();
+		onload();
+	}
+	
+	function onError(e) {
+		removeListeners();
+		onerror();
+	}
+	
+	function onChange(e) { // for IE <= 8 which don't support script.onload
+		var readyState = script.readyState;
+		if (!script.parentNode) {
+			if (readyState === 'loaded') preloadedRe.accept();
+			return;
+		}
+		switch (readyState) {
+		case "complete":
+			onLoad(e);
+			break;
+		case "loading":
+			onError(e);
+			break;
+		default: break;
+		}	
+	}
+
 }
 
 this.empty = function() {
 	emptying = true;
-	return wait(function() {
-		if (queue.length || blockingScript) return false;
+	var list = queue;
+	
+	// the rest is modified from the Future.every implementation
+	var resolver, future = new Future(function() { resolver = this; });
+	var countdown = list.length;
+	if (countdown <= 0) {
 		emptying = false;
-		return true;
-	});
-}
-
-var queueScript = function(script, node) {
-	queue.push({ script: script, node: node });
-	if (blockingScript) return;
-	processQueue();
-}
-
-var processQueue = function(e) {
-	if (e) {
-		var script = e.target || e.srcElement;
-		removeListeners(script);
+		resolver.accept();
+		return future;
 	}
-	if (processing) return;
-	queueTask(_processQueue);
-	processing = true;
-}
-
-var _processQueue = function() {
-	blockingScript = null;
-	while (!blockingScript && queue.length > 0) {
-		var spec = queue.shift(), script = spec.script, node = spec.node, nextScript = queue.length && queue[0].script;
-		if (script.src && !script.getAttribute("async") && (!supportsSync || !nextScript || !nextScript.src || nextScript.getAttribute("async"))) {
-			blockingScript = spec;
-			addListeners(script);
+	forEach(list, function(value, i) {
+		var acceptCallback = function() {
+			if (--countdown <= 0) {
+				emptying = false;
+				resolver.accept();
+			}
 		}
-		if (supportsSync && !script.getAttribute('async')) script.async = false;
-		replaceNode(node, script);
-	}
-	processing = false;
+		value.complete.done(acceptCallback, acceptCallback);
+	});
+	return future;
 }
 
-function addListeners(script) {
-	if (supportsOnLoad) addEvent(script, "load", processQueue);
-	else addEvent(script, 'readystatechange', readyStateHandler);
-	addEvent(script, "error", processQueue); // TODO error message? browser generates one	
-}
-
-function removeListeners(script) {
-	if (supportsOnLoad) removeEvent(script, 'load', processQueue);
-	else removeEvent(script, 'readystatechange', readyStateHandler);
-	removeEvent(script, 'error', processQueue);		
-}
-
-function readyStateHandler(e) { // for IE <= 8 which don't support script.onload
-	var script = e.target || e.srcElement;
-	if (script.complete) return;
-	switch (script.readyState) {
-	case "loaded": case "complete":
-		script.complete = true; // TODO probably not necessary if removeListeners() here
-		processQueue(e);
-		break;
-	default: break;
-	}	
-}
-
-}
+} // end scriptQueue
 
 function getDecorMeta(doc) {
 	if (!doc) doc = document;
