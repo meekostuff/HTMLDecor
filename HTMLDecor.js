@@ -163,14 +163,13 @@ return isolate;
 
 
 /*
- ### FutureFu - a base-class for Futures
+ ### Future
  */
 
-var FutureFu = Meeko.FutureFu = function(init) { // `init` is called as init.call(resolver)
-	if (!(this instanceof FutureFu)) return new FutureFu(init);
+var Future = Meeko.Future = function(init) { // `init` is called as init.call(resolver)
+	if (!(this instanceof Future)) return new Future(init);
 	
 	var future = this;
-	future._constructor = FutureFu;
 	future._initialize();
 
 	if (init === undefined) return;
@@ -181,7 +180,7 @@ var FutureFu = Meeko.FutureFu = function(init) { // `init` is called as init.cal
 	// NOTE future is returned by `new` invocation
 }
 
-extend(FutureFu.prototype, {
+extend(Future.prototype, {
 
 _initialize: function() {
 	var future = this;
@@ -277,8 +276,7 @@ done: function(acceptCallback, rejectCallback) {
 
 thenfu: function(acceptCallback, rejectCallback) {
 	var future = this;
-	var constructor = future._constructor; //  || future.constructor;
-	var newResolver, newFuture = new constructor(function() { newResolver = this; });
+	var newResolver, newFuture = new Future(function() { newResolver = this; });
 	var acceptWrapper = acceptCallback ?
 		wrapfuCallback(acceptCallback, newResolver, newFuture) :
 		function(value) { newFuture._accept(value); }
@@ -305,39 +303,6 @@ function wrapfuCallback(callback, resolver, future) {
 		}
 	}
 }
-
-
-/*
- ### Future
- */
-
-/* If you want to sub-class FutureFu then do it like this:
-
-var Future = Meeko.Future = function(init) { // `init` is called as init.call(resolver)
-	if (!(this instanceof Future)) return new Future(init);
-
-	var future = this;
-	future._constructor = Future; // FutureFu#pipefu calls `new future._constructor( init )`. 
-	future._initialize();
-
-	if (init === undefined) return;
-
-	var resolver = future._resolver;
-	try { init.call(resolver); }
-	catch(error) { future._reject(error); }
-	// NOTE future is returned by `new` invokation
-}
-
-var _Future = function() {}
-_Future.prototype = FutureFu.prototype;
-Future.prototype = new _Future();
-
-*/
-/* If you just want to take-over FutureFu then do it this way: */
-
-var Future = Meeko.Future = FutureFu;
-
-/**/
 
 extend(Future.prototype, {
 	
