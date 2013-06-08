@@ -5,12 +5,12 @@
 
 /* TODO
     + substantial error handling and notification needs to be added
-    + more isolation
     + <link rel="self" />
-    + Would be nice if more of the internal functions were called as method, eg DOM.isContentLoaded()...
+    + Would be nice if more of the internal functions were called as method, eg DOM.ready()...
         this would allow the boot-script to modify them as appropriate
     + Up-front feature testing to prevent boot on unsupportable platorms...
         e.g. can't create HTML documents
+    + Can decorate() and page() share more code?
  */
 
 // FIXME for IE7, IE8 sometimes XMLHttpRequest is in a detectable but not callable state
@@ -38,7 +38,7 @@ var document = window.document;
 var uc = function(str) { return str.toUpperCase(); }
 var lc = function(str) { return str.toLowerCase(); }
 
-var remove = function(a, item) {
+var remove = function(a, item) { // remove the first instance of `item` in `a`
 	for (var n=a.length, i=0; i<n; i++) {
 		if (a[i] !== item) continue;
 		a.splice(i, 1);
@@ -381,7 +381,7 @@ resolve: function(value) { // NOTE equivalent to "resolve wrap"
    delay(timeout, fn) makes one call to fn() after timeout ms
    pipe(startValue, [fn1, fn2, ...]) will call functions sequentially
  */
-var wait = (function() {
+var wait = (function() { // TODO wait() isn't used much. Can it be simpler?
 	
 var timerId, tests = [];
 
@@ -580,10 +580,10 @@ var removeEvent =
 	document.detachEvent && function(node, event, fn) { return node.detachEvent("on" + event, fn); } ||
 	function(node, event, fn) { if (node["on" + event] == fn) node["on" + event] = null; }
 
-var readyStateLookup = {
+var readyStateLookup = { // used in domReady() and checkStyleSheets()
 	"uninitialized": false,
 	"loading": false,
-	"interactive": false, // TODO is this correct??
+	"interactive": false,
 	"loaded": true,
 	"complete": true
 }
@@ -974,7 +974,7 @@ NOTE:  for more details on how checkStyleSheets() works cross-browser see
 http://aaronheckmann.blogspot.com/2010/01/writing-jquery-plugin-manager-part-1.html
 TODO: does this still work when there are errors loading stylesheets??
 */
-var checkStyleSheets = function() {
+var checkStyleSheets = function() { // TODO would be nice if this didn't need to be polled
 	// check that every <link rel="stylesheet" type="text/css" /> 
 	// has loaded
 	return every($$("link"), function(node) {
@@ -1045,12 +1045,11 @@ this.LOG_LEVEL = levels[defaults['log_level']]; // DEFAULT
 
 
 var decor = Meeko.decor = {};
-decor.config = function(options) {
+var panner = Meeko.panner = {};
+
+panner.config = decor.config = function(options) { // same method. different context object.
 	config(this.options, options);
 }
-
-var panner = Meeko.panner = {};
-panner.config = decor.config;
 
 extend(decor, {
 
@@ -1900,7 +1899,7 @@ this.push = function(node) {
 	try { script.innerHTML = node.innerHTML; }
 	catch (error) { script.text = node.text; }
 
-	if (script.getAttribute('defer')) {
+	if (script.getAttribute('defer')) { // @defer is not appropriate. Implement as @async
 		script.removeAttribute('defer');
 		script.setAttribute('async', '');
 		logger.warn('@defer not supported on scripts');
