@@ -5,12 +5,12 @@
 
 /* TODO
     + substantial error handling and notification needs to be added
-    + more isolation
     + <link rel="self" />
-    + Would be nice if more of the internal functions were called as method, eg DOM.isContentLoaded()...
+    + Would be nice if more of the internal functions were called as method, eg DOM.ready()...
         this would allow the boot-script to modify them as appropriate
     + Up-front feature testing to prevent boot on unsupportable platorms...
         e.g. can't create HTML documents
+    + Can decorate() and page() share more code?
  */
 
 // FIXME for IE7, IE8 sometimes XMLHttpRequest is in a detectable but not callable state
@@ -19,6 +19,9 @@
 var XMLHttpRequest = window.XMLHttpRequest; 
 
 (function() {
+
+var window = this;
+var document = window.document;
 
 var defaults = { // NOTE defaults also define the type of the associated config option
 	"log_level": "warn",
@@ -33,12 +36,10 @@ var Meeko = window.Meeko || (window.Meeko = {});
  ### Utility functions
  */
 
-var document = window.document;
-
 var uc = function(str) { return str.toUpperCase(); }
 var lc = function(str) { return str.toLowerCase(); }
 
-var remove = function(a, item) {
+var remove = function(a, item) { // remove the first instance of `item` in `a`
 	for (var n=a.length, i=0; i<n; i++) {
 		if (a[i] !== item) continue;
 		a.splice(i, 1);
@@ -86,12 +87,39 @@ extend(Meeko.stuff, {
 });
 
 /*
- ### Async functions
-   wait(test) waits until test() returns true
-   until(test, fn) repeats call to fn() until test() returns true
-   delay(fn, timeout) makes one call to fn() after timeout ms
-   queue([fn1, fn2, ...]) will call (potentially async) functions sequentially
+ ### Task queuing and isolation
  */
+
+var queueTask = window.setImmediate || (function() {
+
+var taskQueue = [];
+var scheduled = false;
+
+function queueTask(fn) {
+	taskQueue.push(fn);
+	if (scheduled) return;
+	schedule(processTasks);
+	scheduled = true;
+}
+
+// NOTE schedule used to be approx: setImmediate || postMessage || setTimeout
+var schedule = window.setTimeout;
+
+function processTasks() {
+	var task;
+	while (taskQueue.length) {
+		task = taskQueue.shift();
+		if (typeof task !== 'function') continue;
+		var success = isolate(task);
+		// FIXME then what??
+	}
+	scheduled = false;
+}
+
+return queueTask;
+
+})();
+
 var isolate = (function() { // TODO maybe it isn't worth isolating on platforms that don't have dispatchEvent()
 
 var evType = vendorPrefix + "-isolate";
@@ -107,15 +135,15 @@ if (window.dispatchEvent) {
 	isolate = function(fn) {
 		testFn = fn;
 		var e = document.createEvent("Event");
-		e.initEvent("meeko-isolate", true, true);
+		e.initEvent(evType, true, true);
 		window.dispatchEvent(e);
 		return complete.pop();
 	}
 }
-else if ("onpropertychange" in document) {
+else if ("onpropertychange" in document) { // TODO this is for IE <= 8. Might be better with the re-throw solution
 	var meta = document.createElement("meta");
 	meta[evType] = 0;
-	meta.onpropertychange = wrapper;
+	meta.onpropertychange = function(e) { e = e || window.event; if (e.propertyName === evType) wrapper() }
 	isolate = function(fn) { // by inserting meta every time, it doesn't matter if some code removes meta
 		testFn = fn;
 		if (!meta.parentNode) document.head.appendChild(meta);
@@ -127,178 +155,272 @@ else if ("onpropertychange" in document) {
 else isolate = function(fn) {
 	var complete = false;
 	try { fn(); complete = true; }
-	catch(error) { }
+	catch(error) { setTimeout(function() { throw error; }); }
 	return complete;
 }
 
 return isolate;
 })();
 
-var Callback = function(handlers) {
-	if (!(this instanceof Callback)) return new Callback(handlers);
-	this.isCallback = true;
-	this.called = false;
-	switch (typeof handlers) {
-	case "object":
-		extend(this, handlers); // TODO should check fields
-		break;
-	case "function":
-		this.onComplete = handlers;
-		break;
-	default: break; // TODO
-	}
+
+/*
+ ### Future
+ WARN: This was based on an early DOM Future specification. 
+ */
+
+var Future = Meeko.Future = function(init) { // `init` is called as init.call(resolver)
+	if (!(this instanceof Future)) return new Future(init);
+	
+	var future = this;
+	future._initialize();
+
+	if (init === undefined) return;
+
+	var resolver = future._resolver;
+	try { init.call(resolver); }
+	catch(error) { future._reject(error); }
+	// NOTE future is returned by `new` invocation
 }
 
-extend(Callback.prototype, {
+extend(Future.prototype, {
 
-complete: function() {
-	if (this.called) throw "Callback has already been called";
-	this.called = true;
-	if (this.onComplete) this.onComplete.apply(this, arguments);
+_initialize: function() {
+	var future = this;
+	future._acceptCallbacks = [];
+	future._rejectCallbacks = [];
+	future._accepted = null;
+	future._result = null;
+	future._processing = false;	
+	future._resolver = {
+		accept: function(value) { future._accept(value); },
+		resolve: function(value) { future._resolve(value); },
+		reject: function(value) { future._reject(value); }
+	}
 },
 
-error: function() {
-	if (this.called) throw "Callback has already been called";
-	this.called = true;
-	if (this.onError) this.onError.apply(this, arguments);
+_accept: function(result, sync) { // NOTE equivalent to "accept algorithm". External calls MUST NOT use sync
+	var future = this;
+	if (future._accepted != null) return;
+	future._accepted = true;
+	future._result = result;
+	future._requestProcessing(sync);
 },
 
-abort: function() { // NOTE abort could trigger an error, but there is an expectation that whatever context calls abort will be handling that anyway
-	if (this.called) throw "Callback has already been called";
-	this.called = true;
-	if (this.onAbort) this.onAbort.apply(this, arguments); // TODO isolate
+_resolve: function(value, sync) { // NOTE equivalent to "resolve algorithm". External calls MUST NOT use sync
+	var future = this;
+	if (future._accepted != null) return;
+	if (value != null && typeof value.then === 'function') {
+		try {
+			value.then(
+				function(result) { future._resolve(result); },
+				function(error) { future._reject(error); }
+			);
+		}
+		catch(error) {
+			future._reject(error, sync);
+		}
+		return;
+	}
+	// else
+	future._accept(value, sync);
+},
+
+_reject: function(error, sync) { // NOTE equivalent to "reject algorithm". External calls MUST NOT use sync
+	var future = this;
+	if (future._accepted != null) return;
+	future._accepted = false;
+	future._result = error;
+	future._requestProcessing(sync);
+},
+
+_requestProcessing: function(sync) { // NOTE schedule callback processing. TODO may want to disable sync option
+	var future = this;
+	if (future._accepted == null) return;
+	if (future._processing) return;
+	if (sync) {
+		future._processing = true;
+		future._process();
+		future._processing = false;
+	}
+	else {
+		queueTask(function() {
+			future._processing = true;
+			future._process();
+			future._processing = false;
+		});
+	}
+},
+
+_process: function() { // NOTE process a futures callbacks
+	var future = this;
+	var result = future._result;
+	var callbacks, cb;
+	if (future._accepted) {
+		future._rejectCallbacks.length = 0;
+		callbacks = future._acceptCallbacks;
+	}
+	else {
+		future._acceptCallbacks.length = 0;
+		callbacks = future._rejectCallbacks;
+	}
+	while (callbacks.length) {
+		cb = callbacks.shift();
+		if (typeof cb === 'function') isolate(function() { cb(result); });
+	}
+},
+
+done: function(acceptCallback, rejectCallback) {
+	var future = this;
+	future._acceptCallbacks.push(acceptCallback);
+	future._rejectCallbacks.push(rejectCallback);
+	future._requestProcessing();
+},
+
+thenfu: function(acceptCallback, rejectCallback) {
+	var future = this;
+	var newResolver, newFuture = new Future(function() { newResolver = this; });
+	var acceptWrapper = acceptCallback ?
+		wrapfuCallback(acceptCallback, newResolver, newFuture) :
+		function(value) { newFuture._accept(value); }
+
+	var rejectWrapper = rejectCallback ? 
+		wrapfuCallback(rejectCallback, newResolver, newFuture) :
+		function(error) { newFuture._reject(error); }
+
+	future.done(acceptWrapper, rejectWrapper);
+	
+	return newFuture;
 }
 
 });
 
-function isCallback(obj) {
-	return (obj && obj.isCallback);
-}
-
-var async = function(fn) {
-	var wrapper = function() {
-		var nParams = fn.length, nArgs = arguments.length;
-		if (nArgs > nParams) throw "Too many parameters in async call";
-		var inCB = arguments[nParams - 1], cb;
-		if (isCallback(inCB)) cb = inCB;
-		else switch (typeof inCB) {
-			case "undefined": case "null":
-				cb = new Callback();
-				break;
-			case "function":
-				cb = new Callback();
-				cb.onComplete = inCB;
-				break;
-			case "object":
-				if (inCB.onComplete) {
-					cb = new Callback();
-					cb.onComplete = inCB.onComplete;
-					cb.onError = inCB.onError;
-					break;
-				}
-				// else fall-thru to error
-			default:
-				throw "Invalid callback parameter in async call";
-				break;
+/* Functional composition wrapper for `thenfu` */
+function wrapfuCallback(callback, resolver, future) {
+	return function() {
+		try {
+			callback.apply(resolver, arguments);
 		}
-		var params = [].slice.call(arguments, 0);
-		params[nParams - 1] = cb;
-		var result = fn.apply(this, params); // FIXME result should never occur, right? Is it an async function or not!?
-		if (result) delay(function() { cb.complete(result) });
-		return cb;
+		catch (error) {
+			future._reject(error, true);
+		}
 	}
-	return wrapper;
 }
 
-var wait = (function() {
+extend(Future.prototype, {
 	
-var timerId, callbacks = [];
+then: function(acceptCallback, rejectCallback) {
+	var future = this;
+	var acceptWrapper = acceptCallback && wrapResolve(acceptCallback);
+	var rejectWrapper = rejectCallback && wrapResolve(rejectCallback);
+	return future.thenfu(acceptWrapper, rejectWrapper);
+},
 
-function waitback() {
-	var waitCB, i = 0;
-	while ((waitCB = callbacks[i])) {
-		var hook = waitCB.hook;
-		var done, success;
-		success = isolate(function() { done = hook(); });
-		if (!success) {
-			callbacks.splice(i,1);
-			waitCB.error();
-		}
-		else if (done) {
-			callbacks.splice(i,1);
-			waitCB.complete();
-		}
-		else i++;
+'catch': function(rejectCallback) { // FIXME 'catch' is unexpected identifier in IE8-
+	var future = this;
+	return future.then(null, rejectCallback);
+}
+
+});
+
+/* Functional composition wrapper for `then` */
+function wrapResolve(callback) { // prewrap in .then() before passing to .pipefu() and thence to wrapfu
+	return function() {
+		var value = callback.apply(null, arguments); 
+		this.resolve(value, true);
 	}
-	if (!callbacks.length) {
+}
+
+
+extend(Future, {
+
+resolve: function(value) { // NOTE equivalent to "resolve wrap"
+	var resolver, future = new Future(function() { resolver = this; });
+	resolver.resolve(value);
+	return future;
+}
+
+});
+
+
+/*
+ ### Async functions
+   wait(test) waits until test() returns true
+   delay(timeout, fn) makes one call to fn() after timeout ms
+   pipe(startValue, [fn1, fn2, ...]) will call functions sequentially
+ */
+var wait = (function() { // TODO wait() isn't used much. Can it be simpler?
+	
+var timerId, tests = [];
+
+function wait(fn) {
+	var resolver, future = new Future(function() { resolver = this; });
+	tests.push({
+		fn: fn,
+		resolver: resolver
+	});
+	if (!timerId) timerId = window.setInterval(poller, Future.pollingInterval); // NOTE polling-interval is configured below		
+	return future;
+}
+
+function poller() {
+	var test, i = 0;
+	while ((test = tests[i])) {
+		var fn = test.fn, resolver = test.resolver;
+		var done;
+		try {
+			done = fn();
+			if (done) {
+				tests.splice(i,1);
+				resolver.accept(done);
+			}
+			else i++;
+		}
+		catch(error) {
+			tests.splice(i,1);
+			resolver.reject(error);
+		}
+	}
+	if (tests.length <= 0) {
 		window.clearInterval(timerId); // FIXME probably shouldn't use intervals cause it may screw up debuggers
 		timerId = null;
 	}
 }
 
-var wait = async(function(fn, waitCB) {
-	waitCB.hook = fn;
-	callbacks.push(waitCB);
-	if (!timerId) timerId = window.setInterval(waitback, Async.pollingInterval); // NOTE polling-interval is configured below
-	waitCB.onAbort = function() { remove(callbacks, waitCB); }
-});
-
 return wait;
 
 })();
 
-var until = function(test, fn, untilCB) {
-	return wait(function() { var complete = test(); if (!complete) fn(); return complete; }, untilCB);
+function delay(timeout, fn) { // NOTE fn is optional
+	var resolver, future = new Future(function() { resolver = this; });
+	window.setTimeout(function() {
+		var result;
+		try {
+			result = fn && fn();
+			resolver.accept(result);
+		}
+		catch(error) {
+			resolver.reject(error);
+		}
+	}, timeout);
+	return future;
 }
 
-var delay = async(function(fn, timeout, delayCB) {
-	var timerId = window.setTimeout(function() {
-		var result;
-		var success = isolate(function() { result = fn(); });
-		if (!success) {
-			delayCB.error();
-			return;
-		}
-		else delayCB.complete(result);
-	}, timeout);
-	delayCB.onAbort = function() { window.clearTimeout(timerId); }
-});
-
-var queue = async(function(fnList, queueCB) {
-	var list = [], innerCB;
-	forEach(fnList, function(fn) {
-		if (typeof fn != "function") throw "Non-function passed to queue()";
-		list.push(fn);
-	});
-	var queueback = function() {
-		var fn;
-		while ((fn = list.shift())) {
-			var success = isolate(function() { innerCB = fn(); });
-			if (!success) {
-				queueCB.error();
-				return;
-			}
-			if (isCallback(innerCB)) {
-				innerCB.onComplete = queueback;
-				innerCB.onError = function() { queueCB.error(); }
-				return;
-			}
-		}
-		queueCB.complete();
+function pipe(startValue, fnList) {
+	var future = Future.resolve(startValue);
+	while (fnList.length) { 
+		var fn = fnList.shift();
+		future = future.then(fn);
 	}
-	queueCB.onAbort = function() {
-		if (isCallback(innerCB)) innerCB.abort();
-		list = [];
-	}
-	queueback();
+	return future;
+}
+
+Future.pollingInterval = defaults['polling_interval'];
+
+extend(Future, {
+	isolate: isolate, queue: queueTask, delay: delay, wait: wait, pipe: pipe
 });
 
-var Async = Meeko.Async || (Meeko.Async = {});
-Async.pollingInterval = defaults['polling_interval'];
 
-extend(Async, {
-	isCallback: isCallback, Callback: Callback, wrap: async, delay: delay, wait: wait, until: until, queue: queue
-});
 
 /*
  ### DOM utility functions
@@ -425,20 +547,48 @@ var removeEvent =
 	document.detachEvent && function(node, event, fn) { return node.detachEvent("on" + event, fn); } ||
 	function(node, event, fn) { if (node["on" + event] == fn) node["on" + event] = null; }
 
-var readyStateLookup = {
+var readyStateLookup = { // used in domReady() and checkStyleSheets()
 	"uninitialized": false,
 	"loading": false,
-	"interactive": false, // TODO is this correct??
+	"interactive": false,
 	"loaded": true,
 	"complete": true
 }
 
-var isContentLoaded = function() { // WARN this assumes that document.readyState is valid or that content is ready...
-	// Change Meeko.DOM.isContentLoaded if you need something better
-	var readyState = document.readyState;
-	var loaded = !readyState || readyStateLookup[readyState];
-	return loaded;
+var domReady = (function() { // WARN this assumes that document.readyState is valid or that content is ready...
+
+var readyState = document.readyState;
+var loaded = readyState ? readyStateLookup[readyState] : true;
+var queue = [];
+
+function domReady(fn) {
+	queue.push(fn);
+	if (loaded) processQueue();
 }
+
+function processQueue() {
+	forEach(queue, setTimeout, window);
+	queue.length = 0;
+}
+
+var events = {
+	"DOMContentLoaded": document,
+	"load": window
+};
+
+if (!loaded) each(events, function(type, node) { addEvent(node, type, onLoaded); });
+
+return domReady;
+
+// NOTE the following functions are hoisted
+function onLoaded(e) {
+	loaded = true;
+	each(events, function(type, node) { removeEvent(node, type, onLoaded); });
+	processQueue();
+}
+
+})();
+
 
 var overrideDefaultAction = function(e, fn) {
 	// Shim the event to detect if external code has called preventDefault(), and to make sure we call it (but late as possible);
@@ -467,7 +617,7 @@ var overrideDefaultAction = function(e, fn) {
 	}
 	window.addEventListener(e.type, backstop, false);
 	
-	delay(function() {
+	queueTask(function() {
 		window.removeEventListener(e.type, backstop, false);
 		if (defaultPrevented) return;
 		fn(e);
@@ -534,11 +684,11 @@ return URL;
 
 })();
 
-var loadHTML = async(function(url, cb) { // WARN only performs GET
+var loadHTML = function(url) { // WARN only performs GET
 	var htmlLoader = new HTMLLoader();
 	var method = 'get';
-	htmlLoader.load(method, url, null, { method: method, url: url }, cb);
-});
+	return htmlLoader.load(method, url, null, { method: method, url: url });
+}
 
 var HTMLLoader = (function() {
 
@@ -555,33 +705,21 @@ var HTMLLoader = function(options) {
 
 extend(HTMLLoader.prototype, {
 
-load: async(function(method, url, data, details, cb) {
+load: function(method, url, data, details) {
 	var htmlLoader = this;
-	var xhr, doc;
 	
 	if (!details.url) details.url = url;
 	
-	queue([
-		async(function(qb) {
-			htmlLoader.request(method, url, data, details,
-				new Callback({
-					onComplete: function(result) { doc = result; qb.complete(); },
-					onError: function(err) { logger.error(err); qb.error(err); }
-				})
-			);
-		}),
-		function() {
-			if (htmlLoader.normalize) htmlLoader.normalize(doc, details);
-		}
-	], {
-		onComplete: function() { cb.complete(doc); },
-		onError: cb.onError
-	});
-}),
+	return htmlLoader.request(method, url, data, details) // NOTE this returns the future that .then returns
+		.then(
+			function(doc) { if (htmlLoader.normalize) htmlLoader.normalize(doc, details); return doc; },
+			function(err) { logger.error(err); throw (err); }
+		);
+},
 
 serialize: function(data, details) { return ""; },  // TODO
 
-request: function(method, url, data, details, cb) {
+request: function(method, url, data, details) {
 	var sendText = null;
 	method = lc(method);
 	if ('post' == method) {
@@ -594,14 +732,15 @@ request: function(method, url, data, details, cb) {
 	else {
 		throw uc(method) + ' not supported';
 	}
-	doRequest(method, url, sendText, details, cb);
+	return doRequest(method, url, sendText, details);
 },
 
 normalize: function(doc, details) {}
 
 });
 
-var doRequest = function(method, url, sendText, details, cb) {
+var doRequest = function(method, url, sendText, details) {
+return new Future(function() { var r = this;
 	var xhr = window.XMLHttpRequest ?
 		new XMLHttpRequest() :
 		new ActiveXObject("Microsoft.XMLHTTP");
@@ -610,16 +749,17 @@ var doRequest = function(method, url, sendText, details, cb) {
 	xhr.send(sendText);
 	function onchange() {
 		if (xhr.readyState != 4) return;
-		if (xhr.status != 200) {
-			cb.error(xhr.status); // FIXME what should status be??
+		if (xhr.status != 200) { // FIXME what about other status codes?
+			r.reject(xhr.status); // FIXME what should status be??
 			return;
 		}
-		delay(onload); // Use delay to stop the readystatechange event interrupting other event handlers (on IE). 
+		queueTask(onload); // Use delay to stop the readystatechange event interrupting other event handlers (on IE). 
 	}
-	function onload() { 
+	function onload() {
 		var doc = parseHTML(new String(xhr.responseText), details.url);
-		cb.complete(doc);
+		r.accept(doc);
 	}
+});
 }
 
 return HTMLLoader;
@@ -700,7 +840,6 @@ parse: function(html, url) {
 	forEach($$("style", iframeDoc.body), function(node) { // TODO support <style scoped>
 		iframeDoc.head.appendChild(node);
 	});
-	
 	var pseudoDoc = importDocument(iframeDoc);
 	docHead.removeChild(iframe);
 
@@ -779,7 +918,7 @@ function(srcDoc) {
 	return doc;
 }
 
-// FIXME should be called importSingleNode or something
+// FIXME should be named importSingleNode or something
 var importNode = document.importNode ? // NOTE only for single nodes, especially elements in <head>. 
 function(srcNode) { 
 	return document.importNode(srcNode, false);
@@ -797,7 +936,7 @@ NOTE:  for more details on how checkStyleSheets() works cross-browser see
 http://aaronheckmann.blogspot.com/2010/01/writing-jquery-plugin-manager-part-1.html
 TODO: does this still work when there are errors loading stylesheets??
 */
-var checkStyleSheets = function() {
+var checkStyleSheets = function() { // TODO would be nice if this didn't need to be polled
 	// check that every <link rel="stylesheet" type="text/css" /> 
 	// has loaded
 	return every($$("link"), function(node) {
@@ -826,7 +965,7 @@ var checkStyleSheets = function() {
 			case "NS_ERROR_DOM_INVALID_ACCESS_ERR": case "InvalidAccessError":
 				return false;
 			default:
-				return true; // FIXME what if Firefox changes the name again??
+				return true;
 			}
 		} 
 	});
@@ -841,7 +980,7 @@ var DOM = Meeko.DOM || (Meeko.DOM = {});
 extend(DOM, {
 	$id: $id, $$: $$, tagName: tagName, forSiblings: forSiblings, matchesElement: matchesElement, firstChild: firstChild,
 	replaceNode: replaceNode, copyAttributes: copyAttributes, scrollToId: scrollToId, createDocument: createDocument,
-	addEvent: addEvent, removeEvent: removeEvent, isContentLoaded: isContentLoaded, overrideDefaultAction: overrideDefaultAction,
+	addEvent: addEvent, removeEvent: removeEvent, ready: domReady, overrideDefaultAction: overrideDefaultAction,
 	URL: URL, HTMLLoader: HTMLLoader, HTMLParser: HTMLParser, loadHTML: loadHTML, parseHTML: parseHTML,
 	polyfill: polyfill
 });
@@ -868,12 +1007,11 @@ this.LOG_LEVEL = levels[defaults['log_level']]; // DEFAULT
 
 
 var decor = Meeko.decor = {};
-decor.config = function(options) {
+var panner = Meeko.panner = {};
+
+panner.config = decor.config = function(options) { // same method. different context object.
 	config(this.options, options);
 }
-
-var panner = Meeko.panner = {};
-panner.config = decor.config;
 
 extend(decor, {
 
@@ -888,15 +1026,15 @@ start: function() {
 	decor.started = true;
 	var options = decor.options;
 	var decorURL;
-	return queue([
-
+	return pipe(null, [
+		
 	function() {
 		if (options.lookup) decorURL = options.lookup(document.URL);
 		if (decorURL) return;
 		if (options.detect) return wait(function() { return !!document.body; });
 	},
 	function() {
-		if (!decorURL && options.detect) decorURL = options.detect(document); // FIXME this should wait until <head> is completely loaded
+		if (!decorURL && options.detect) decorURL = options.detect(document);
 		if (!decorURL) throw "No decor could be determined for this page";
 		decorURL = URL(document.URL).resolve(decorURL);
 		decor.current.url = decorURL;
@@ -906,16 +1044,9 @@ start: function() {
 	},
 	function() {
 		scrollToId(location.hash && location.hash.substr(1));
-		panner.contentURL = URL(document.URL).nohash;
-		
-		if (!history.pushState) return;
-		
-		// NOTE fortuitously all the browsers that support pushState() also support addEventListener() and dispatchEvent()
-		window.addEventListener("click", function(e) { panner.onClick(e); }, true);
-		window.addEventListener("submit", function(e) { panner.onSubmit(e); }, true);
-		window.addEventListener("popstate", function(e) { panner.onPopState(e); }, true);
 
-		window.addEventListener('scroll', function(e) { panner.saveScroll(); }, false); // NOTE first scroll after popstate might be cancelled
+		if (!history.pushState) return;
+
 		/*
 			If this is the landing page then `history.state` will be null.
 			But if there was a navigation back / forwards sequence then there could be `state`.
@@ -924,40 +1055,50 @@ start: function() {
 		*/
 		var state = history.state;
 		if (panner.ownsState(state)) {
-			panner.updateState(state);
+			panner.restoreState(state);
 			panner.restoreScroll(state);
 		}
 		else {
-			panner.replaceState(); // otherwise there will be no popstate when returning to original URL
+			state = panner.createState({ url: document.URL });
+			panner.commitState(state, true); // replaceState
 			panner.saveScroll();
 		}
+
+		// NOTE fortuitously all the browsers that support pushState() also support addEventListener() and dispatchEvent()
+		window.addEventListener("click", function(e) { panner.onClick(e); }, true);
+		window.addEventListener("submit", function(e) { panner.onSubmit(e); }, true);
+		window.addEventListener("popstate", function(e) { panner.onPopState(e); }, true);
+		window.addEventListener('scroll', function(e) { panner.saveScroll(); }, false); // NOTE first scroll after popstate might be cancelled
 	}
-		
+	
 	]);
 },
 
-decorate: async(function(decorURL, callback) {
+decorate: function(decorURL) {
 	var doc, complete = false;
-	var contentStart, decorEnd;
-	var placingContent = false;
-	var decorReady = false;
+	var decorEnd;
+	var decorReadyFu;
+	var domReadyFu = new Future(function() { var r = this;
+		DOM.ready(function() { r.accept(); });
+	});
+	var contentLoaded = false;
+	domReadyFu.done(function() { contentLoaded = true; });
 
 	if (getDecorMeta()) throw "Cannot decorate a document that has already been decorated";
 
-	queue([
+	return pipe(null, [
 
-	async(function(cb) {
-		var method = 'get';
-		decor.options.load(method, decorURL, null, { method: method, url: decorURL }, {
-			onComplete: function(result) {
-				doc = result;
-				cb.complete(doc);
-			},
-			onError: function() { logger.error("HTMLLoader failed for " + decorURL); cb.error(); } // FIXME need decorError notification / handling
-		});
-	}),
 	function() {
-		if (panner.options.normalize) return wait(function() { return DOM.isContentLoaded(); });
+		var method = 'get';
+		var f = decor.options.load(method, decorURL, null, { method: method, url: decorURL });
+		f.done(
+			function(result) { doc = result; },
+			function(error) { logger.error("HTMLLoader failed for " + decorURL); } // FIXME need decorError notification / handling
+		);
+		return f;
+	},
+	function() {
+		if (panner.options.normalize) return domReadyFu;
 		else return wait(function() { return !!document.body; });
 	},
 	function() {
@@ -977,9 +1118,9 @@ decorate: async(function(decorURL, callback) {
 		});
 		mergeHead(doc, true);
 	},
-	function() { return wait(function() { return scriptQueue.isEmpty(); }); }, 
+	function() { return scriptQueue.empty(); }, // FIXME this should be in mergeHead
 	function() {
-		contentStart = document.body.firstChild;
+		var contentStart = document.body.firstChild;
 		decor_insertBody(doc);
 		notify({
 			module: "decor",
@@ -987,18 +1128,15 @@ decorate: async(function(decorURL, callback) {
 			type: "decorIn",
 			node: doc
 		});
-		wait(
-			 function() { return checkStyleSheets(); },
-			 function() {
-				decorReady = true;
-				notify({
-					module: "decor",
-					stage: "after",
-					type: "decorReady",
-					node: doc
-				});
-			}
-		);
+		decorReadyFu = wait(function() { return checkStyleSheets(); });
+		decorReadyFu.done(function() {
+			notify({
+				module: "decor",
+				stage: "after",
+				type: "decorReady",
+				node: doc
+			});
+		});
 		decorEnd = document.createTextNode("");
 		document.body.insertBefore(decorEnd, contentStart);
 		notify({
@@ -1007,46 +1145,45 @@ decorate: async(function(decorURL, callback) {
 			type: "pageIn",
 			node: document,
 			target: document
-		}); // TODO perhaps this should be stalled until scriptQueue.isEmpty() (or a config option)
+		}); // TODO perhaps this should wait on scriptQueue.empty() (or a config option)
 	},
 	function() {
-		return until(
-			function() { return DOM.isContentLoaded() && placingContent; },
-			function() {
-				placingContent = true;
-				var nodeList = [];
-				contentStart = decorEnd.nextSibling;
-				if (contentStart) placeContent(
-					contentStart,
-					function(node, target) {
-						decor.placeHolders[target.id] = target;
-						notify({
-							module: "panner",
-							stage: "before",
-							type: "nodeInserted",
-							target: document.body,
-							node: node
-						});
-					},
-					function(node) {
-						nodeList.push(node.id);
-						delay(function() {
-							notify({
-								module: "panner",
-								stage: "after",
-								type: "nodeInserted",
-								target: document.body,
-								node: node
-							});
-							remove(nodeList, node.id);
-							if (!nodeList.length && DOM.isContentLoaded()) complete = true;
-						});
-					}
-				);
-			}
-		);
+		var afterInsertFu;
+		return wait(function() {
+			var nodeList = [];
+			var contentStart = decorEnd.nextSibling;
+			if (contentStart) placeContent(
+				contentStart,
+				function(node, target) {
+					decor.placeHolders[target.id] = target;
+					notify({
+						module: "panner",
+						stage: "before",
+						type: "nodeInserted",
+						target: document.body,
+						node: node
+					});
+				},
+				function(node) {
+					nodeList.push(node);
+				}
+			);
+			afterInsertFu = delay(0, function() {
+				forEach(nodeList, function(node) {
+					notify({
+						module: "panner",
+						stage: "after",
+						type: "nodeInserted",
+						target: document.body,
+						node: node
+					});
+				});
+			});
+			return contentLoaded;
+		})
+		.then(function() { return afterInsertFu; }); // this will be the last `afterInsertFu`
 	},
-	function() { return wait(function() { return complete && scriptQueue.isEmpty(); }); },
+	function() { return scriptQueue.empty(); },
 	function() { // NOTE resolve URLs in landing page
 		// TODO could be merged with code in parseHTML
 		var baseURL = URL(document.URL);
@@ -1094,17 +1231,15 @@ decorate: async(function(decorURL, callback) {
 			target: document
 		});
 	},
-	function() { return wait(function() { return decorReady; }); }
+	function() { return decorReadyFu; }
 
-	], callback);
-})
+	]);
+}
 
 });
 
 
 extend(panner, {
-
-contentURL: "",
 
 onClick: function(e) {
 	// NOTE only pushState enabled browsers use this
@@ -1132,7 +1267,6 @@ onClick: function(e) {
 		
 	// TODO perhaps should test same-site and same-page links
 	var isPageLink = (oURL.nohash == baseURL.nohash); // TODO what about page-links that match the current hash
-
 	// From here on we effectively take over the default-action of the event
 	overrideDefaultAction(e, function(event) {
 		if (isPageLink) panner.onPageLink(url);
@@ -1141,7 +1275,8 @@ onClick: function(e) {
 },
 
 onPageLink: function(url) {	// TODO Need to handle anchor links. The following just replicates browser behavior
-	panner.pushState(url);
+	var state = panner.createState({ url: url });
+	panner.commitState(state, false); // pushState
 	scrollToId(URL(url).hash.substr(1));
 },
 
@@ -1202,29 +1337,26 @@ onForm: function(form) {
 },
 
 onPopState: function(e) {
-	var state = e.state;
-	if (!panner.ownsState(state)) return;
+	var newState = e.state;
+	if (!panner.ownsState(newState)) return;
 	if (e.stopImmediatePropagation) e.stopImmediatePropagation();
 	else e.stopPropagation();
 	// NOTE there is no default-action for popstate
-	
+
+	var oldState = panner.state;
 	var complete = false;
-	var newURL = URL(document.URL).nohash;
-	if (newURL != panner.contentURL) {
-		var loader = async(function(cb) {
-			var method = 'get';
-			panner.options.load(method, newURL, null, { method: method, url: newURL }, cb);
-		});
-		page(loader, function() {
-			panner.restoreScroll(state);
+	var newURL = URL(newState.url).nohash;
+	if (newURL != URL(oldState.url).nohash) {
+		page(oldState, newState)
+		.done(function() {
+			panner.restoreScroll(newState);
 			complete = true;
 		});
-		panner.contentURL = newURL;
 	}
-	else delay(function() {
-		panner.restoreScroll(state);
+	else queueTask(function() {
+		panner.restoreScroll(newState);
 		complete = true;
-	}, Async.pollingInterval);
+	}, Future.pollingInterval);
 	
 	/*
 	  All browsers seem to scroll the page around the popstate event.
@@ -1233,9 +1365,9 @@ onPopState: function(e) {
 	  so the following listens for that event and restores the page offsets from the outgoing state.
 	  If there is no scroll event then it is effectively a no-op. 
 	*/
-	var oldState = panner.state;
-	panner.updateState(state);
+	panner.restoreState(newState);
 	window.scroll(oldState.pageXOffset, oldState.pageYOffset); // TODO IE10 sometimes scrolls visibly before `scroll` event. This might help.
+	// var refresh = document.documentElement.scrollTop;
 	window.addEventListener('scroll', undoScroll, true);
 	var count = 0;
 	function undoScroll(scrollEv) { // undo the popstate triggered scroll if appropriate
@@ -1246,55 +1378,81 @@ onPopState: function(e) {
 		scrollEv.stopPropagation(); // prevent the saveScroll function
 		scrollEv.preventDefault(); // TODO should really use this
 		window.scroll(oldState.pageXOffset, oldState.pageYOffset);
+		// var refresh = document.documentElement.scrollTop;
 	}
 },
 
-assign: function(url, callback) {
-	panner.navigate({
+assign: function(url) {
+	return panner.navigate({
 		url: url,
 		replace: false
-	}, callback);
+	});
 },
 
-replace: function(url, callback) {
-	panner.navigate({
+replace: function(url) {
+	return panner.navigate({
 		url: url,
 		replace: true
-	}, callback);
+	});
 },
 
-navigate: async(function(options, callback) {
+navigate: function(options) {
+return new Future(function() { var r = this;
 	var url = options.url;
 	var decorURL = decor.options.lookup(url);
 	if (typeof decorURL !== "string" || URL(document.URL).resolve(decorURL) !== decor.current.url) {
 		var modifier = options.replace ? "replace" : "assign";
 		location[modifier](url);
-		callback.complete();	// TODO should this be an error??
+		r.accept();	// TODO should this be an error??
 		return;
 	}
 
-	var loader = async(function(cb) {
-		var method = 'get';
-		panner.options.load(method, url, null, { method: method, url: url }, cb);
+	var oldState = panner.state;
+	var newState = panner.createState({ // FIXME
+		url: url
 	});
 
-	page(loader, {
-		
-	onComplete: function(msg) {
-		var oURL = URL(document.URL);
-		panner.contentURL = oURL.nohash;
+	page(oldState, newState)
+	.done(function(msg) {
+		var oURL = URL(newState.url);
 		scrollToId(oURL.hash && oURL.hash.substr(1));
-		callback.complete(msg);
-	}
-	
+
+		panner.saveScroll();
+
+		r.accept(msg);
 	});
 	
 	// Change document.URL
-	// This happens after the page load has initiated and after the pageOut.before handler
-	// TODO
-	var modifier = options.replace ? "replaceState" : "pushState";
-	panner[modifier](url);
-}),
+	// FIXME When should this happen?
+	panner.commitState(newState, options.replace);
+
+});
+},
+
+bfcache: {},
+
+createState: function(options) {
+	var state = {
+		'meeko-panner': true,
+		pageXOffset: 0,
+		pageYOffset: 0,
+		url: null,
+		timeStamp: +(new Date)
+	};
+	if (options) config(state, options);
+	return state;
+},
+
+commitState: function(state, replace) {
+	panner.state = state;
+	var modifier = replace ? 'replaceState' : 'pushState';
+	history[modifier](state, null, state.url);	
+},
+
+configState: function(options) {
+	if (options) config(panner.state, options);
+	history.replaceState(panner.state, null);
+},
 
 ownsState: function(state) {
 	if (!state) state = history.state;
@@ -1302,23 +1460,13 @@ ownsState: function(state) {
 	return !!state['meeko-panner'];
 },
 
-pushState: function(url) {
-	panner.state = { 'meeko-panner': true, pageXOffset: 0, pageYOffset: 0 };
-	history.pushState(panner.state, null, url || null);
-},
-
-replaceState: function(url) {
-	panner.state = { 'meeko-panner': true, pageXOffset: 0, pageYOffset: 0 };
-	history.replaceState(panner.state, null, url || null);
-},
-
-updateState: function(state) { // called from popstate
+restoreState: function(state) { // called from popstate
 	if (!state) state = history.state;
-	panner.state = extend({}, state);	
+	panner.state = state;
 },
 
 saveScroll: function() {
-	panner.state = { 'meeko-panner': true, pageXOffset: window.pageXOffset, pageYOffset: window.pageYOffset };
+	panner.configState({pageXOffset: window.pageXOffset, pageYOffset: window.pageYOffset });
 	history.replaceState(panner.state, null);	
 },
 
@@ -1338,10 +1486,10 @@ restoreScroll: function(state) {
 decor.options = {
 	lookup: function(url) {},
 	detect: function(document) {},
-	load: async(function(method, url, data, details, cb) {
+	load: function(method, url, data, details) {
 		var loader = new HTMLLoader(decor.options);
-		loader.load(method, url, data, details, cb);
-	})
+		return loader.load(method, url, data, details);
+	}
 	/* The following options are also available (unless otherwise indicated) *
 	decorIn: { before: noop, after: noop },
 	decorOut: { before: noop, after: noop }, // TODO not called at all
@@ -1351,10 +1499,10 @@ decor.options = {
 
 panner.options = { 
 	duration: 0,
-	load: async(function(method, url, data, details, cb) {
+	load: function(method, url, data, details) {
 		var loader = new HTMLLoader(panner.options);
-		loader.load(method, url, data, details, cb);
-	})
+		return loader.load(method, url, data, details);
+	}
 	/* The following options are also available *
 	nodeRemoved: { before: hide, after: show },
 	nodeInserted: { before: hide, after: show },
@@ -1390,58 +1538,70 @@ var notify = function(msg) {
 	if (typeof listener == "function") isolate(function() { listener(msg); }); // TODO isFunction(listener)
 }
 
-var page = async(function(loader, callback) {
-	var doc, ready = false;
+var page = function(oldState, newState) {
+	if (!getDecorMeta()) throw "Cannot page if the document has not been decorated"; // FIXME r.reject()
 
-	var outCB = pageOut();
-	delay(function() { ready = true; }, panner.options.duration);
+	var durationFu = delay(panner.options.duration);
 
-	queue([
-
-	async(function(cb) {
-		if (typeof loader == "function") loader({
-			onComplete: function(result) { doc = result; if (!outCB.called) outCB.abort(); cb.complete(); },
-			onError: function() { logger.error("HTMLLoader failed"); cb.error(); }		
-		});
-		else {
-			doc = loader;
-			return true;
-		}
-	}),
-	function() { return wait(function() { return ready; }); },
-	// we don't get to here if location.replace() was called
-	function() {
-		return pageIn(doc);
+	var oldDoc = panner.bfcache[oldState.timeStamp];
+	if (!oldDoc) {
+		oldDoc = document.implementation.createHTMLDocument(''); // FIXME
+		panner.bfcache[oldState.timeStamp] = oldDoc;
 	}
+	var oldDocSaved = false;
+
+	var newDoc, newDocFu;
+	newDoc = panner.bfcache[newState.timeStamp];
+	if (newDoc) newDocFu = Future.resolve(newDoc);
+	else {
+		var url = newState.url;
+		var method = 'get'; // newState.method
+		newDocFu = panner.options.load(method, url, null, { method: method, url: url });
+		newDocFu.done(
+			function(result) {
+				newDoc = result;
+				panner.bfcache[newState.timeStamp] = newDoc;
+			},
+			function(error) { logger.error("HTMLLoader failed"); } // FIXME page() will stall. Need elegant error handling
+		);
+	}
+
+	var oldContent = getContent(oldDoc);
+	var newContent;
 	
-	], callback);	
-});
-
-var pageOut = async(function(cb) {
-	if (!getDecorMeta()) throw "Cannot page if the document has not been decorated";
-
-	notify({
-		module: "panner",
-		stage: "before",
-		type: "pageOut",
-		target: document
-	});
-
-	each(decor.placeHolders, function(id, node) {
-		var target = $id(id);
+	return pipe(null, [
+		
+	function() { // before pageOut / nodeRemoved
 		notify({
 			module: "panner",
 			stage: "before",
-			type: "nodeRemoved",
-			target: document.body,
-			node: target // TODO rename `target` variable
+			type: "pageOut",
+			target: document
 		});
-	});
+		each(decor.placeHolders, function(id, node) {
+			var target = $id(id);
+			notify({
+				module: "panner",
+				stage: "before",
+				type: "nodeRemoved",
+				target: document.body,
+				node: target // TODO rename `target` variable
+			});
+		});		
+	},
 
-	delay(function() { // NOTE external context can abort this delayed call with cb.abort();
+	function() { return durationFu; },
+
+	function() {
+		if (newDoc) return; // pageIn will take care of pageOut
+
+		separateHead(false, function(target) {
+			oldDoc.head.appendChild(target); // FIXME will need to use some of mergeHead()
+		});
 		each(decor.placeHolders, function(id, node) {
 			var target = $id(id);
 			replaceNode(target, node);
+			oldDoc.body.appendChild(target); // FIXME should use adoptNode()
 			notify({
 				module: "panner",
 				stage: "after",
@@ -1450,34 +1610,36 @@ var pageOut = async(function(cb) {
 				node: target
 			});
 		});
+		oldDocSaved = true;
 		notify({
 			module: "panner",
 			stage: "after",
 			type: "pageOut",
 			target: document
-		});
-	}, panner.options.duration, cb);
-});
+		});		
+	},
 
-var pageIn = async(function(doc, cb) {
-	
-	queue([
-
-	function() {
+	function() { return newDocFu; },
+		
+	function() { // before pageIn
 		notify({
 			module: "panner",
 			stage: "before",
 			type: "pageIn",
 			target: document,
-			node: doc
+			node: newDoc
 		});
-		mergeHead(doc, false);
 	},
-	async(function(cb) {
+
+	function() { // pageIn
+		newContent = getContent(newDoc);
 		var nodeList = [];
-		var contentStart = doc.body.firstChild;
-		if (contentStart) placeContent(contentStart,
-			function(node) {
+
+		mergeHead(newDoc, false, function(target) {
+			if (!oldDocSaved) oldDoc.head.appendChild(target);
+		});
+		placeContent(newContent, // FIXME uses locally-scoped implementation of placeContent()
+			function(node, target) {
 				notify({
 					module: "panner",
 					stage: "before",
@@ -1486,24 +1648,29 @@ var pageIn = async(function(doc, cb) {
 					node: node
 				});
 			},
-			function(node) {
+			function(node, target) {
+				if (!oldDocSaved) oldDoc.body.appendChild(target);
 				nodeList.push(node);
-				delay(function() {
-					notify({
-						module: "panner",
-						stage: "after",
-						type: "nodeInserted",
-						target: document.body,
-						node: node
-					});
-					remove(nodeList, node);
-					if (!nodeList.length) cb.complete();
-				});
 			}
 		);
-	}),
-	function() { return wait(function() { return scriptQueue.isEmpty(); }); },
-	function() {
+
+		var fu = delay(0, function() { // NOTE delayed to allow styles to be applied from *before* nodeInserted 
+			forEach(nodeList, function(node) {
+				notify({ 
+					module: "panner",
+					stage: "after",
+					type: "nodeInserted",
+					target: document.body,
+					node: node
+				});
+			});
+		});
+		return fu;
+	},
+	
+	function() { return scriptQueue.empty(); },
+	
+	function() { // after pageIn
 		notify({
 			module: "panner",
 			stage: "after",
@@ -1511,13 +1678,39 @@ var pageIn = async(function(doc, cb) {
 			target: document
 		});
 	}
+	
+	]);
+	
+	// NOTE page() returns now. The following functions are hoisted
+	
+	function getContent(doc) {
+		var content = {};
+		each(decor.placeHolders, function(id) {
+			content[id] = $id(id, doc);
+		});
+		return content;
+	}
 
-	], cb);
-});
+	function placeContent(content, beforeReplace, afterReplace) { // this should work for content from both internal and external documents
+		each(decor.placeHolders, function(id) {
+			var node = content[id];
+			if (!node) {
+				console.log(id + ' not found');
+				return;
+			}
+			var target = $id(id);
+			// TODO compat check between node and target
+			if (beforeReplace) beforeReplace(node, target);
+			replaceNode(target, node);
+			if (afterReplace) afterReplace(node, target);
+		});
+	}
+
+	
+}
 
 
-function mergeHead(doc, isDecor) {
-	var baseURL = URL(document.URL);
+function separateHead(isDecor, afterRemove) { // FIXME more callback than just afterRemove?
 	var dstHead = document.head;
 	var marker = getDecorMeta();
 	if (!marker) throw "No meeko-decor marker found. ";
@@ -1526,7 +1719,17 @@ function mergeHead(doc, isDecor) {
 	forSiblings (isDecor ? "before" : "after", marker, function(node) {
 		if (tagName(node) == "script" && (!node.type || node.type.match(/^text\/javascript/i))) return;
 		dstHead.removeChild(node);
-	});
+		if (afterRemove) afterRemove(node);
+	});	
+}
+
+function mergeHead(doc, isDecor, afterRemove) { // FIXME more callback than just afterRemove?
+	var baseURL = URL(document.URL);
+	var dstHead = document.head;
+	var marker = getDecorMeta();
+	if (!marker) throw "No meeko-decor marker found. ";
+
+	separateHead(isDecor, afterRemove);
 
 	// remove duplicate scripts from srcHead
 	var srcHead = doc.head;
@@ -1610,6 +1813,10 @@ function decor_insertBody(doc) {
 var scriptQueue = new function() {
 
 /*
+ WARN: This description comment was from the former scriptQueue implementation.
+ It is still a correct description of behavior,
+ but doesn't give a great insight into the current Futures-based implementation.
+ 
  We want <script>s to execute in document order (unless @async present)
  but also want <script src>s to download in parallel.
  The script queue inserts scripts until it is paused on a blocking script.
@@ -1618,89 +1825,153 @@ var scriptQueue = new function() {
  Sync <script src> are blocking, but if `script.async=false` is supported by the browser
  then only the last <script src> (in a series of sync scripts) needs to pause the queue. See
 	http://wiki.whatwg.org/wiki/Dynamic_Script_Execution_Order#My_Solution
- Script preloading is always performed, even if the browser doesn't support it. See
+ Script preloading is always initiated, even if the browser doesn't support it. See
 	http://wiki.whatwg.org/wiki/Dynamic_Script_Execution_Order#readyState_.22preloading.22
 */
 var queue = [],
-	pending = false,
-	blockingScript;
-	
-this.push = function(node) {
-	if (!/^text\/javascript\?disabled$/i.test(node.type)) return;
-	var script = document.createElement("script");
-	copyAttributes(script, node);
-	script.type = "text/javascript";
-	
-	// FIXME is this comprehensive?
-	try { script.innerHTML = node.innerHTML; }
-	catch (error) { script.text = node.text; }
-	
-	queueScript(script, node);
-}
-
-this.isEmpty = function() {
-	return (queue.length <= 0 && !blockingScript);
-}
+	emptying = false;
 
 var testScript = document.createElement('script'),
 	supportsOnLoad = (testScript.setAttribute('onload', 'void(0)'), typeof testScript.onload === 'function'),
 	supportsSync = (testScript.async === true);
 
-var queueScript = function(script, node) {
-	queue.push({ script: script, node: node });
-	if (blockingScript) return;
-	processQueue();
-}
+this.push = function(node) {
+	if (emptying) throw 'Attempt to append script to scriptQueue while emptying';
+	
+	// TODO assert node is in document
 
-var processQueue = function(e) {
-	if (e) {
-		var script = e.target || e.srcElement;
-		removeListeners(script);
+	var completeRe, completeFu = new Future(function() { completeRe = this; });	
+
+	if (!/^text\/javascript\?disabled$/i.test(node.type)) {
+		completeRe.reject("Unsupported script-type " + node.type);
+		return completeFu;
 	}
-	if (pending) return;
-	delay(_processQueue);
-	pending = true;
-}
 
-var _processQueue = function() {
-	pending = false;
-	blockingScript = null;
-	while (!blockingScript && queue.length > 0) {
-		var spec = queue.shift(), script = spec.script, node = spec.node, nextScript = queue.length && queue[0].script;
-		if (script.src && !script.getAttribute("async") && (!supportsSync || !nextScript || !nextScript.src || nextScript.getAttribute("async"))) {
-			blockingScript = spec;
-			addListeners(script);
-		}
-		if (supportsSync && !script.getAttribute('async')) script.async = false;
+	var script = document.createElement("script");
+
+	// preloadedFu is needed for IE <= 8
+	// On other browsers (and for inline scripts) it is pre-accepted
+	var preloadedRe, preloadedFu = new Future(function() { preloadedRe = this; }); 
+	if (!script.src || supportsOnLoad) preloadedRe.accept();
+	if (script.src) addListeners();
+	
+	copyAttributes(script, node);
+
+	// FIXME is this comprehensive?
+	try { script.innerHTML = node.innerHTML; }
+	catch (error) { script.text = node.text; }
+
+	if (script.getAttribute('defer')) { // @defer is not appropriate. Implement as @async
+		script.removeAttribute('defer');
+		script.setAttribute('async', '');
+		logger.warn('@defer not supported on scripts');
+	}
+	if (supportsSync && script.src && !script.getAttribute('async')) script.async = false;
+	script.type = "text/javascript";
+	
+	// enabledFu resolves after script is inserted
+	var enabledRe, enabledFu = new Future(function() { enabledRe = this; }); 
+	
+	var prev = queue[queue.length - 1], prevScript = prev && prev.script;
+	
+	var triggerFu; // triggerFu allows this script to be enabled, i.e. inserted
+	if (prev) {
+		if (prevScript.getAttribute('async') || supportsSync && !script.getAttribute('async')) triggerFu = prev.enabled;
+		else triggerFu = prev.complete;
+	}
+	else triggerFu = Future.resolve();
+	
+	triggerFu.then(enable, enable);
+
+	var current = { script: script, node: node, complete: completeFu, enabled: enabledFu };
+	queue.push(current);
+	return completeFu;
+
+	// The following are hoisted
+	function enable() {
+		preloadedFu.then(_enable, function(err) { logger.error('Script preloading failed'); });
+	}
+	function _enable() {
 		replaceNode(node, script);
+		enabledRe.accept();
+		if (!script.src) {
+			remove(queue, current);
+			completeRe.accept();
+		}
 	}
+	
+	function onLoad(e) {
+		removeListeners();
+		remove(queue, current);
+		completeRe.accept();
+	}
+
+	function onError(e) {
+		removeListeners();
+		remove(queue, current);
+		completeRe.reject('NetworkError'); // FIXME throw DOMError()
+	}
+
+	function addListeners() {
+		if (supportsOnLoad) {
+			addEvent(script, "load", onLoad);
+			addEvent(script, "error", onError);
+		}
+		else addEvent(script, 'readystatechange', onChange);
+	}
+	
+	function removeListeners() {
+		if (supportsOnLoad) {
+			removeEvent(script, "load", onLoad);
+			removeEvent(script, "error", onError);
+		}
+		else removeEvent(script, 'readystatechange', onChange);
+	}
+	
+	function onChange(e) { // for IE <= 8 which don't support script.onload
+		var readyState = script.readyState;
+		if (!script.parentNode) {
+			if (readyState === 'loaded') preloadedRe.accept();
+			return;
+		}
+		switch (readyState) {
+		case "complete":
+			onLoad(e);
+			break;
+		case "loading":
+			onError(e);
+			break;
+		default: break;
+		}	
+	}
+
 }
 
-function addListeners(script) {
-	if (supportsOnLoad) addEvent(script, "load", processQueue);
-	else addEvent(script, 'readystatechange', readyStateHandler);
-	addEvent(script, "error", processQueue); // TODO error message? browser generates one	
+this.empty = function() {
+	emptying = true;
+	var list = queue;
+	
+	// the rest is modified from the Future.every implementation
+	var resolver, future = new Future(function() { resolver = this; });
+	var countdown = list.length;
+	if (countdown <= 0) {
+		emptying = false;
+		resolver.accept();
+		return future;
+	}
+	forEach(list, function(value, i) {
+		var acceptCallback = function() {
+			if (--countdown <= 0) {
+				emptying = false;
+				resolver.accept();
+			}
+		}
+		value.complete.done(acceptCallback, acceptCallback);
+	});
+	return future;
 }
 
-function removeListeners(script) {
-	if (supportsOnLoad) removeEvent(script, 'load', processQueue);
-	else removeEvent(script, 'readystatechange', readyStateHandler);
-	removeEvent(script, 'error', processQueue);		
-}
-
-function readyStateHandler(e) { // for IE <= 8 which don't support script.onload
-	var script = e.target || e.srcElement;
-	if (script.complete) return;
-	switch (script.readyState) {
-	case "loaded": case "complete":
-		script.complete = true; // TODO probably not necessary if removeListeners() here
-		processQueue(e);
-		break;
-	default: break;
-	}	
-}
-
-}
+} // end scriptQueue
 
 function getDecorMeta(doc) {
 	if (!doc) doc = document;
@@ -1714,4 +1985,4 @@ function getDecorMeta(doc) {
 
 // end decor defn
 
-})();
+}).call(window);

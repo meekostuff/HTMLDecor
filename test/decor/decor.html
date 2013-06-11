@@ -17,7 +17,12 @@ Meeko.decor.config({ // this will over-ride the <link rel="meeko-decor"> detect 
 	lookup: function(url) { return 'decor/decor.html'; }
 });
 Meeko.panner.config({
-	pageOut: function(msg) { document.getElementById('panner').className = ''; }
+	duration: 250,
+	pageOut: function(msg) { document.getElementById('panner').className = ''; },
+	nodeRemoved: {
+		before: function(msg) { },
+		after: function(msg) { }
+	}
 });
 </script>
 </head>
