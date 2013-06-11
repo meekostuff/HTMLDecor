@@ -120,57 +120,62 @@ function resolveURL(url, params) { // works for all browsers including IE < 8
 }
 
 var addEvent = 
-	document.addEventListener && function(node, event, fn) { return node.addEventListener(event, fn, true); } || // NOTE using capture phase
+	document.addEventListener && function(node, event, fn) { return node.addEventListener(event, fn, false); } ||
 	document.attachEvent && function(node, event, fn) { return node.attachEvent("on" + event, fn); } ||
-	function(node, event, fn) { node["on" + event] = fn; }
+	function(node, event, fn) { node["on" + event] = fn; };
 
 var removeEvent = 
 	document.removeEventListener && function(node, event, fn) { return node.removeEventListener(event, fn, false); } ||
 	document.detachEvent && function(node, event, fn) { return node.detachEvent("on" + event, fn); } ||
-	function(node, event, fn) { if (node["on" + event] == fn) node["on" + event] = null; }
+	function(node, event, fn) { if (node["on" + event] == fn) node["on" + event] = null; };
 
-var isContentLoaded = (function() { // TODO perhaps remove listeners after load detected
+var domReady = (function() {
 // WARN this function assumes the script is included in the page markup so it will run before DOMContentLoaded, etc
 
 var loaded = false;
+var queue = [];
 
-function isContentLoaded() {
-	return loaded;
+function domReady(fn) {
+	queue.push(fn);
+	if (loaded) processQueue();
 }
 
-(function() { 
-	
-var listeners = {
-	'readystatechange': onChange,
-	'DOMContentLoaded': onLoaded,
-	'load': onLoaded
+function processQueue() {
+	forEach(queue, function(fn) { setTimeout(fn); });
+	queue.length = 0;
 }
 
-addListeners(document);
-
-function onLoaded(e) {
-	if (e.target == document) loaded = true;
-	if (document.readyState == "complete") loaded = true;
-	if (loaded) removeListeners(document);
+var events = {
+	'readystatechange': document,
+	'DOMContentLoaded': document,
+	'load': window
 }
+
+addListeners(events, onChange);
 
 function onChange(e) {
-	var readyState = document.readyState;
-	if (readyState == "loaded" || readyState == "complete") loaded = true;
-	if (loaded) removeListeners(document);
+	switch(e.type) {
+	case "DOMContentLoaded": case "load": 
+		loaded = true;
+		break;
+	case "readystatechange":
+		if (/loaded|complete/.test(document.readyState)) loaded = true;
+		break;
+	}
+	if (!loaded) return;
+	removeListeners(events, onChange);
+	processQueue();
 }
 
-function addListeners(node) {
-	each(listeners, function(type, handler) { addEvent(node, type, handler); });
+function addListeners(events, handler) {
+	each(events, function(type, node) { addEvent(node, type, handler); });
 }
 
-function removeListeners(node) {
-	each(listeners, function(type, handler) { removeEvent(node, type, handler); });
+function removeListeners(node, types, handler) {
+	each(events, function(type, node) { removeEvent(node, type, handler); });
 }
 
-})();
-
-return isContentLoaded;
+return domReady;
 
 })();
 
@@ -178,30 +183,80 @@ return isContentLoaded;
  ### async functions
  */
 
-function delay(callback, timeout) {
-	return window.setTimeout(callback, timeout);
-}
-
 var queue = (function() {
 
 var head = document.head;
 var marker = head.firstChild;
+var testScript = document.createElement('script');
+var supportsOnLoad = (testScript.setAttribute('onload', 'void(0)'), typeof testScript.onload === 'function');
+var supportsSync = (testScript.async === true);
 
-function prepareScript(url, onload, onerror) {
+if (!supportsOnLoad && !testScript.readyState) throw "script.onload not supported in this browser";
+
+function prepareScript(url, onload, onerror) { // create script (and insert if supportsSync)
 	var script = document.createElement('script');
-	addListeners(script, onload, onerror);
+	script.onerror = onError;
+	script.onload = onLoad;
 	script.src = url;
-	
-	if (script.async == true) {
+	if (supportsSync) {
 		script.async = false;
 		marker.parentNode.insertBefore(script, marker);
 	}
 	return script;
+
+	// The following are hoisted
+	function onLoad() {
+		script.onerror = null;
+		script.onload = null;
+		onload();
+	}
+	
+	function onError() { 
+		script.onerror = null;
+		script.onload = null;
+		onerror();
+	}	
 }
 
-function enableScript(script) {
-	if (script.parentNode) return;
-	marker.parentNode.insertBefore(script, marker);
+function enableScript(script) { // insert script (if not already done). Insertion is delayed if preloading
+	// TODO assert (!!script.parentNode === supportsSync)
+	if (supportsSync) return;
+
+	if (supportsOnLoad) {
+		marker.parentNode.insertBefore(script, marker);
+		return;
+	}
+
+	/*
+		IE <= 8 don't implement script.onload, script.onerror.
+		But they do implement script preloading:
+			http://wiki.whatwg.org/wiki/Dynamic_Script_Execution_Order#readyState_.22preloading.22
+		Preloading starts as soon as `script.src` is set.
+		If the script isn't inserted then it completes when `script.readyState === 'loaded'`.
+		If the script is then inserted the readyState signals success as 'complete' and failure as 'loading'.
+	*/
+	script.onreadystatechange = onChange;
+	if (script.readyState == 'loaded') onChange();
+
+	function onChange() {
+		var readyState = script.readyState;
+		if (!script.parentNode) {
+			if (readyState === 'loaded') marker.parentNode.insertBefore(script, marker);
+			return;
+		}
+		switch (readyState) {
+		case "complete": // NOTE successfully loaded
+			script.onreadystatechange = null;
+			script.onload();
+			break;
+		case "loading": // NOTE load failure
+			script.onreadystatechange = null;
+			script.onerror();
+			break;
+		default: break;
+		}
+	}
+
 }
 
 function disableScript(script) {
@@ -225,23 +280,27 @@ function queue(fnList, oncomplete, onerror) {
 	});
 	queueback();
 
-	function errorback(err) {
-		logger.error(err);
+	function errorback() {
 		var fn;
 		while (fn = list.shift()) {
 			if (typeof fn == 'function') continue;
 			// NOTE the only other option is a prepared script
 			disableScript(fn);
 		}
-		if (onerror) onerror(err);
+		if (onerror) onerror();
 	}
 
 	function queueback() {
 		var fn;
-		while (fn = list.shift()) {
+		while (list.length) {
+			fn = list.shift();
 			if (typeof fn == "function") {
 				try { fn(); continue; }
-				catch(err) { errorback(err); return; }
+				catch(err) {
+					setTimeout(function() { throw err; });
+					errorback();
+					return;
+				}
 			}
 			else { // NOTE the only other option is a prepared script
 				enableScript(fn);
@@ -251,46 +310,6 @@ function queue(fnList, oncomplete, onerror) {
 		if (oncomplete) oncomplete();
 		return;
 	}
-}
-
-var testScript = document.createElement('script');
-var supportsOnLoad = ('onload' in testScript) ||
-	(testScript.setAttribute('onload', 'void(0)'), typeof testScript.onload === 'function');
-
-if (!supportsOnLoad && !testScript.readyState) throw "script.onload not supported in this browser";
-
-function addListeners(script, onload, onerror) {
-	script.onerror = onError;
-	if (supportsOnLoad) script.onload = onLoad;
-	else script.onreadystatechange = onChange;
-
-	function onLoad() {
-		removeListeners(script);
-		onload();
-	}
-	
-	function onError() {
-		removeListeners(script);
-		onerror();
-	}
-	
-	function onChange() { // for IE <= 8 which don't support script.onload
-		if (!script.parentNode) return;
-		switch (script.readyState) {
-		case "loaded": case "complete":
-			removeListeners(script);
-			onload();
-			break;
-		default: break;
-		}	
-	}
-
-	function removeListeners(script) {
-		script.onerror = null;
-		if (supportsOnLoad) script.onload = null;
-		else script.onreadystatechange = null;
-	}
-	
 }
 
 return queue;
@@ -419,7 +438,7 @@ function unhide() {
 	// the stylesheet has been removed.
 	// The following forces the content to be revealed
 	document.body.style.visibility = "hidden";
-	delay(function() { document.body.style.visibility = ""; }, pollingInterval);
+	setTimeout(function() { document.body.style.visibility = ""; }, pollingInterval);
 }
 
 return {
@@ -448,7 +467,7 @@ else {
 var timeout = bootOptions["hidden_timeout"];
 if (timeout > 0) {
 	Viewport.hide();
-	delay(Viewport.unhide, timeout);
+	setTimeout(Viewport.unhide, timeout);
 }
 
 var urlParams = {
@@ -469,9 +488,9 @@ if (typeof htmldecor_script !== 'string') throw 'HTMLDecor script URL is not con
 htmldecor_script = bootOptions['htmldecor_script'] = resolveURL(htmldecor_script, urlParams);
 
 function config() {
-	Meeko.DOM.isContentLoaded = isContentLoaded;
+	Meeko.DOM.ready = domReady;
 	Meeko.DOM.HTMLParser.prototype.prepare = html5prepare;
-	Meeko.Async.pollingInterval = bootOptions["polling_interval"];
+	Meeko.Future.pollingInterval = bootOptions["polling_interval"];
 	Meeko.decor.config({
 		decorReady: Viewport.unhide
 	});
