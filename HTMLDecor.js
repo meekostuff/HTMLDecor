@@ -165,6 +165,7 @@ return isolate;
 
 /*
  ### Future
+ WARN: This was based on an early DOM Future specification. 
  */
 
 var Future = Meeko.Future = function(init) { // `init` is called as init.call(resolver)
