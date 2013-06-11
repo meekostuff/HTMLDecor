@@ -161,12 +161,6 @@ error: function() {
 	if (this.called) throw "Callback has already been called";
 	this.called = true;
 	if (this.onError) this.onError.apply(this, arguments);
-},
-
-abort: function() { // NOTE abort could trigger an error, but there is an expectation that whatever context calls abort will be handling that anyway
-	if (this.called) throw "Callback has already been called";
-	this.called = true;
-	if (this.onAbort) this.onAbort.apply(this, arguments); // TODO isolate
 }
 
 });
@@ -240,7 +234,6 @@ var wait = async(function(fn, waitCB) {
 	waitCB.hook = fn;
 	callbacks.push(waitCB);
 	if (!timerId) timerId = window.setInterval(waitback, Async.pollingInterval); // NOTE polling-interval is configured below
-	waitCB.onAbort = function() { remove(callbacks, waitCB); }
 });
 
 return wait;
@@ -261,7 +254,6 @@ var delay = async(function(fn, timeout, delayCB) {
 		}
 		else delayCB.complete(result);
 	}, timeout);
-	delayCB.onAbort = function() { window.clearTimeout(timerId); }
 });
 
 var queue = async(function(fnList, queueCB) {
@@ -285,10 +277,6 @@ var queue = async(function(fnList, queueCB) {
 			}
 		}
 		queueCB.complete();
-	}
-	queueCB.onAbort = function() {
-		if (isCallback(innerCB)) innerCB.abort();
-		list = [];
 	}
 	queueback();
 });
@@ -700,7 +688,6 @@ parse: function(html, url) {
 	forEach($$("style", iframeDoc.body), function(node) { // TODO support <style scoped>
 		iframeDoc.head.appendChild(node);
 	});
-	
 	var pseudoDoc = importDocument(iframeDoc);
 	docHead.removeChild(iframe);
 
@@ -896,7 +883,7 @@ start: function() {
 		if (options.detect) return wait(function() { return !!document.body; });
 	},
 	function() {
-		if (!decorURL && options.detect) decorURL = options.detect(document); // FIXME this should wait until <head> is completely loaded
+		if (!decorURL && options.detect) decorURL = options.detect(document);
 		if (!decorURL) throw "No decor could be determined for this page";
 		decorURL = URL(document.URL).resolve(decorURL);
 		decor.current.url = decorURL;
@@ -906,16 +893,9 @@ start: function() {
 	},
 	function() {
 		scrollToId(location.hash && location.hash.substr(1));
-		panner.contentURL = URL(document.URL).nohash;
-		
-		if (!history.pushState) return;
-		
-		// NOTE fortuitously all the browsers that support pushState() also support addEventListener() and dispatchEvent()
-		window.addEventListener("click", function(e) { panner.onClick(e); }, true);
-		window.addEventListener("submit", function(e) { panner.onSubmit(e); }, true);
-		window.addEventListener("popstate", function(e) { panner.onPopState(e); }, true);
 
-		window.addEventListener('scroll', function(e) { panner.saveScroll(); }, false); // NOTE first scroll after popstate might be cancelled
+		if (!history.pushState) return;
+
 		/*
 			If this is the landing page then `history.state` will be null.
 			But if there was a navigation back / forwards sequence then there could be `state`.
@@ -924,13 +904,20 @@ start: function() {
 		*/
 		var state = history.state;
 		if (panner.ownsState(state)) {
-			panner.updateState(state);
+			panner.restoreState(state);
 			panner.restoreScroll(state);
 		}
 		else {
-			panner.replaceState(); // otherwise there will be no popstate when returning to original URL
+			state = panner.createState({ url: document.URL });
+			panner.commitState(state, true); // replaceState
 			panner.saveScroll();
 		}
+
+		// NOTE fortuitously all the browsers that support pushState() also support addEventListener() and dispatchEvent()
+		window.addEventListener("click", function(e) { panner.onClick(e); }, true);
+		window.addEventListener("submit", function(e) { panner.onSubmit(e); }, true);
+		window.addEventListener("popstate", function(e) { panner.onPopState(e); }, true);
+		window.addEventListener('scroll', function(e) { panner.saveScroll(); }, false); // NOTE first scroll after popstate might be cancelled
 	}
 		
 	]);
@@ -1104,8 +1091,6 @@ decorate: async(function(decorURL, callback) {
 
 extend(panner, {
 
-contentURL: "",
-
 onClick: function(e) {
 	// NOTE only pushState enabled browsers use this
 	// We want panning to be the default behavior for clicks on hyperlinks - <a href>
@@ -1141,7 +1126,8 @@ onClick: function(e) {
 },
 
 onPageLink: function(url) {	// TODO Need to handle anchor links. The following just replicates browser behavior
-	panner.pushState(url);
+	var state = panner.createState({ url: url });
+	panner.commitState(state, false); // pushState
 	scrollToId(URL(url).hash.substr(1));
 },
 
@@ -1202,27 +1188,23 @@ onForm: function(form) {
 },
 
 onPopState: function(e) {
-	var state = e.state;
-	if (!panner.ownsState(state)) return;
+	var newState = e.state;
+	if (!panner.ownsState(newState)) return;
 	if (e.stopImmediatePropagation) e.stopImmediatePropagation();
 	else e.stopPropagation();
 	// NOTE there is no default-action for popstate
-	
+
+	var oldState = panner.state;
 	var complete = false;
-	var newURL = URL(document.URL).nohash;
-	if (newURL != panner.contentURL) {
-		var loader = async(function(cb) {
-			var method = 'get';
-			panner.options.load(method, newURL, null, { method: method, url: newURL }, cb);
-		});
-		page(loader, function() {
-			panner.restoreScroll(state);
+	var newURL = URL(newState.url).nohash;
+	if (newURL != URL(oldState.url).nohash) {
+		page(oldState, newState, function() {
+			panner.restoreScroll(newState);
 			complete = true;
 		});
-		panner.contentURL = newURL;
 	}
 	else delay(function() {
-		panner.restoreScroll(state);
+		panner.restoreScroll(newState);
 		complete = true;
 	}, Async.pollingInterval);
 	
@@ -1233,9 +1215,9 @@ onPopState: function(e) {
 	  so the following listens for that event and restores the page offsets from the outgoing state.
 	  If there is no scroll event then it is effectively a no-op. 
 	*/
-	var oldState = panner.state;
-	panner.updateState(state);
+	panner.restoreState(newState);
 	window.scroll(oldState.pageXOffset, oldState.pageYOffset); // TODO IE10 sometimes scrolls visibly before `scroll` event. This might help.
+	// var refresh = document.documentElement.scrollTop;
 	window.addEventListener('scroll', undoScroll, true);
 	var count = 0;
 	function undoScroll(scrollEv) { // undo the popstate triggered scroll if appropriate
@@ -1246,6 +1228,7 @@ onPopState: function(e) {
 		scrollEv.stopPropagation(); // prevent the saveScroll function
 		scrollEv.preventDefault(); // TODO should really use this
 		window.scroll(oldState.pageXOffset, oldState.pageYOffset);
+		// var refresh = document.documentElement.scrollTop;
 	}
 },
 
@@ -1273,28 +1256,51 @@ navigate: async(function(options, callback) {
 		return;
 	}
 
-	var loader = async(function(cb) {
-		var method = 'get';
-		panner.options.load(method, url, null, { method: method, url: url }, cb);
+	var oldState = panner.state;
+	var newState = panner.createState({ // FIXME
+		url: url
 	});
+	page(oldState, newState, {
+		onComplete: function(msg) {
+			var oURL = URL(newState.url);
+			scrollToId(oURL.hash && oURL.hash.substr(1));
 
-	page(loader, {
-		
-	onComplete: function(msg) {
-		var oURL = URL(document.URL);
-		panner.contentURL = oURL.nohash;
-		scrollToId(oURL.hash && oURL.hash.substr(1));
-		callback.complete(msg);
-	}
-	
+			panner.saveScroll();
+
+			callback.complete(msg);
+		}
 	});
 	
 	// Change document.URL
-	// This happens after the page load has initiated and after the pageOut.before handler
-	// TODO
-	var modifier = options.replace ? "replaceState" : "pushState";
-	panner[modifier](url);
+	// FIXME When should this happen?
+	panner.commitState(newState, options.replace);
+	
 }),
+
+bfcache: {},
+
+createState: function(options) {
+	var state = {
+		'meeko-panner': true,
+		pageXOffset: 0,
+		pageYOffset: 0,
+		url: null,
+		timeStamp: +(new Date)
+	};
+	if (options) config(state, options);
+	return state;
+},
+
+commitState: function(state, replace) {
+	panner.state = state;
+	var modifier = replace ? 'replaceState' : 'pushState';
+	history[modifier](state, null, state.url);	
+},
+
+configState: function(options) {
+	if (options) config(panner.state, options);
+	history.replaceState(panner.state, null);
+},
 
 ownsState: function(state) {
 	if (!state) state = history.state;
@@ -1302,23 +1308,13 @@ ownsState: function(state) {
 	return !!state['meeko-panner'];
 },
 
-pushState: function(url) {
-	panner.state = { 'meeko-panner': true, pageXOffset: 0, pageYOffset: 0 };
-	history.pushState(panner.state, null, url || null);
-},
-
-replaceState: function(url) {
-	panner.state = { 'meeko-panner': true, pageXOffset: 0, pageYOffset: 0 };
-	history.replaceState(panner.state, null, url || null);
-},
-
-updateState: function(state) { // called from popstate
+restoreState: function(state) { // called from popstate
 	if (!state) state = history.state;
-	panner.state = extend({}, state);	
+	panner.state = state;
 },
 
 saveScroll: function() {
-	panner.state = { 'meeko-panner': true, pageXOffset: window.pageXOffset, pageYOffset: window.pageYOffset };
+	panner.configState({pageXOffset: window.pageXOffset, pageYOffset: window.pageYOffset });
 	history.replaceState(panner.state, null);	
 },
 
@@ -1390,58 +1386,68 @@ var notify = function(msg) {
 	if (typeof listener == "function") isolate(function() { listener(msg); }); // TODO isFunction(listener)
 }
 
-var page = async(function(loader, callback) {
-	var doc, ready = false;
-
-	var outCB = pageOut();
-	delay(function() { ready = true; }, panner.options.duration);
-
-	queue([
-
-	async(function(cb) {
-		if (typeof loader == "function") loader({
-			onComplete: function(result) { doc = result; if (!outCB.called) outCB.abort(); cb.complete(); },
-			onError: function() { logger.error("HTMLLoader failed"); cb.error(); }		
-		});
-		else {
-			doc = loader;
-			return true;
-		}
-	}),
-	function() { return wait(function() { return ready; }); },
-	// we don't get to here if location.replace() was called
-	function() {
-		return pageIn(doc);
-	}
-	
-	], callback);	
-});
-
-var pageOut = async(function(cb) {
+var page = async(function(oldState, newState, callback) {
 	if (!getDecorMeta()) throw "Cannot page if the document has not been decorated";
 
-	notify({
-		module: "panner",
-		stage: "before",
-		type: "pageOut",
-		target: document
-	});
+	var ready = false;
+	delay(function() { ready = true; }, panner.options.duration);
 
-	each(decor.placeHolders, function(id, node) {
-		var target = $id(id);
+	var oldDoc = panner.bfcache[oldState.timeStamp];
+	if (!oldDoc) {
+		oldDoc = document.implementation.createHTMLDocument(''); // FIXME
+		panner.bfcache[oldState.timeStamp] = oldDoc;
+	}
+	var oldDocSaved = false;
+
+	var newDoc = panner.bfcache[newState.timeStamp];
+	if (!newDoc) {
+		var url = newState.url;
+		var method = 'get'; // newState.method
+		panner.options.load(method, url, null, { method: method, url: url }, {
+			onComplete: function(result) {
+				newDoc = result;
+				panner.bfcache[newState.timeStamp] = newDoc;
+			},
+			onError: function() { logger.error("HTMLLoader failed"); } // FIXME page() will stall. Need elegant error handling
+		});
+	}
+
+	var oldContent = getContent(oldDoc);
+	var newContent;
+	
+	queue([
+	
+	function() { // before pageOut / nodeRemoved
 		notify({
 			module: "panner",
 			stage: "before",
-			type: "nodeRemoved",
-			target: document.body,
-			node: target // TODO rename `target` variable
+			type: "pageOut",
+			target: document
 		});
-	});
+		each(decor.placeHolders, function(id, node) {
+			var target = $id(id);
+			notify({
+				module: "panner",
+				stage: "before",
+				type: "nodeRemoved",
+				target: document.body,
+				node: target // TODO rename `target` variable
+			});
+		});		
+	},
 
-	delay(function() { // NOTE external context can abort this delayed call with cb.abort();
+	function() { return wait(function() { return ready; }); },
+
+	function() {
+		if (newDoc) return; // pageIn will take care of pageOut
+
+		separateHead(false, function(target) {
+			oldDoc.head.appendChild(target); // FIXME will need to use some of mergeHead()
+		});
 		each(decor.placeHolders, function(id, node) {
 			var target = $id(id);
 			replaceNode(target, node);
+			oldDoc.body.appendChild(target); // FIXME should use adoptNode()
 			notify({
 				module: "panner",
 				stage: "after",
@@ -1450,34 +1456,36 @@ var pageOut = async(function(cb) {
 				node: target
 			});
 		});
+		oldDocSaved = true;
 		notify({
 			module: "panner",
 			stage: "after",
 			type: "pageOut",
 			target: document
-		});
-	}, panner.options.duration, cb);
-});
+		});		
+	},
 
-var pageIn = async(function(doc, cb) {
-	
-	queue([
-
-	function() {
+	function() { return wait(function() { return !!newDoc; }); },
+		
+	function() { // before pageIn
 		notify({
 			module: "panner",
 			stage: "before",
 			type: "pageIn",
 			target: document,
-			node: doc
+			node: newDoc
 		});
-		mergeHead(doc, false);
 	},
-	async(function(cb) {
+
+	async(function(cb) { // pageIn
+		newContent = getContent(newDoc);
+		
+		mergeHead(newDoc, false, function(target) {
+			if (!oldDocSaved) oldDoc.head.appendChild(target);
+		});
 		var nodeList = [];
-		var contentStart = doc.body.firstChild;
-		if (contentStart) placeContent(contentStart,
-			function(node) {
+		placeContent(newContent, // FIXME uses locally-scoped implementation of placeContent()
+			function(node, target) {
 				notify({
 					module: "panner",
 					stage: "before",
@@ -1486,7 +1494,8 @@ var pageIn = async(function(doc, cb) {
 					node: node
 				});
 			},
-			function(node) {
+			function(node, target) {
+				if (!oldDocSaved) oldDoc.body.appendChild(target);
 				nodeList.push(node);
 				delay(function() {
 					notify({
@@ -1502,8 +1511,10 @@ var pageIn = async(function(doc, cb) {
 			}
 		);
 	}),
+	
 	function() { return wait(function() { return scriptQueue.isEmpty(); }); },
-	function() {
+	
+	function() { // after pageIn
 		notify({
 			module: "panner",
 			stage: "after",
@@ -1511,13 +1522,37 @@ var pageIn = async(function(doc, cb) {
 			target: document
 		});
 	}
+	
+	], callback);
+	
+	function getContent(doc) {
+		var content = {};
+		each(decor.placeHolders, function(id) {
+			content[id] = $id(id, doc);
+		});
+		return content;
+	}
 
-	], cb);
+	function placeContent(content, beforeReplace, afterReplace) { // this should work for content from both internal and external documents
+		each(decor.placeHolders, function(id) {
+			var node = content[id];
+			if (!node) {
+				console.log(id + ' not found');
+				return;
+			}
+			var target = $id(id);
+			// TODO compat check between node and target
+			if (beforeReplace) beforeReplace(node, target);
+			replaceNode(target, node);
+			if (afterReplace) afterReplace(node, target);
+		});
+	}
+
+	
 });
 
 
-function mergeHead(doc, isDecor) {
-	var baseURL = URL(document.URL);
+function separateHead(isDecor, afterRemove) { // FIXME more callback than just afterRemove?
 	var dstHead = document.head;
 	var marker = getDecorMeta();
 	if (!marker) throw "No meeko-decor marker found. ";
@@ -1526,7 +1561,17 @@ function mergeHead(doc, isDecor) {
 	forSiblings (isDecor ? "before" : "after", marker, function(node) {
 		if (tagName(node) == "script" && (!node.type || node.type.match(/^text\/javascript/i))) return;
 		dstHead.removeChild(node);
-	});
+		if (afterRemove) afterRemove(node);
+	});	
+}
+
+function mergeHead(doc, isDecor, afterRemove) { // FIXME more callback than just afterRemove?
+	var baseURL = URL(document.URL);
+	var dstHead = document.head;
+	var marker = getDecorMeta();
+	if (!marker) throw "No meeko-decor marker found. ";
+
+	separateHead(isDecor, afterRemove);
 
 	// remove duplicate scripts from srcHead
 	var srcHead = doc.head;
