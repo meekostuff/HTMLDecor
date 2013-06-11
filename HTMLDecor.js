@@ -20,6 +20,9 @@ var XMLHttpRequest = window.XMLHttpRequest;
 
 (function() {
 
+var window = this;
+var document = window.document;
+
 var defaults = { // NOTE defaults also define the type of the associated config option
 	"log_level": "warn",
 	"polling_interval": 50
@@ -32,8 +35,6 @@ var Meeko = window.Meeko || (window.Meeko = {});
 /*
  ### Utility functions
  */
-
-var document = window.document;
 
 var uc = function(str) { return str.toUpperCase(); }
 var lc = function(str) { return str.toLowerCase(); }
@@ -569,25 +570,20 @@ function processQueue() {
 	queue.length = 0;
 }
 
-if (!loaded) addListeners();
+var events = {
+	"DOMContentLoaded": document,
+	"load": window
+};
+
+if (!loaded) each(events, function(type, node) { addEvent(node, type, onLoaded); });
 
 return domReady;
 
 // NOTE the following functions are hoisted
 function onLoaded(e) {
 	loaded = true;
-	removeListeners();
+	each(events, function(type, node) { removeEvent(node, type, onLoaded); });
 	processQueue();
-}
-
-function addListeners() {
-	addEvent(document, "DOMContentLoaded", onLoaded);
-	addEvent(window, "load", onLoaded);
-}
-
-function removeListeners() {
-	removeEvent(document, "DOMContentLoaded", onLoaded);
-	removeEvent(window, "load", onLoaded);
 }
 
 })();
@@ -1988,4 +1984,4 @@ function getDecorMeta(doc) {
 
 // end decor defn
 
-})();
+}).call(window);
