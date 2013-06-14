@@ -1852,10 +1852,10 @@ this.push = function(node) {
 	// preloadedFu is needed for IE <= 8
 	// On other browsers (and for inline scripts) it is pre-accepted
 	var preloadedRe, preloadedFu = new Future(function() { preloadedRe = this; }); 
-	if (!script.src || supportsOnLoad) preloadedRe.accept();
-	if (script.src) addListeners();
+	if (!node.src || supportsOnLoad) preloadedRe.accept(); // WARN must use `node.src` because attrs not copied to `script` yet
+	if (node.src) addListeners(); // WARN must use `node.src` because attrs not copied to `script` yet
 	
-	copyAttributes(script, node);
+	copyAttributes(script, node); 
 
 	// FIXME is this comprehensive?
 	try { script.innerHTML = node.innerHTML; }
@@ -1866,7 +1866,7 @@ this.push = function(node) {
 		script.setAttribute('async', '');
 		logger.warn('@defer not supported on scripts');
 	}
-	if (supportsSync && script.src && !script.getAttribute('async')) script.async = false;
+	if (supportsSync && script.src && !script.hasAttribute('async')) script.async = false;
 	script.type = "text/javascript";
 	
 	// enabledFu resolves after script is inserted
@@ -1876,14 +1876,14 @@ this.push = function(node) {
 	
 	var triggerFu; // triggerFu allows this script to be enabled, i.e. inserted
 	if (prev) {
-		if (prevScript.getAttribute('async') || supportsSync && !script.getAttribute('async')) triggerFu = prev.enabled;
+		if (prevScript.hasAttribute('async') || supportsSync && !script.hasAttribute('async')) triggerFu = prev.enabled;
 		else triggerFu = prev.complete;
 	}
 	else triggerFu = Future.resolve();
 	
 	triggerFu.then(enable, enable);
 
-	var current = { script: script, node: node, complete: completeFu, enabled: enabledFu };
+	var current = { script: script, complete: completeFu, enabled: enabledFu };
 	queue.push(current);
 	return completeFu;
 
@@ -1949,19 +1949,16 @@ this.push = function(node) {
 
 this.empty = function() {
 	emptying = true;
-	var list = queue;
 	
-	// the rest is modified from the Future.every implementation
 	var resolver, future = new Future(function() { resolver = this; });
-	var countdown = list.length;
-	if (countdown <= 0) {
+	if (queue.length <= 0) {
 		emptying = false;
 		resolver.accept();
 		return future;
 	}
-	forEach(list, function(value, i) {
+	forEach(queue, function(value, i) {
 		var acceptCallback = function() {
-			if (--countdown <= 0) {
+			if (queue.length <= 0) {
 				emptying = false;
 				resolver.accept();
 			}
