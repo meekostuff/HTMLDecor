@@ -1253,7 +1253,7 @@ onClick: function(e) {
 	if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return; // FIXME do these always trigger modified click behavior??
 
 	// Find closest <a> to e.target
-	for (var target=e.target; target!=document.body; target=target.parentNode) if (tagName(target) == "a") break;
+	for (var target=e.target; target!=document; target=target.parentNode) if (tagName(target) == "a") break;
 	if (tagName(target) != "a") return; // only handling hyperlink clicks
 	var href = target.getAttribute("href");
 	if (!href) return; // not really a hyperlink
