@@ -42,23 +42,11 @@ For more info on the concept of HTMLDecor and its affinity with pushState assist
 
 Also make sure you check the [wiki](https://github.com/meekostuff/HTMLDecor/wiki).
 
-If you have any questions or comments, don't hesitate to contact the author via
-[web](http://meekostuff.net/), [email](mailto:shogun70@gmail.com) or [twitter](http://twitter.com/meekostuff). 
-
-
-License
--------
-
-HTMLDecor is available under 
-[MPL 2.0](http://www.mozilla.org/MPL/2.0/ "Mozilla Public License version 2.0").
-See the [MPL 2.0 FAQ](http://www.mozilla.org/MPL/2.0/FAQ.html "Frequently Asked Questions")
-for your obligations if you intend to modify or distribute HTMLDecor or part thereof. 
-
 
 Installation
 ------------
 
-1. Copy or clone the HTMLDecor files to a directory on your server, say 
+1. Copy or clone the HTMLDecor project files to a directory on your server, say 
 	
 		/path/to/HTMLDecor/
 
@@ -746,4 +734,21 @@ TODO
 ----
 - this README is too long - needs to be split up into sub-sections
 - some features would be best explained with demo pages / sites 
+
+
+License
+-------
+
+HTMLDecor is available under 
+[MPL 2.0](http://www.mozilla.org/MPL/2.0/ "Mozilla Public License version 2.0").
+See the [MPL 2.0 FAQ](http://www.mozilla.org/MPL/2.0/FAQ.html "Frequently Asked Questions")
+for your obligations if you intend to modify or distribute HTMLDecor or part thereof. 
+
+
+Contact
+-------
+
+If you have any questions or comments, don't hesitate to contact the author via
+[web](http://meekostuff.net/), [email](mailto:shogun70@gmail.com) or [twitter](http://twitter.com/meekostuff). 
+
 
