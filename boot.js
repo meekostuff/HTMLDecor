@@ -126,7 +126,7 @@ var addEvent =
 
 var removeEvent = 
 	document.removeEventListener && function(node, event, fn) { return node.removeEventListener(event, fn, false); } ||
-	document.detachEvent && function(node, event, fn) { return node.detachEvent("on" + event, fn); } ||
+	document.detachEvent && function(node, event, fn) { try { return node.detachEvent("on" + event, fn); } catch(error) {} } ||
 	function(node, event, fn) { if (node["on" + event] == fn) node["on" + event] = null; };
 
 var domReady = (function() {
