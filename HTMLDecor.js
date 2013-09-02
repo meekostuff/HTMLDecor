@@ -511,6 +511,10 @@ var composeNode = function(srcNode) { // document.importNode() NOT available on 
 	return node;
 }
 
+var hasAttribute = document.documentElement.hasAttribute ?
+function(node, attrName) { return node.hasAttribute(attrName); } :
+function(node, attrName) { var attr = node.getAttributeNode(attrName); return (attr == null) ? false : attr.specified; }; // IE <= 7
+
 var copyAttributes = function(node, srcNode) { // implements srcNode.cloneNode(false)
 	var attrs = srcNode.attributes;
 	forEach(attrs, function(attr) {
@@ -978,7 +982,7 @@ var polyfill = function(doc) { // NOTE more stuff could be added here if *necess
 
 var DOM = Meeko.DOM || (Meeko.DOM = {});
 extend(DOM, {
-	$id: $id, $$: $$, tagName: tagName, forSiblings: forSiblings, matchesElement: matchesElement, firstChild: firstChild,
+	$id: $id, $$: $$, tagName: tagName, hasAttribute: hasAttribute, forSiblings: forSiblings, matchesElement: matchesElement, firstChild: firstChild,
 	replaceNode: replaceNode, copyAttributes: copyAttributes, scrollToId: scrollToId, createDocument: createDocument,
 	addEvent: addEvent, removeEvent: removeEvent, ready: domReady, overrideDefaultAction: overrideDefaultAction,
 	URL: URL, HTMLLoader: HTMLLoader, HTMLParser: HTMLParser, loadHTML: loadHTML, parseHTML: parseHTML,
@@ -1866,18 +1870,18 @@ this.push = function(node) {
 		script.setAttribute('async', '');
 		logger.warn('@defer not supported on scripts');
 	}
-	if (supportsSync && script.src && !script.hasAttribute('async')) script.async = false;
+	if (supportsSync && script.src && !hasAttribute(script, 'async')) script.async = false;
 	script.type = "text/javascript";
 	
 	// enabledFu resolves after script is inserted
 	var enabledRe, enabledFu = new Future(function() { enabledRe = this; }); 
 	
 	var prev = queue[queue.length - 1], prevScript = prev && prev.script;
-	
+
 	var triggerFu; // triggerFu allows this script to be enabled, i.e. inserted
 	if (prev) {
-		if (prevScript.hasAttribute('async') || supportsSync && !script.hasAttribute('async')) triggerFu = prev.enabled;
-		else triggerFu = prev.complete;
+		if (hasAttribute(prevScript, 'async') || supportsSync && !hasAttribute(script, 'async')) triggerFu = prev.enabled;
+		else triggerFu = prev.complete; 
 	}
 	else triggerFu = Future.resolve();
 	
@@ -1893,7 +1897,7 @@ this.push = function(node) {
 	}
 	function _enable() {
 		replaceNode(node, script);
-		enabledRe.accept();
+		enabledRe.accept(); 
 		if (!script.src) {
 			remove(queue, current);
 			completeRe.accept();
@@ -1931,7 +1935,7 @@ this.push = function(node) {
 	function onChange(e) { // for IE <= 8 which don't support script.onload
 		var readyState = script.readyState;
 		if (!script.parentNode) {
-			if (readyState === 'loaded') preloadedRe.accept();
+			if (readyState === 'loaded') preloadedRe.accept(); 
 			return;
 		}
 		switch (readyState) {
