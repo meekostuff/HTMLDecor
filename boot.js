@@ -470,9 +470,11 @@ if (timeout > 0) {
 	setTimeout(Viewport.unhide, timeout);
 }
 
-var urlParams = {
+var urlParams = Meeko.bootParams = { // WARN this dictionary can be modified during the boot sequence
 	bootscriptdir: bootScript.src.replace(/\/[^\/]*$/, '/') // TODO this assumes no ?search or #hash
 }
+
+if (Meeko.bootConfig) Meeko.bootConfig(); // TODO try / catch ??
 
 function resolveScript(script) {
 	switch (typeof script) {
