@@ -10,7 +10,7 @@
         this would allow the boot-script to modify them as appropriate
     + Up-front feature testing to prevent boot on unsupportable platorms...
         e.g. can't create HTML documents
-    + Can decorate() and page() share more code?
+    + Can decorate() and pan() share more code?
  */
 
 // FIXME for IE7, IE8 sometimes XMLHttpRequest is in a detectable but not callable state
@@ -1028,8 +1028,13 @@ placeHolders: {},
 start: function() {
 	if (decor.started) throw "Already started";
 	decor.started = true;
+	var domReadyFu = new Future(function() { var r = this;
+		DOM.ready(function() { r.accept(); });
+	});
+
 	var options = decor.options;
-	var decorURL;
+	var decorURL, decorDocument;
+
 	return pipe(null, [
 		
 	function() {
@@ -1044,7 +1049,27 @@ start: function() {
 		decor.current.url = decorURL;
 	},
 	function() {
-		return decor.decorate(decorURL); // FIXME what if decorate fails??
+		var method = 'get';
+		var f = decor.options.load(method, decorURL, null, { method: method, url: decorURL });
+		f.done(
+			function(result) { decorDocument = result; },
+			function(error) { logger.error("HTMLLoader failed for " + decorURL); } // FIXME need decorError notification / handling
+		);
+		return f;
+	},
+	
+	function() {
+		if (panner.options.normalize) return domReadyFu;
+		else return wait(function() { return !!document.body; });
+	},
+	function() {
+		if (panner.options.normalize) isolate(function() { panner.options.normalize(document, { url: document.URL }); });
+	},
+	function() {
+		return decor.decorate(decorDocument); // FIXME what if decorate fails??
+	},
+	function() {
+		return pageIn(null, null);
 	},
 	function() {
 		scrollToId(location.hash && location.hash.substr(1));
@@ -1078,164 +1103,51 @@ start: function() {
 	]);
 },
 
-decorate: function(decorURL) {
-	var doc, complete = false;
-	var decorEnd;
-	var decorReadyFu;
-	var domReadyFu = new Future(function() { var r = this;
-		DOM.ready(function() { r.accept(); });
-	});
-	var contentLoaded = false;
-	domReadyFu.done(function() { contentLoaded = true; });
+decorate: function(decorDocument) {
 
 	if (getDecorMeta()) throw "Cannot decorate a document that has already been decorated";
 
 	return pipe(null, [
 
 	function() {
-		var method = 'get';
-		var f = decor.options.load(method, decorURL, null, { method: method, url: decorURL });
-		f.done(
-			function(result) { doc = result; },
-			function(error) { logger.error("HTMLLoader failed for " + decorURL); } // FIXME need decorError notification / handling
-		);
-		return f;
-	},
-	function() {
-		if (panner.options.normalize) return domReadyFu;
-		else return wait(function() { return !!document.body; });
-	},
-	function() {
-		if (panner.options.normalize) isolate(function() { panner.options.normalize(document, { url: document.URL }); });
-		marker = document.createElement("meta");
+		var marker = document.createElement("meta");
 		marker.name = "meeko-decor";
 		document.head.insertBefore(marker, document.head.firstChild);
 	},
 	
-	/* Now merge decor into page */
 	function() {
 		notify({
 			module: "decor",
 			stage: "before",
 			type: "decorIn",
-			node: doc
+			node: decorDocument
 		});
-		mergeHead(doc, true);
+		mergeHead(decorDocument, true);
 	},
 	function() { return scriptQueue.empty(); }, // FIXME this should be in mergeHead
 	function() {
 		var contentStart = document.body.firstChild;
-		decor_insertBody(doc);
+		decor_insertBody(decorDocument);
 		notify({
 			module: "decor",
 			stage: "after",
 			type: "decorIn",
-			node: doc
+			node: decorDocument
 		});
-		decorReadyFu = wait(function() { return checkStyleSheets(); });
+		var decorReadyFu = wait(function() { return checkStyleSheets(); });
 		decorReadyFu.done(function() {
 			notify({
 				module: "decor",
 				stage: "after",
 				type: "decorReady",
-				node: doc
+				node: decorDocument
 			});
 		});
-		decorEnd = document.createTextNode("");
+		var decorEnd = document.createElement('plaintext');
+		decorEnd.setAttribute('style', 'display: none;');
 		document.body.insertBefore(decorEnd, contentStart);
-		notify({
-			module: "panner",
-			stage: "before",
-			type: "pageIn",
-			node: document,
-			target: document
-		}); // TODO perhaps this should wait on scriptQueue.empty() (or a config option)
 	},
-	function() {
-		var afterInsertFu;
-		return wait(function() {
-			var nodeList = [];
-			var contentStart = decorEnd.nextSibling;
-			if (contentStart) placeContent(
-				contentStart,
-				function(node, target) {
-					decor.placeHolders[target.id] = target;
-					notify({
-						module: "panner",
-						stage: "before",
-						type: "nodeInserted",
-						target: document.body,
-						node: node
-					});
-				},
-				function(node) {
-					nodeList.push(node);
-				}
-			);
-			afterInsertFu = delay(0, function() {
-				forEach(nodeList, function(node) {
-					notify({
-						module: "panner",
-						stage: "after",
-						type: "nodeInserted",
-						target: document.body,
-						node: node
-					});
-				});
-			});
-			return contentLoaded;
-		})
-		.then(function() { return afterInsertFu; }); // this will be the last `afterInsertFu`
-	},
-	function() { return scriptQueue.empty(); },
-	function() { // NOTE resolve URLs in landing page
-		// TODO could be merged with code in parseHTML
-		var baseURL = URL(document.URL);
-		function _resolve(el, attrName) {
-			var relURL = el.getAttribute(attrName);
-			if (relURL == null) return;
-			var absURL = baseURL.resolve(relURL);
-			el.setAttribute(attrName, absURL);
-		}
-		
-		function resolve(el, attrName) {
-			if (tagName(el) != 'script') return _resolve(el, attrName);		
-			var scriptType = el.type;
-			var isJS = (!scriptType || /^text\/javascript/i.test(scriptType));
-			if (isJS) el.type = "text/javascript?complete"; // IE6 and IE7 will re-execute script if @src is modified (even to same path)
-			_resolve(el, attrName);
-		}
-		
-		function resolveAll(root, tag, attr) {
-			forEach($$(tag, root), function(el) { resolve(el, attr); });
-		}
-		
-		function resolveTree(root, inHead) {
-			var tag = tagName(root);
-			if (tag in hrefAttrs) resolve(root, hrefAttrs[tag]);
-			if (tag in srcAttrs) resolve(root, srcAttrs[tag]);
-			if (inHead) return;
-			each(hrefAttrs, function(tag, attr) { resolveAll(root, tag, attr); });
-			each(srcAttrs, function(tag, attr) { resolveAll(root, tag, attr); });
-		}
-		
-		forSiblings("after", getDecorMeta(), function(node) {
-			resolveTree(node, true);
-		});
-		forEach(decor.placeHolders, function(node) {
-			var tree = $(node.id);
-			resolveTree(tree, false);
-		});
-	},
-	function() {
-		notify({
-			module: "panner",
-			stage: "after",
-			type: "pageIn",
-			target: document
-		});
-	},
-	function() { return decorReadyFu; }
+	function() { return scriptQueue.empty(); }
 
 	]);
 }
@@ -1351,7 +1263,7 @@ onPopState: function(e) {
 	var complete = false;
 	var newURL = URL(newState.url).nohash;
 	if (newURL != URL(oldState.url).nohash) {
-		page(oldState, newState)
+		pan(oldState, newState)
 		.done(function() {
 			panner.restoreScroll(newState);
 			complete = true;
@@ -1416,7 +1328,7 @@ return new Future(function() { var r = this;
 		url: url
 	});
 
-	page(oldState, newState)
+	pan(oldState, newState)
 	.done(function(msg) {
 		var oURL = URL(newState.url);
 		scrollToId(oURL.hash && oURL.hash.substr(1));
@@ -1542,8 +1454,8 @@ var notify = function(msg) {
 	if (typeof listener == "function") isolate(function() { listener(msg); }); // TODO isFunction(listener)
 }
 
-var page = function(oldState, newState) {
-	if (!getDecorMeta()) throw "Cannot page if the document has not been decorated"; // FIXME r.reject()
+var pan = function(oldState, newState) {
+	if (!getDecorMeta()) throw "Cannot pan if the document has not been decorated"; // FIXME r.reject()
 
 	var durationFu = delay(panner.options.duration);
 
@@ -1566,12 +1478,9 @@ var page = function(oldState, newState) {
 				newDoc = result;
 				panner.bfcache[newState.timeStamp] = newDoc;
 			},
-			function(error) { logger.error("HTMLLoader failed"); } // FIXME page() will stall. Need elegant error handling
+			function(error) { logger.error("HTMLLoader failed"); } // FIXME pan() will stall. Need elegant error handling
 		);
 	}
-
-	var oldContent = getContent(oldDoc);
-	var newContent;
 	
 	return pipe(null, [
 		
@@ -1625,6 +1534,20 @@ var page = function(oldState, newState) {
 
 	function() { return newDocFu; },
 		
+	function() { return pageIn(oldDocSaved ? null : oldDoc, newDoc); }
+	
+	]);
+
+}
+
+function pageIn(oldDoc, newDoc) {
+	
+	var contentLoaded = false;
+	if (newDoc) contentLoaded = true;
+	else DOM.ready(function() { contentLoaded = true; }); // src doc is `document`
+
+	return pipe(null, [
+		
 	function() { // before pageIn
 		notify({
 			module: "panner",
@@ -1635,45 +1558,55 @@ var page = function(oldState, newState) {
 		});
 	},
 
-	function() { // pageIn
-		newContent = getContent(newDoc);
-		var nodeList = [];
-
-		mergeHead(newDoc, false, function(target) {
-			if (!oldDocSaved) oldDoc.head.appendChild(target);
+	function() {
+		if (newDoc) mergeHead(newDoc, false, function(target) {
+			if (oldDoc) oldDoc.head.appendChild(target);
 		});
-		placeContent(newContent, // FIXME uses locally-scoped implementation of placeContent()
-			function(node, target) {
-				notify({
-					module: "panner",
-					stage: "before",
-					type: "nodeInserted",
-					target: document.body,
-					node: node
-				});
-			},
-			function(node, target) {
-				if (!oldDocSaved) oldDoc.body.appendChild(target);
-				nodeList.push(node);
-			}
-		);
 
-		var fu = delay(0, function() { // NOTE delayed to allow styles to be applied from *before* nodeInserted 
-			forEach(nodeList, function(node) {
-				notify({ 
-					module: "panner",
-					stage: "after",
-					type: "nodeInserted",
-					target: document.body,
-					node: node
+		var decorEnd;
+		if (!newDoc) decorEnd = $$('plaintext')[0];
+		var afterInsertFu;
+		
+		return wait(function() {
+			var nodeList = [];
+			var contentStart = newDoc ? newDoc.body.firstChild : decorEnd.nextSibling;
+			if (contentStart) placeContent(
+				contentStart,
+				function(node, target) {
+					if (!newDoc) decor.placeHolders[target.id] = target;
+					notify({
+						module: "panner",
+						stage: "before",
+						type: "nodeInserted",
+						target: document.body,
+						node: node
+					});
+				},
+				function(node, target) {
+					if (oldDoc) oldDoc.body.appendChild(target);
+					nodeList.push(node);
+				}
+			);
+			afterInsertFu = delay(0, function() {
+				forEach(nodeList, function(node) {
+					notify({
+						module: "panner",
+						stage: "after",
+						type: "nodeInserted",
+						target: document.body,
+						node: node
+					});
 				});
 			});
-		});
-		return fu;
+			return contentLoaded;
+		})
+		.then(function() { return afterInsertFu; }); // this will be the last `afterInsertFu`
 	},
-	
+
 	function() { return scriptQueue.empty(); },
 	
+	function() { if (!newDoc) resolveDocURL(); },
+
 	function() { // after pageIn
 		notify({
 			module: "panner",
@@ -1685,32 +1618,63 @@ var page = function(oldState, newState) {
 	
 	]);
 	
-	// NOTE page() returns now. The following functions are hoisted
+	// NOTE pageIn() returns now. The following functions are hoisted
 	
-	function getContent(doc) {
-		var content = {};
-		each(decor.placeHolders, function(id) {
-			content[id] = $id(id, doc);
-		});
-		return content;
-	}
-
 	function placeContent(content, beforeReplace, afterReplace) { // this should work for content from both internal and external documents
-		each(decor.placeHolders, function(id) {
-			var node = content[id];
-			if (!node) {
-				console.log(id + ' not found');
-				return;
+		var srcBody = content.parentNode;
+		forSiblings ("starting", content, function(node) { 
+			var target;
+			if (node.id && (target = $id(node.id)) != node) {
+				// TODO compat check between node and target
+				if (beforeReplace) beforeReplace(node, target);
+				try { replaceNode(target, node); } // NOTE fails in IE <= 8 if node is still loading
+				catch (error) { return; }
+				if (afterReplace) afterReplace(node, target);
 			}
-			var target = $id(id);
-			// TODO compat check between node and target
-			if (beforeReplace) beforeReplace(node, target);
-			replaceNode(target, node);
-			if (afterReplace) afterReplace(node, target);
+			else try { srcBody.removeChild(node); } catch (error) {}
 		});
 	}
 
-	
+	function resolveDocURL() { // NOTE resolve URLs in landing page
+		// TODO could be merged with code in parseHTML
+		var baseURL = URL(document.URL);
+		function _resolveAttr(el, attrName) {
+			var relURL = el.getAttribute(attrName);
+			if (relURL == null) return;
+			var absURL = baseURL.resolve(relURL);
+			el.setAttribute(attrName, absURL);
+		}
+		
+		function resolveAttr(el, attrName) {
+			if (tagName(el) != 'script') return _resolveAttr(el, attrName);		
+			var scriptType = el.type;
+			var isJS = (!scriptType || /^text\/javascript/i.test(scriptType));
+			if (isJS) el.type = "text/javascript?complete"; // IE6 and IE7 will re-execute script if @src is modified (even to same path)
+			_resolveAttr(el, attrName);
+		}
+		
+		function resolveAll(root, tag, attr) {
+			forEach($$(tag, root), function(el) { resolveAttr(el, attr); });
+		}
+		
+		function resolveTree(root, inHead) {
+			var tag = tagName(root);
+			if (tag in hrefAttrs) resolveAttr(root, hrefAttrs[tag]);
+			if (tag in srcAttrs) resolveAttr(root, srcAttrs[tag]);
+			if (inHead) return;
+			each(hrefAttrs, function(tag, attr) { resolveAll(root, tag, attr); });
+			each(srcAttrs, function(tag, attr) { resolveAll(root, tag, attr); });
+		}
+		
+		forSiblings("after", getDecorMeta(), function(node) {
+			resolveTree(node, true);
+		});
+		forEach(decor.placeHolders, function(node) {
+			var tree = $(node.id);
+			resolveTree(tree, false);
+		});
+	}
+
 }
 
 
@@ -1775,21 +1739,6 @@ function mergeHead(doc, isDecor, afterRemove) { // FIXME more callback than just
 	});
 	// allow scripts to run
 	forEach($$("script", dstHead), function(script) { scriptQueue.push(script); }); // FIXME this breaks if a script inserts other scripts
-}
-
-function placeContent(content, beforeReplace, afterReplace) { // this should work for content from both internal and external documents
-	var srcBody = content.parentNode;
-	forSiblings ("starting", content, function(node) { 
-		var target;
-		if (node.id && (target = $id(node.id)) != node) {
-			// TODO compat check between node and target
-			if (beforeReplace) beforeReplace(node, target);
-			try { replaceNode(target, node); } // NOTE fails in IE <= 8 if node is still loading
-			catch (error) { return; }
-			if (afterReplace) afterReplace(node, target);
-		}
-		else try { srcBody.removeChild(node); } catch (error) {}
-	});
 }
 
 function decor_insertBody(doc) {
