@@ -12,6 +12,7 @@ var Meeko = window.Meeko || {};
 Meeko.options = { // these are the default values
 	"no_boot": false, // use feature / browser detection to set this true
 	"autostart": true,
+	"capturing": false,
 	"log_level": "warn", // debug, info, warn, error, none
 	"no_cookie_options": false,
 	"hidden_timeout": 3000,

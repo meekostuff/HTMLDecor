@@ -7,6 +7,7 @@
 
 var defaults = { // NOTE defaults also define the type of the associated config option
 	"autostart": true,
+	"capturing": false,
 	"log_level": "warn",
 	"hidden_timeout": 3000,
 	"polling_interval": 50,
@@ -449,13 +450,8 @@ return {
 })();
 
 /*
- ## Startup
+ ## Boot configuration
 */
-
-var log_index = logger.levels[bootOptions["log_level"]];
-if (log_index != null) logger.LOG_LEVEL = log_index;
-
-html5prepare(document);
 
 var bootScript;
 if (Meeko.bootScript) bootScript = Meeko.bootScript; // hook for meeko-panner
@@ -464,30 +460,37 @@ else {
 	if (document.body) logger.warn("Bootscript SHOULD be in <head> and MUST NOT have @async or @defer");
 }
 
-var timeout = bootOptions["hidden_timeout"];
-if (timeout > 0) {
-	Viewport.hide();
-	setTimeout(Viewport.unhide, timeout);
-}
-
 var urlParams = Meeko.bootParams = { // WARN this dictionary can be modified during the boot sequence
 	bootscriptdir: bootScript.src.replace(/\/[^\/]*$/, '/') // TODO this assumes no ?search or #hash
 }
 
 if (Meeko.bootConfig) Meeko.bootConfig(); // TODO try / catch ??
 
-function resolveScript(script) {
-	switch (typeof script) {
-	case "string": return resolveURL(script, urlParams);
-	case "function": return script;
-	default: return function() { /* dummy */ };
-	}
+/*
+ ## Startup
+*/
+
+var timeout = bootOptions["hidden_timeout"];
+if (timeout > 0) {
+	Viewport.hide();
+	setTimeout(Viewport.unhide, timeout);
 }
 
+var log_index = logger.levels[bootOptions["log_level"]];
+if (log_index != null) logger.LOG_LEVEL = log_index;
 
-var htmldecor_script = bootOptions['htmldecor_script'];
-if (typeof htmldecor_script !== 'string') throw 'HTMLDecor script URL is not configured';
-htmldecor_script = bootOptions['htmldecor_script'] = resolveURL(htmldecor_script, urlParams);
+html5prepare(document);
+
+var capturing = false;
+
+// FIXME Capturing conflicts with autostart: false and document already loaded
+// FIXME needs dead man recovery with document.write(), but this breaks older IE
+if (bootOptions['capturing']) { 
+	if (document.body) throw 'Bootscript MUST run before <body> when capturing';
+	if ($$('script').length > 1) throw 'Bootscript MUST be first <script> when capturing';
+	capturing = true;
+	document.write('<plaintext style="display: none;">');
+}
 
 function config() {
 	Meeko.DOM.ready = domReady;
@@ -498,6 +501,43 @@ function config() {
 	});
 }
 
+function start() {
+	if (!bootOptions["autostart"]) {
+		Viewport.unhide();
+		return;
+	}
+	var startOptions = {};
+
+	if (capturing) {
+		var loader = new Meeko.DOM.HTMLLoader({
+			request: new Meeko.Future(function() { var r = this;
+				domReady(function() {
+					var plaintext = $$('plaintext')[0];
+					var html = plaintext.firstChild.nodeValue; // FIXME assumes bootscript before <!DOCTYPE ...
+					plaintext.parentNode.removeChild(plaintext);
+					var doc = Meeko.DOM.parseHTML(new String(html), document.URL);
+					r.accept(doc);
+				});
+			})
+		});
+		startOptions.contentDocument = loader.load();
+	}
+
+	Meeko.decor.start(startOptions);
+}
+
+function resolveScript(script) {
+	switch (typeof script) {
+	case "string": return resolveURL(script, urlParams);
+	case "function": return script;
+	default: return function() { /* dummy */ };
+	}
+}
+
+var htmldecor_script = bootOptions['htmldecor_script'];
+if (typeof htmldecor_script !== 'string') throw 'HTMLDecor script URL is not configured';
+htmldecor_script = bootOptions['htmldecor_script'] = resolveURL(htmldecor_script, urlParams);
+
 var config_script = bootOptions['config_script'];
 if (config_script instanceof Array) forEach(config_script, function(script, i, list) {
 	list[i] = resolveScript(script, urlParams);
@@ -505,11 +545,6 @@ if (config_script instanceof Array) forEach(config_script, function(script, i, l
 else {
 	config_script = [ resolveScript(config_script) ];
 	bootOptions['config_script'] = config_script;
-}
-
-function start() {
-	if (bootOptions["autostart"]) Meeko.decor.start();
-	else Viewport.unhide();
 }
 
 var startupSequence = [].concat(
