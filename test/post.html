@@ -1,10 +1,12 @@
 <!DOCTYPE html>
+<script src="../boot.js"></script>
+
+<!DOCTYPE html>
 <html>
 <head>
 <meta charset="UTF-8" />
-<link rel="stylesheet" href="normal.css" />
 <link rel="meeko-decor" type="text/html" href="decor/decor.html" />
-<script src="../boot.js"></script>
+<link rel="stylesheet" href="normal.css" />
 <style type="text/css">
 div { margin: 0.5em; border: 1px dashed black; }
 .remove { background-color: red; color: white; }
