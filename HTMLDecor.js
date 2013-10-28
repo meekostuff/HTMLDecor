@@ -1048,7 +1048,7 @@ start: function(startOptions) {
 		if (decorURL) return;
 		if (options.detect) return domReadyFu
 			.then(function(doc) {
-				decorURL = options.detect(document);
+				decorURL = options.detect(doc);
 			});
 	},
 	function() { // initiate fetch of decorURL
@@ -1069,7 +1069,7 @@ start: function(startOptions) {
 	},
 	
 	function() { // the order of normalize, decorate, pageIn depends on whether content is from external document or the default document
-		if (startOptions.contentDocument) return pipe(null, [
+		if (startOptions && startOptions.contentDocument) return pipe(null, [
 		function() {
 			return decor.decorate(decorDocument); // FIXME what if decorate fails??
 		},
