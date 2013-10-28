@@ -510,15 +510,17 @@ function start() {
 
 	if (capturing) {
 		var loader = new Meeko.DOM.HTMLLoader({
-			request: new Meeko.Future(function() { var r = this;
-				domReady(function() {
-					var plaintext = $$('plaintext')[0];
-					var html = plaintext.firstChild.nodeValue; // FIXME assumes bootscript before <!DOCTYPE ...
-					plaintext.parentNode.removeChild(plaintext);
-					var doc = Meeko.DOM.parseHTML(new String(html), document.URL);
-					r.accept(doc);
+			request: function() {
+				return new Meeko.Future(function() { var r = this;
+					domReady(function() {
+						var plaintext = $$('plaintext')[0];
+						var html = plaintext.firstChild.nodeValue; // FIXME assumes bootscript before <!DOCTYPE ...
+						plaintext.parentNode.removeChild(plaintext);
+						var doc = Meeko.DOM.parseHTML(new String(html), document.URL);
+						r.accept(doc);
+					});
 				});
-			})
+			}
 		});
 		startOptions.contentDocument = loader.load();
 	}
