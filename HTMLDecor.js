@@ -712,6 +712,8 @@ extend(HTMLLoader.prototype, {
 load: function(method, url, data, details) {
 	var htmlLoader = this;
 	
+	if (!details) details = {};
+	if (!details.url) details.method = method;	
 	if (!details.url) details.url = url;
 	
 	return htmlLoader.request(method, url, data, details) // NOTE this returns the future that .then returns
@@ -1025,30 +1027,34 @@ current: {
 },
 placeHolders: {},
 
-start: function() {
+start: function(startOptions) {
+	var contentDocument;
+	
 	if (decor.started) throw "Already started";
 	decor.started = true;
-	var domReadyFu = new Future(function() { var r = this;
-		DOM.ready(function() { r.accept(); });
-	});
+	var domReadyFu = startOptions && startOptions.contentDocument ?
+		startOptions.contentDocument :
+		new Future(function() { var r = this;
+			DOM.ready(function() { r.accept(document); });
+		});
 
 	var options = decor.options;
 	var decorURL, decorDocument;
 
 	return pipe(null, [
 		
-	function() {
+	function() { // lookup or detect decorURL
 		if (options.lookup) decorURL = options.lookup(document.URL);
 		if (decorURL) return;
-		if (options.detect) return wait(function() { return !!document.body; });
+		if (options.detect) return domReadyFu
+			.then(function(doc) {
+				decorURL = options.detect(document);
+			});
 	},
-	function() {
-		if (!decorURL && options.detect) decorURL = options.detect(document);
+	function() { // initiate fetch of decorURL
 		if (!decorURL) throw "No decor could be determined for this page";
 		decorURL = URL(document.URL).resolve(decorURL);
 		decor.current.url = decorURL;
-	},
-	function() {
 		var method = 'get';
 		var f = decor.options.load(method, decorURL, null, { method: method, url: decorURL });
 		f.done(
@@ -1059,17 +1065,35 @@ start: function() {
 	},
 	
 	function() {
-		if (panner.options.normalize) return domReadyFu;
-		else return wait(function() { return !!document.body; });
+		return wait(function() { return !!document.body; });		
 	},
-	function() {
-		if (panner.options.normalize) isolate(function() { panner.options.normalize(document, { url: document.URL }); });
-	},
-	function() {
-		return decor.decorate(decorDocument); // FIXME what if decorate fails??
-	},
-	function() {
-		return pageIn(null, null);
+	
+	function() { // the order of normalize, decorate, pageIn depends on whether content is from external document or the default document
+		if (startOptions.contentDocument) return pipe(null, [
+		function() {
+			return decor.decorate(decorDocument); // FIXME what if decorate fails??
+		},
+		function() {
+			return startOptions.contentDocument
+				.then(function(doc) {
+					if (panner.options.normalize) isolate(function() { panner.options.normalize(doc, { url: document.URL }); });				
+					return pageIn(null, doc);
+				});
+		}
+		]);
+		else return pipe(null, [
+		function() {
+			if (panner.options.normalize) return domReadyFu.then(function() {
+				isolate(function() { panner.options.normalize(document, { url: document.URL }); });
+			});
+		},			
+		function() {
+			return decor.decorate(decorDocument); // FIXME what if decorate fails??
+		},
+		function() {
+			return pageIn(null, null);
+		}
+		]);
 	},
 	function() {
 		scrollToId(location.hash && location.hash.substr(1));
@@ -1756,11 +1780,14 @@ function decor_insertBody(doc) {
 		dstBody.insertBefore(node, content);
 	});
 
-	forSiblings ("before", content, function(node) {
+	if (content) forSiblings ("before", content, enableScripts);
+	else forSiblings("ending", dstBody.lastChild, enableScripts);
+	
+	function enableScripts(node) {
 		if (node.nodeType !== 1) return;
 		if ("script" === tagName(node)) scriptQueue.push(node);
 		else forEach($$("script", node), function(script) { scriptQueue.push(script); });
-	});
+	}
 }
 
 var scriptQueue = new function() {
