@@ -1864,9 +1864,9 @@ this.push = function(node) {
 	copyAttributes(script, node); 
 
 	// FIXME is this comprehensive?
-	if (node.text) script.text = node.text; // all IE, current non-IE
-	else if (node.textContent) script.textContent = node.textContent; // old non-IE
-	else script.appendChild(document.createTextNode(node.firstChild ? node.firstChild.nodeValue : '')); // really old non-IE
+	if ('text' in node) script.text = node.text; // all IE, current non-IE
+	else if ('textContent' in node) script.textContent = node.textContent; // old non-IE
+	else if (node.firstChild) script.appendChild(document.createTextNode(node.firstChild.nodeValue)); // really old non-IE
 
 	if (script.getAttribute('defer')) { // @defer is not appropriate. Implement as @async
 		script.removeAttribute('defer');
