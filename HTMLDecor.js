@@ -427,15 +427,15 @@ extend(Future, {
  */
 var tagName = function(el) { return el.nodeType == 1 ? lc(el.tagName) : ""; }
 
-var $id = function(id, context) {
-	if (!context) context = document;
-	else if (context.nodeType != 9) context = context.ownerDocument;
+var $id = function(id, doc) {
 	if (!id) return;
-	var node = context.getElementById(id);
+	if (!doc) doc = document;
+	if (!doc.getElementById) throw 'Context for $id must be a Document node';
+	var node = doc.getElementById(id);
 	if (!node) return;
-	if (node.id == id) return node;
+	if (node.id === id) return node;
 	// work around for broken getElementById in old IE
-	var nodeList = context.getElementsByName(id);
+	var nodeList = doc.getElementsByName(id);
 	for (var n=nodeList.length, i=0; i<n; i++) {
 		node = nodeList[i];
 		if (node.id == id) return node;
