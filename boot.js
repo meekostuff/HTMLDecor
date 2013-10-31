@@ -3,7 +3,7 @@
  * Mozilla Public License v2.0 (http://mozilla.org/MPL/2.0/)
  */
 
-(function() {
+(function() { // NOTE throwing an error or returning from this wrapper function prematurely aborts booting
 
 var defaults = { // NOTE defaults also define the type of the associated config option
 	"autostart": true,
@@ -21,8 +21,8 @@ var vendorPrefix = "Meeko";
 var Meeko = window.Meeko || (window.Meeko = {});
 
 // Don't even load HTMLDecor if "nodecor" / "noboot" is one of the search options (or true in Meeko.options)
-if (/(^\?|&)(no_?decor|no_?boot)($|&)/.test(location.search)) return;
-if (Meeko && Meeko.options && Meeko.options['no_boot']) return;
+if (/(^\?|&)(no_?decor|no_?boot)($|&)/.test(location.search)) return; // TODO message in the log?
+if (Meeko && Meeko.options && Meeko.options['no_boot']) return; // FIXME why would someone use this?
 
 // TODO up-front feature testing to prevent boot on unsupportable platorms
 // e.g. where script.onload can't be used or faked
@@ -85,12 +85,75 @@ this.LOG_LEVEL = levels[defaults['log_level']]; // DEFAULT. Options are read lat
 }); // end logger defn
 
 /*
+ ### Get options
+*/
+
+Meeko.cookieStorage = { // TODO should be under Meeko.DOM
+
+getItem: function(sKey) { // See https://developer.mozilla.org/en-US/docs/DOM/Storage
+	  return unescape(document.cookie.replace(new RegExp("(?:^|.*;\\s*)" + escape(sKey).replace(/[\-\.\+\*]/g, "\\$&") + "\\s*\\=\\s*((?:[^;](?!;))*[^;]?).*"), "$1")); // TODO decodeURIComponent??
+}
+
+}
+
+var dataSources = [];
+
+function addDataSource(name) {
+	try { // NOTE IE10 can throw on `localStorage.getItem()` - see http://stackoverflow.com/questions/13102116/access-denied-for-localstorage-in-ie10
+		// Also Firefox on `window.localStorage` - see http://meyerweb.com/eric/thoughts/2012/04/25/firefox-failing-localstorage/
+		var source = window[name] || Meeko[name];
+		if (!source) return;
+		var options = parseJSON(source.getItem(vendorPrefix + ".options"));
+		if (options) dataSources.push( function(name) { return options[name]; } );
+	} catch(error) {
+		logger.warn(name + ' inaccessible');
+	}
+}
+
+addDataSource('sessionStorage');
+if (!Meeko.options || !Meeko.options['ignore_cookie_options']) addDataSource('cookieStorage');
+addDataSource('localStorage');
+if (Meeko.options) dataSources.push( function(name) { return Meeko.options[name]; } )
+
+var getData = function(name, type) {
+	var data = null;
+	some(dataSources, function(fn) {
+		var val = fn(name);
+		if (val == null) return false;
+		switch (type) {
+		case "string": data = val; break;
+		case "number":
+			if (!isNaN(val)) data = 1 * val;
+			// TODO else logger.warn("incorrect config option " + val + " for " + name); 
+			break;
+		case "boolean":
+			data = !!val;
+			// if ([false, true, 0, 1].indexOf(val) < 0) logger.warn("incorrect config option " + val + " for " + name); 
+			break;
+		}
+		return (data !== null); 
+	});
+	return data;
+}
+
+var bootOptions = Meeko.bootOptions = (function() {
+	var options = {};
+	for (var name in defaults) {
+		var def = options[name] = defaults[name];
+		var val = getData(name, typeof def);
+		if (val != null) options[name] = val;
+	}
+	return options;
+})();
+
+/*
  ### DOM utilities
  */
 
 function $$(selector) { return document.getElementsByTagName(selector); }
 
-document.head = $$('head')[0]; // FIXME should abort if there is no <head>
+document.head = $$('head')[0];
+if (!document.head) throw 'ABORT: <head> not found. This implies a legacy browser.';
 
 function getBootScript() {
 	var script = document.currentScript;
@@ -314,68 +377,6 @@ function queue(fnList, oncomplete, onerror) {
 
 return queue;
 
-})();
-
-/*
- ### Get options
-*/
-
-Meeko.cookieStorage = { // TODO should be under Meeko.DOM
-
-getItem: function(sKey) { // See https://developer.mozilla.org/en-US/docs/DOM/Storage
-	  return unescape(document.cookie.replace(new RegExp("(?:^|.*;\\s*)" + escape(sKey).replace(/[\-\.\+\*]/g, "\\$&") + "\\s*\\=\\s*((?:[^;](?!;))*[^;]?).*"), "$1")); // TODO decodeURIComponent??
-}
-
-}
-
-var dataSources = [];
-
-function addDataSource(name) {
-	try { // NOTE IE10 can throw on `localStorage.getItem()` - see http://stackoverflow.com/questions/13102116/access-denied-for-localstorage-in-ie10
-		// Also Firefox on `window.localStorage` - see http://meyerweb.com/eric/thoughts/2012/04/25/firefox-failing-localstorage/
-		var source = window[name] || Meeko[name];
-		if (!source) return;
-		var options = parseJSON(source.getItem(vendorPrefix + ".options"));
-		if (options) dataSources.push( function(name) { return options[name]; } );
-	} catch(error) {
-		logger.warn(name + ' inaccessible');
-	}
-}
-
-addDataSource('sessionStorage');
-if (!Meeko.options || !Meeko.options['ignore_cookie_options']) addDataSource('cookieStorage');
-addDataSource('localStorage');
-if (Meeko.options) dataSources.push( function(name) { return Meeko.options[name]; } )
-
-var getData = function(name, type) {
-	var data = null;
-	some(dataSources, function(fn) {
-		var val = fn(name);
-		if (val == null) return false;
-		switch (type) {
-		case "string": data = val; break;
-		case "number":
-			if (!isNaN(val)) data = 1 * val;
-			// TODO else logger.warn("incorrect config option " + val + " for " + name); 
-			break;
-		case "boolean":
-			data = !!val;
-			// if ([false, true, 0, 1].indexOf(val) < 0) logger.warn("incorrect config option " + val + " for " + name); 
-			break;
-		}
-		return (data !== null); 
-	});
-	return data;
-}
-
-var bootOptions = Meeko.bootOptions = (function() {
-	var options = {};
-	for (var name in defaults) {
-		var def = options[name] = defaults[name];
-		var val = getData(name, typeof def);
-		if (val != null) options[name] = val;
-	}
-	return options;
 })();
 
 /*
