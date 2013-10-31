@@ -1699,7 +1699,7 @@ var page = function(oldState, newState) {
 		each(decor.placeHolders, function(id) {
 			var node = content[id];
 			if (!node) {
-				console.log(id + ' not found');
+				logger.warn(id + ' not found');
 				return;
 			}
 			var target = $id(id);
@@ -1780,8 +1780,8 @@ function mergeHead(doc, isDecor, afterRemove) { // FIXME more callback than just
 function placeContent(content, beforeReplace, afterReplace) { // this should work for content from both internal and external documents
 	var srcBody = content.parentNode;
 	forSiblings ("starting", content, function(node) { 
-		var target;
-		if (node.id && (target = $id(node.id)) != node) {
+		var target; 
+		if (node.id && (target = $id(node.id)) !== node) {
 			// TODO compat check between node and target
 			if (beforeReplace) beforeReplace(node, target);
 			try { replaceNode(target, node); } // NOTE fails in IE <= 8 if node is still loading
@@ -1836,7 +1836,7 @@ var queue = [],
 	emptying = false;
 
 var testScript = document.createElement('script'),
-	supportsOnLoad = (testScript.setAttribute('onload', 'void(0)'), typeof testScript.onload === 'function'),
+	supportsOnLoad = (testScript.setAttribute('onload', ';'), typeof testScript.onload === 'function'),
 	supportsSync = (testScript.async === true);
 
 this.push = function(node) {
@@ -1862,8 +1862,9 @@ this.push = function(node) {
 	copyAttributes(script, node); 
 
 	// FIXME is this comprehensive?
-	try { script.innerHTML = node.innerHTML; }
-	catch (error) { script.text = node.text; }
+	if (node.text) script.text = node.text; // all IE, current non-IE
+	else if (node.textContent) script.textContent = node.textContent; // old non-IE
+	else script.appendChild(document.createTextNode(node.firstChild ? node.firstChild.nodeValue : '')); // really old non-IE
 
 	if (script.getAttribute('defer')) { // @defer is not appropriate. Implement as @async
 		script.removeAttribute('defer');
