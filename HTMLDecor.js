@@ -1238,6 +1238,23 @@ decorate: function(decorURL) {
 	function() { return decorReadyFu; }
 
 	]);
+
+	// NOTE decorate() returns now. The following functions are hoisted
+	
+	function placeContent(content, beforeReplace, afterReplace) { // this should work for content from both internal and external documents
+		var srcBody = content.parentNode;
+		forSiblings ("starting", content, function(node) { 
+			if (node.id && (target = $id(node.id)) !== node) { // FIXME Safari 3 returns *last* element with matching ID so this always fails
+				// TODO compat check between node and target
+				if (beforeReplace) beforeReplace(node, target);
+				try { replaceNode(target, node); } // NOTE fails in IE <= 8 if node is still loading
+				catch (error) { return; }
+				if (afterReplace) afterReplace(node, target);
+			}
+			else try { srcBody.removeChild(node); } catch (error) {}
+		});
+	}
+
 }
 
 });
@@ -1775,21 +1792,6 @@ function mergeHead(doc, isDecor, afterRemove) { // FIXME more callback than just
 	});
 	// allow scripts to run
 	forEach($$("script", dstHead), function(script) { scriptQueue.push(script); }); // FIXME this breaks if a script inserts other scripts
-}
-
-function placeContent(content, beforeReplace, afterReplace) { // this should work for content from both internal and external documents
-	var srcBody = content.parentNode;
-	forSiblings ("starting", content, function(node) { 
-		var target; 
-		if (node.id && (target = $id(node.id)) !== node) {
-			// TODO compat check between node and target
-			if (beforeReplace) beforeReplace(node, target);
-			try { replaceNode(target, node); } // NOTE fails in IE <= 8 if node is still loading
-			catch (error) { return; }
-			if (afterReplace) afterReplace(node, target);
-		}
-		else try { srcBody.removeChild(node); } catch (error) {}
-	});
 }
 
 function decor_insertBody(doc) {
