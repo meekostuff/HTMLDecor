@@ -449,16 +449,34 @@ var $$ = function(selector, context) { // WARN only selects by tagName
 	}
 }
 
-var forSiblings = function(conf, refNode, fn) {
+var forSiblings = function(conf, refNode, conf2, refNode2, fn) {
 	if (!refNode || !refNode.parentNode) return;
+	if (typeof conf2 === 'function') {
+		fn = conf2;
+		conf2 = null;
+		refNode2 = null;
+	}
 	var node, stopNode, first = refNode.parentNode.firstChild;
-	switch (lc(conf)) {
+	
+	conf = lc(conf);
+	if (conf2) {
+		conf2 = lc(conf2);
+		if (conf === 'ending' || conf === 'before') throw 'forSiblings startNode looks like stopNode';
+		if (conf2 === 'starting' || conf2 === 'after') throw 'forSiblings stopNode looks like startNode';
+	}
+	
+	switch (conf) {
 	case "starting": node = refNode; break;
-	case "ending": node = first; stopNode = refNode.nextSibling; break;
 	case "after": node = refNode.nextSibling; break;
+	case "ending": node = first; stopNode = refNode.nextSibling; break;
 	case "before": node = first; stopNode = refNode; break;
 	default: throw conf + " is not a valid configuration in forSiblings";
 	}
+	if (conf2) switch (conf2) {
+	case "ending": stopNode = refNode2.nextSibling; break;
+	case "before": stopNode = refNode2; break;
+	}
+	
 	if (!node) return;
 	for (var next; next=node && node.nextSibling, node && node!=stopNode; node=next) fn(node);
 }
@@ -1071,7 +1089,7 @@ start: function(startOptions) {
 	function() { // the order of normalize, decorate, pageIn depends on whether content is from external document or the default document
 		if (startOptions && startOptions.contentDocument) return pipe(null, [
 		function() {
-			return decor.decorate(decorDocument); // FIXME what if decorate fails??
+			return decor.decorate(decorDocument, decorURL); // FIXME what if decorate fails??
 		},
 		function() {
 			return startOptions.contentDocument
@@ -1088,7 +1106,7 @@ start: function(startOptions) {
 			});
 		},			
 		function() {
-			return decor.decorate(decorDocument); // FIXME what if decorate fails??
+			return decor.decorate(decorDocument, decorURL); // FIXME what if decorate fails??
 		},
 		function() {
 			return pageIn(null, null);
@@ -1127,16 +1145,28 @@ start: function(startOptions) {
 	]);
 },
 
-decorate: function(decorDocument) {
+decorate: function(decorDocument, decorURL) {
 
-	if (getDecorMeta()) throw "Cannot decorate a document that has already been decorated";
+	if (getDecorMarker()) throw "Cannot decorate a document that has already been decorated";
 
+	var selfMarker;
+	
 	return pipe(null, [
 
 	function() {
-		var marker = document.createElement("meta");
-		marker.name = "meeko-decor";
-		document.head.insertBefore(marker, document.head.firstChild);
+		selfMarker = getSelfMarker();
+		if (selfMarker) return;
+		selfMarker = document.createElement("link");
+		selfMarker.rel = "meeko-self";
+		selfMarker.href = document.URL;
+		document.head.insertBefore(selfMarker, document.head.firstChild);
+		
+	},
+	function() {
+		var marker = document.createElement("link");
+		marker.rel = "meeko-decor-active";
+		marker.href = decorURL;
+		document.head.insertBefore(marker, selfMarker);
 	},
 	
 	function() {
@@ -1479,7 +1509,7 @@ var notify = function(msg) {
 }
 
 var pan = function(oldState, newState) {
-	if (!getDecorMeta()) throw "Cannot pan if the document has not been decorated"; // FIXME r.reject()
+	if (!getDecorMarker()) throw "Cannot pan if the document has not been decorated"; // FIXME r.reject()
 
 	var durationFu = delay(panner.options.duration);
 
@@ -1558,7 +1588,12 @@ var pan = function(oldState, newState) {
 
 	function() { return newDocFu; },
 		
-	function() { return pageIn(oldDocSaved ? null : oldDoc, newDoc); }
+	function() { return pageIn(oldDocSaved ? null : oldDoc, newDoc); },
+	
+	function() {
+		var selfMarker = getSelfMarker();
+		selfMarker.href = newState.url;
+	}
 	
 	]);
 
@@ -1690,7 +1725,7 @@ function pageIn(oldDoc, newDoc) {
 			each(srcAttrs, function(tag, attr) { resolveAll(root, tag, attr); });
 		}
 		
-		forSiblings("after", getDecorMeta(), function(node) {
+		forSiblings("after", getSelfMarker(), function(node) {
 			resolveTree(node, true);
 		});
 		forEach(decor.placeHolders, function(node) {
@@ -1704,22 +1739,25 @@ function pageIn(oldDoc, newDoc) {
 
 function separateHead(isDecor, afterRemove) { // FIXME more callback than just afterRemove?
 	var dstHead = document.head;
-	var marker = getDecorMeta();
-	if (!marker) throw "No meeko-decor marker found. ";
+	if (!getDecorMarker()) throw "No meeko-decor marker found. ";
 
 	// remove decor / page elements except for <script type=text/javascript>
-	forSiblings (isDecor ? "before" : "after", marker, function(node) {
+	if (isDecor) forSiblings("after", getDecorMarker(), "before", getSelfMarker(), remove);
+	else forSiblings("after", getSelfMarker(), remove);
+	
+	function remove(node) {
 		if (tagName(node) == "script" && (!node.type || node.type.match(/^text\/javascript/i))) return;
 		dstHead.removeChild(node);
 		if (afterRemove) afterRemove(node);
-	});	
+	}
 }
 
 function mergeHead(doc, isDecor, afterRemove) { // FIXME more callback than just afterRemove?
 	var baseURL = URL(document.URL);
 	var dstHead = document.head;
-	var marker = getDecorMeta();
-	if (!marker) throw "No meeko-decor marker found. ";
+	var decorMarker = getDecorMarker();
+	if (!decorMarker) throw "No meeko-decor marker found. ";
+	var marker = getSelfMarker();
 
 	separateHead(isDecor, afterRemove);
 
@@ -1950,14 +1988,24 @@ this.empty = function() {
 
 } // end scriptQueue
 
-function getDecorMeta(doc) {
+function getDecorMarker(doc) {
 	if (!doc) doc = document;
-	var meta = firstChild(doc.head, function(el) {
+	var marker = firstChild(doc.head, function(el) {
 		return el.nodeType == 1 &&
-			tagName(el) == "meta" &&
-			/\bMEEKO-DECOR\b/i.test(el.name);
+			tagName(el) == "link" &&
+			/\bMEEKO-DECOR-ACTIVE\b/i.test(el.rel);
 	});
-	return meta;
+	return marker;
+}
+
+function getSelfMarker(doc) {
+	if (!doc) doc = document;
+	var marker = firstChild(doc.head, function(el) {
+		return el.nodeType == 1 &&
+			tagName(el) == "link" &&
+			/\bMEEKO-SELF\b/i.test(el.rel);
+	});
+	return marker;
 }
 
 // end decor defn
