@@ -189,7 +189,7 @@ var queue = (function() {
 var head = document.head;
 var marker = head.firstChild;
 var testScript = document.createElement('script');
-var supportsOnLoad = (testScript.setAttribute('onload', 'void(0)'), typeof testScript.onload === 'function');
+var supportsOnLoad = (testScript.setAttribute('onload', ';'), typeof testScript.onload === 'function');
 var supportsSync = (testScript.async === true);
 
 if (!supportsOnLoad && !testScript.readyState) throw "script.onload not supported in this browser";
@@ -389,16 +389,16 @@ var inlineTags = words(bootOptions['html5_inline_elements']);
 
 if (blockTags.length) { // FIXME add a test for html5 support. TODO what about inline tags?
 
-var head = document.head;
-var fragment = document.createDocumentFragment();
-var style = document.createElement("style");
-fragment.appendChild(style); // NOTE on IE this realizes style.styleSheet 
-
-var cssText = blockTags.join(', ') + ' { display: block; }\n';
-if (style.styleSheet) style.styleSheet.cssText = cssText;
-else style.textContent = cssText;
-
-head.insertBefore(style, head.firstChild);
+	var head = document.head;
+	var fragment = document.createDocumentFragment();
+	var style = document.createElement("style");
+	fragment.appendChild(style); // NOTE on IE this realizes style.styleSheet 
+	
+	var cssText = blockTags.join(', ') + ' { display: block; }\n';
+	if (style.styleSheet) style.styleSheet.cssText = cssText;
+	else style.textContent = cssText;
+	
+	head.insertBefore(style, head.firstChild);
 	
 }
 
@@ -460,6 +460,20 @@ else {
 	if (document.body) logger.warn("Bootscript SHOULD be in <head> and MUST NOT have @async or @defer");
 }
 
+/*
+	The self-marker is inserted by HTMLDecor (if not already present)
+	to mark the head elements associated with the content document
+	as opposed to decor elements or others.
+	The boot-script inserts one which means <style>, etc inserted above
+	are protected from HTMLDecor
+*/
+   
+var selfMarker = document.createElement('link');
+selfMarker.rel = 'meeko-self';
+selfMarker.href = document.URL;
+document.head.insertBefore(selfMarker, bootScript.parentNode === document.head ? bootScript : document.head.firstChild);
+
+
 var urlParams = Meeko.bootParams = { // WARN this dictionary can be modified during the boot sequence
 	bootscriptdir: bootScript.src.replace(/\/[^\/]*$/, '/') // TODO this assumes no ?search or #hash
 }
@@ -513,7 +527,8 @@ function start() {
 			request: function() {
 				return new Meeko.Future(function() { var r = this;
 					domReady(function() {
-						var plaintext = $$('plaintext')[0];
+						var elts = $$('plaintext');
+						var plaintext = elts[elts.length - 1]; // NOTE There should only be one, but take the last just to be sure
 						var html = plaintext.firstChild.nodeValue; // FIXME assumes bootscript before <!DOCTYPE ...
 						plaintext.parentNode.removeChild(plaintext);
 						var doc = Meeko.DOM.parseHTML(new String(html), document.URL);
