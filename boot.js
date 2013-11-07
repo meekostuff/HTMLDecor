@@ -89,9 +89,25 @@ this.LOG_LEVEL = levels[defaults['log_level']]; // DEFAULT. Options are read lat
  ### DOM utilities
  */
 
-function $$(selector) { return document.getElementsByTagName(selector); }
+function $$(selector, context) { context = context || document; return context.getElementsByTagName(selector); }
 
 document.head = $$('head')[0]; // FIXME should abort if there is no <head>
+
+function toStartTag(el) { // WARN outerHTML not available before Firefox 11
+	return el.outerHTML.replace(/>.*$/, '>\n');
+}
+
+function getDocTypeTag(doc) { // WARN doctype not available before IE 9
+	var doctype = doc.doctype;
+	return (doctype) ?
+
+		'<!DOCTYPE ' + doctype.name +
+		(doctype.publicId ? 'PUBLIC "' + doctype.publicId + '"': '') +
+		(doctype.systemId ? '"' + doctype.systemId + '"' : '') +
+		'>\n' :
+
+		'<!DOCTYPE html>\n';
+}
 
 function getBootScript() {
 	var script = document.currentScript;
@@ -387,7 +403,8 @@ var html5prepare = (function() {
 var blockTags = words(bootOptions['html5_block_elements']);
 var inlineTags = words(bootOptions['html5_inline_elements']);
 
-if (blockTags.length) { // FIXME add a test for html5 support. TODO what about inline tags?
+function addStyles() {
+	if (blockTags.length <= 0) return; // FIXME add a test for html5 support. TODO what about inline tags?
 
 	var head = document.head;
 	var fragment = document.createDocumentFragment();
@@ -399,14 +416,16 @@ if (blockTags.length) { // FIXME add a test for html5 support. TODO what about i
 	else style.textContent = cssText;
 	
 	head.insertBefore(style, head.firstChild);
-	
 }
 
 function html5prepare(doc) {
-	if (!doc) doc = document;
+	if (!doc) {
+		doc = document;
+		addStyles();
+	}
 	forEach(blockTags.concat(inlineTags), function(tag) {
 		doc.createElement(tag);
-	});	
+	});
 }
 
 return html5prepare;
@@ -460,6 +479,52 @@ else {
 	if (document.body) logger.warn("Bootscript SHOULD be in <head> and MUST NOT have @async or @defer");
 }
 
+
+var urlParams = Meeko.bootParams = { // WARN this dictionary can be modified during the boot sequence
+	bootscriptdir: bootScript.src.replace(/\/[^\/]*$/, '/') // TODO this assumes no ?search or #hash
+}
+
+if (Meeko.bootConfig) Meeko.bootConfig(); // TODO try / catch ??
+
+/*
+ ## Startup
+*/
+
+var capturing = false, capturedHTML = '';
+
+// FIXME Capturing conflicts with autostart: false and document already loaded
+// FIXME needs dead man recovery with document.write(), but this breaks older IE
+// FIXME alternatively could turn off booting in sessionStorage and then use document.reload()
+if (bootOptions['capturing']) { 
+	if (document.body) throw 'When capturing, boot-script MUST run before <body>';
+	if ($$('script').length > 1) throw 'When capturing, boot-script MUST be first <script>';
+	if (some($$('*', document.head), function(node) { // return true if invalid node
+		if (node.nodeType !== 1) return false; // comments and text-nodes are ok
+		if (node === bootScript) return false; // boot-script is ok. TODO should be last node in <head>
+		if (node.tagName === 'TITLE' && node.firstChild === null) return false; // IE6 adds a dummy <title>
+		if (node.tagName !== 'META') return true; 
+		if (node.httpEquiv) return false; // <meta http-equiv> are ok
+		return true;
+	})) throw 'When capturing, only <meta http-equiv> nodes may precede boot-script';
+	capturing = true;
+	capturedHTML += getDocTypeTag(document); // WARN relies on document.doctype
+	capturedHTML += toStartTag(document.documentElement); // WARN relies on element.outerHTML
+	capturedHTML += toStartTag(document.head);
+	document.write('<plaintext style="display: none;">');
+}
+
+
+var timeout = bootOptions["hidden_timeout"];
+if (timeout > 0) {
+	Viewport.hide();
+	setTimeout(Viewport.unhide, timeout);
+}
+
+var log_index = logger.levels[bootOptions["log_level"]];
+if (log_index != null) logger.LOG_LEVEL = log_index;
+
+html5prepare(); // no doc arg means use document and add block element styles
+
 /*
 	The self-marker is inserted by HTMLDecor (if not already present)
 	to mark the head elements associated with the content document
@@ -473,38 +538,6 @@ selfMarker.rel = 'meeko-self';
 selfMarker.href = document.URL;
 document.head.insertBefore(selfMarker, bootScript.parentNode === document.head ? bootScript : document.head.firstChild);
 
-
-var urlParams = Meeko.bootParams = { // WARN this dictionary can be modified during the boot sequence
-	bootscriptdir: bootScript.src.replace(/\/[^\/]*$/, '/') // TODO this assumes no ?search or #hash
-}
-
-if (Meeko.bootConfig) Meeko.bootConfig(); // TODO try / catch ??
-
-/*
- ## Startup
-*/
-
-var timeout = bootOptions["hidden_timeout"];
-if (timeout > 0) {
-	Viewport.hide();
-	setTimeout(Viewport.unhide, timeout);
-}
-
-var log_index = logger.levels[bootOptions["log_level"]];
-if (log_index != null) logger.LOG_LEVEL = log_index;
-
-html5prepare(document);
-
-var capturing = false;
-
-// FIXME Capturing conflicts with autostart: false and document already loaded
-// FIXME needs dead man recovery with document.write(), but this breaks older IE
-if (bootOptions['capturing']) { 
-	if (document.body) throw 'Bootscript MUST run before <body> when capturing';
-	if ($$('script').length > 1) throw 'Bootscript MUST be first <script> when capturing';
-	capturing = true;
-	document.write('<plaintext style="display: none;">');
-}
 
 function config() {
 	Meeko.DOM.ready = domReady;
@@ -529,8 +562,10 @@ function start() {
 					domReady(function() {
 						var elts = $$('plaintext');
 						var plaintext = elts[elts.length - 1]; // NOTE There should only be one, but take the last just to be sure
-						var html = plaintext.firstChild.nodeValue; // FIXME assumes bootscript before <!DOCTYPE ...
+						var html = plaintext.firstChild.nodeValue;
 						plaintext.parentNode.removeChild(plaintext);
+						
+						if (!/\s*<!DOCTYPE/i.test(html)) html = capturedHTML + html;
 						var doc = Meeko.DOM.parseHTML(new String(html), document.URL);
 						r.accept(doc);
 					});
