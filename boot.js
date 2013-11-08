@@ -8,7 +8,7 @@
 var defaults = { // NOTE defaults also define the type of the associated config option
 	"no_boot": false, // WARN don't remove or change this line, otherwise no_boot when reloading after capture error won't be detected - infinite reload
 	"autostart": true,
-	"capturing": true,
+	"capturing": false,
 	"log_level": "warn",
 	"hidden_timeout": 3000,
 	"polling_interval": 50,
@@ -537,8 +537,9 @@ var capturing = false, capturedHTML = '';
 // FIXME needs dead man recovery with document.write(), but this breaks older IE
 // FIXME alternatively could turn off booting in sessionStorage and then use document.reload()
 if (bootOptions['capturing']) {
-	if (!(window.sessionStorage && window.JSON && window.JSON.stringify)) throw 'Capturing depends on sessionStorage and JSON'; 
-	if (document.body) throw 'When capturing, boot-script MUST run before <body>';
+	if (!reloadOptions) throw 'Capturing depends on sessionStorage and JSON'; 
+	if (document.body) throw 'When capturing, boot-script MUST be in - or before - <head>';
+	if (!bootOptions['autostart']) throw 'Capturing is not compatible with autostart: false';
 	if ($$('script').length > 1) throw 'When capturing, boot-script MUST be first <script>';
 	if (some($$('*', document.head), function(node) { // return true if invalid node
 		if (node.nodeType !== 1) return false; // comments and text-nodes are ok
