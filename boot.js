@@ -510,6 +510,60 @@ return {
 })();
 
 /*
+ ### Capturing
+     See https://hacks.mozilla.org/2013/03/capturing-improving-performance-of-the-adaptive-web/
+ */
+var Capture = (function() {
+
+var capturedHTML = '';
+
+var Capture = {
+
+start: function() {
+	if (document.body) throw 'When capturing, boot-script MUST be in - or before - <head>';
+	if ($$('script').length > 1) throw 'When capturing, boot-script MUST be first <script>';
+	if (some($$('*', document.head), function(node) { // return true if invalid node
+		if (node.nodeType !== 1) return false; // comments and text-nodes are ok
+		if (node === bootScript) return false; // boot-script is ok. TODO should be last node in <head>
+		if (node.tagName === 'TITLE' && node.firstChild === null) return false; // IE6 adds a dummy <title>
+		if (node.tagName !== 'META') return true; 
+		if (node.httpEquiv) return false; // <meta http-equiv> are ok
+		return true;
+	})) throw 'When capturing, only <meta http-equiv> nodes may precede boot-script';
+	capturedHTML += getDocTypeTag(document); // WARN relies on document.doctype
+	capturedHTML += toStartTag(document.documentElement); // WARN relies on element.outerHTML
+	capturedHTML += toStartTag(document.head);
+	document.write('<plaintext style="display: none;">');
+},
+
+getDocument: function() { // WARN this assumes HTMLDecor is ready
+	var loader = new Meeko.DOM.HTMLLoader({
+		request: function() {
+			return new Meeko.Future(function() { var r = this;
+				domReady(function() {
+					var elts = $$('plaintext');
+					var plaintext = elts[elts.length - 1]; // NOTE There should only be one, but take the last just to be sure
+					var html = plaintext.firstChild.nodeValue;
+					plaintext.parentNode.removeChild(plaintext);
+					
+					if (!/\s*<!DOCTYPE/i.test(html)) html = capturedHTML + html;
+					var doc = Meeko.DOM.parseHTML(new String(html), document.URL);
+					r.accept(doc);
+				});
+			});
+		}
+	});
+	return loader.load();	
+}
+
+}
+
+return Capture;
+
+})();
+
+
+/*
  ## Boot configuration
 */
 
@@ -531,31 +585,11 @@ if (Meeko.bootConfig) Meeko.bootConfig(); // TODO try / catch ??
  ## Startup
 */
 
-var capturing = false, capturedHTML = '';
-
-// FIXME Capturing conflicts with autostart: false and document already loaded
-// FIXME needs dead man recovery with document.write(), but this breaks older IE
-// FIXME alternatively could turn off booting in sessionStorage and then use document.reload()
 if (bootOptions['capturing']) {
 	if (!reloadOptions) throw 'Capturing depends on sessionStorage and JSON'; 
-	if (document.body) throw 'When capturing, boot-script MUST be in - or before - <head>';
 	if (!bootOptions['autostart']) throw 'Capturing is not compatible with autostart: false';
-	if ($$('script').length > 1) throw 'When capturing, boot-script MUST be first <script>';
-	if (some($$('*', document.head), function(node) { // return true if invalid node
-		if (node.nodeType !== 1) return false; // comments and text-nodes are ok
-		if (node === bootScript) return false; // boot-script is ok. TODO should be last node in <head>
-		if (node.tagName === 'TITLE' && node.firstChild === null) return false; // IE6 adds a dummy <title>
-		if (node.tagName !== 'META') return true; 
-		if (node.httpEquiv) return false; // <meta http-equiv> are ok
-		return true;
-	})) throw 'When capturing, only <meta http-equiv> nodes may precede boot-script';
-	capturing = true;
-	capturedHTML += getDocTypeTag(document); // WARN relies on document.doctype
-	capturedHTML += toStartTag(document.documentElement); // WARN relies on element.outerHTML
-	capturedHTML += toStartTag(document.head);
-	document.write('<plaintext style="display: none;">');
+	Capture.start(); // NOTE this can also throw
 }
-
 
 var timeout = bootOptions["hidden_timeout"];
 if (timeout > 0) {
@@ -596,29 +630,11 @@ function start() {
 		Viewport.unhide();
 		return;
 	}
-	var startOptions = {};
 
-	if (capturing) {
-		var loader = new Meeko.DOM.HTMLLoader({
-			request: function() {
-				return new Meeko.Future(function() { var r = this;
-					domReady(function() {
-						var elts = $$('plaintext');
-						var plaintext = elts[elts.length - 1]; // NOTE There should only be one, but take the last just to be sure
-						var html = plaintext.firstChild.nodeValue;
-						plaintext.parentNode.removeChild(plaintext);
-						
-						if (!/\s*<!DOCTYPE/i.test(html)) html = capturedHTML + html;
-						var doc = Meeko.DOM.parseHTML(new String(html), document.URL);
-						r.accept(doc);
-					});
-				});
-			}
-		});
-		startOptions.contentDocument = loader.load();
-	}
-
-	Meeko.decor.start(startOptions);
+	if (bootOptions['capturing']) Meeko.decor.start({
+		contentDocument: Capture.getDocument()
+	});
+	else Meeko.decor.start();
 }
 
 function resolveScript(script) {
@@ -650,7 +666,7 @@ var startupSequence = [].concat(
 );
 
 queue(startupSequence, null, function() {
-	if (capturing) 	domReady(function() {
+	if (bootOptions['capturing']) 	domReady(function() { // TODO would it be better to do this with document.write()?
 		reloadOptions.setItem('no_boot', true);
 		reloadOptions.save();
 		location.reload();
