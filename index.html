@@ -95,10 +95,10 @@ only displayed if HTMLDecor is NOT enabled.</p>
 <pre><code>&lt;!DOCTYPE html&gt;
 &lt;html&gt;
 &lt;head&gt;
+    &lt;!-- source the HTMLDecor boot-script --&gt;
+    &lt;script src="/path/to/HTMLDecor/boot.js"&gt;&lt;/script&gt;
     &lt;!-- create a link to the decor page. All attributes are needed --&gt;
     &lt;link rel="meeko-decor" type="text/html" href="decor.html" /&gt;
-    &lt;!-- and source the HTMLDecor boot-script --&gt;
-    &lt;script src="/path/to/HTMLDecor/boot.js"&gt;&lt;/script&gt;
     &lt;!-- include fallback stylesheets for when HTMLDecor doesn't run.
         @title=nodecor stylesheets are removed !--&gt;
     &lt;link rel="stylesheet" href="nodecor.css" title="nodecor" /&gt;
@@ -112,8 +112,8 @@ only displayed if HTMLDecor is NOT enabled.</p>
     This fallback content will be removed from the page
     &lt;/header&gt;
 
-    &lt;article id="__content"&gt;&lt;!-- Page specific content, identified by @id --&gt;
-    #__content in page
+    &lt;article id="mk_content"&gt;&lt;!-- Page specific content, identified by @id --&gt;
+    #mk_content in page
         &lt;div class="styled-from-decor"&gt;
         This content is styled by the decor stylesheet
         &lt;/div&gt;  
@@ -145,10 +145,10 @@ will appear as the final page without the page specific content. </p>
     #header in decor
     &lt;/header&gt;
 
-    &lt;div id="__main"&gt;
-        #__main in decor
-        &lt;article id="__content"&gt;
-        #__content in decor: This will be replaced by #__content from the page
+    &lt;div id="mk_main"&gt;
+        #mk_main in decor
+        &lt;article id="mk_content"&gt;
+        #mk_content in decor: This will be replaced by #mk_content from the page
         &lt;/article&gt;
     &lt;/div&gt;
 
@@ -201,10 +201,10 @@ This step may occur at any time during or after step 7. *</li>
     #header in decor
     &lt;/header&gt;
 
-    &lt;div id="__main"&gt;
-        #__main in decor
-        &lt;article id="__content"&gt;
-        #__content in page
+    &lt;div id="mk_main"&gt;
+        #mk_main in decor
+        &lt;article id="mk_content"&gt;
+        #mk_content in page
             &lt;div class="styled-from-decor"&gt;
             This content is styled by the decor stylesheet
             &lt;/div&gt;  
@@ -259,12 +259,12 @@ will be removed from the page before the decor is applied, e.g.</p>
     because it has no @id
     &lt;/div&gt;
 
-    &lt;div id="__irrelevant"&gt;
+    &lt;div id="mk_irrelevant"&gt;
     This content will be REMOVED from the page
     assuming the decor has no element with matching @id
     &lt;/div&gt;
 
-    &lt;div id="__content"&gt;
+    &lt;div id="mk_content"&gt;
     This content will be RETAINED in the page
     assuming the decor has an element with matching @id
     &lt;/div&gt;
@@ -346,14 +346,14 @@ Meeko.panner.config({
 });
 &lt;/script&gt;
 &lt;style&gt;
-#__content { /\* assuming #__content is the page-specific content \*/
+#mk_content { /\* assuming #mk_content is the page-specific content \*/
     -webkit-transition: opacity 0.5s linear;
     -moz-transition: opacity 0.5s linear;
     -ms-transition: opacity 0.5s linear;
     -o-transition: opacity 0.5s linear;
     transition: opacity 0.5s linear;
 }
-#__content[hidden] {
+#mk_content[hidden] {
     display: block;
     visibility: visible;
     opacity: 0;
@@ -438,6 +438,37 @@ but BEFORE the page content is MERGED WITH the decor.</p></li>
 <li><p>When panning occurs, scripts in the <code>&lt;head&gt;</code> of the next page are <strong>enabled</strong> AFTER all the content in the <code>&lt;head&gt;</code> of the next page is MERGED WITH the page. 
 Scripts in the <code>&lt;body&gt;</code> of the next page are <strong>enabled</strong> AFTER the content in the <code>&lt;body&gt;</code> of the next page is MERGED WITH the page.
 <strong>RECOMMENDATION:</strong> You do not need and SHOULD NOT have scripts in any page (other than the decor document). </p></li>
+</ul>
+
+<h2>Capturing</h2>
+
+<p><small> <strong>This feature is in beta. It may be removed or redesigned.</strong> </small></p>
+
+<p>The <strong>capturing</strong> <a href="#boot-options">boot option</a> prevents normal browser parsing of the <em>landing page</em>. <br />
+This allows HTMLDecor to manage parsing in the same way that AJAXed pages are handled.
+The main benefits of this would be:</p>
+
+<ul>
+<li><p>normalizing landing-page content occurs before the content is rendered, and </p></li>
+<li><p>because <code>&lt;link&gt;</code> and <code>&lt;img&gt;</code> resources aren't automatically downloaded they can be changed (or removed) with no penalty.</p></li>
+</ul>
+
+<p>The drawbacks are:</p>
+
+<ul>
+<li>parsing and displaying of content doesn't begin until the landing-page has fully down-loaded.
+On long pages over slow networks this will have quite a noticeable delay before any content is viewable. </li>
+</ul>
+
+<p>The article "<a href="https://hacks.mozilla.org/2013/03/capturing-improving-performance-of-the-adaptive-web/">Capturing - Improving Performance of the Adaptive Web</a>"
+provides a short description and discussion of this approach.</p>
+
+<h3>Restrictions</h3>
+
+<ul>
+<li>The boot-script must be the first <code>&lt;script&gt;</code> in the page.</li>
+<li>The boot-script must be within - or before - <code>&lt;head&gt;</code>.</li>
+<li>If within <code>&lt;head&gt;</code> the boot-script may only be preceded by <code>&lt;meta http-equiv&gt;</code> elements.</li>
 </ul>
 
 <h2>Debugging</h2>
@@ -540,6 +571,8 @@ You could symlink to the test directory from the root directory</p>
 </ul></li>
 </ul>
 
+<p><a id="boot-options"></a></p>
+
 <h3>Boot options</h3>
 
 <p>These options aren't specifically related to the operation of HTMLDecor. 
@@ -550,6 +583,7 @@ The boot-script has the following options (default values in <strong>bold</stron
 <li>log_level: "none", "error", <strong>"warn"</strong>, "info", "debug"</li>
 <li>polling_interval: <strong>50</strong> (milliseconds)</li>
 <li>autostart: <strong>true</strong>, false</li>
+<li>capturing: true, <strong>false</strong></li>
 <li>hidden_timeout: <strong>3000</strong> (milliseconds)</li>
 <li>html5_block_elements: <strong>"article aside figcaption figure footer header hgroup main nav section"</strong></li>
 <li>html5_inline_elements: <strong>"abbr mark output"</strong></li>
@@ -671,7 +705,7 @@ which will manipulate the DOM of <code>doc</code> into the appropriate format, e
 <pre><code>    Meeko.panner.config({
         normalize: function(doc) {
             var content = doc.getElementsByTagName('main')[0];
-            content.id = '__content';
+            content.id = 'mk_content';
             doc.body.innerHTML = '';
             doc.body.appendChild(content);
         }

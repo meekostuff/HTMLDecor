@@ -85,10 +85,10 @@ only displayed if HTMLDecor is NOT enabled.
     <!DOCTYPE html>
 	<html>
 	<head>
+		<!-- source the HTMLDecor boot-script -->
+		<script src="/path/to/HTMLDecor/boot.js"></script>
 		<!-- create a link to the decor page. All attributes are needed -->
 		<link rel="meeko-decor" type="text/html" href="decor.html" />
-		<!-- and source the HTMLDecor boot-script -->
-		<script src="/path/to/HTMLDecor/boot.js"></script>
 		<!-- include fallback stylesheets for when HTMLDecor doesn't run.
 		    @title=nodecor stylesheets are removed !-->
 		<link rel="stylesheet" href="nodecor.css" title="nodecor" />
@@ -102,8 +102,8 @@ only displayed if HTMLDecor is NOT enabled.
 		This fallback content will be removed from the page
 		</header>
 		
-		<article id="__content"><!-- Page specific content, identified by @id -->
-		#__content in page
+		<article id="mk_content"><!-- Page specific content, identified by @id -->
+		#mk_content in page
 			<div class="styled-from-decor">
 			This content is styled by the decor stylesheet
 			</div>	
@@ -134,10 +134,10 @@ will appear as the final page without the page specific content.
 		#header in decor
 		</header>
 		
-		<div id="__main">
-			#__main in decor
-			<article id="__content">
-			#__content in decor: This will be replaced by #__content from the page
+		<div id="mk_main">
+			#mk_main in decor
+			<article id="mk_content">
+			#mk_content in decor: This will be replaced by #mk_content from the page
 			</article>
 		</div>
 		
@@ -187,10 +187,10 @@ This process results in a DOM tree like this:
 		#header in decor
 		</header>
 		
-		<div id="__main">
-			#__main in decor
-			<article id="__content">
-			#__content in page
+		<div id="mk_main">
+			#mk_main in decor
+			<article id="mk_content">
+			#mk_content in page
 				<div class="styled-from-decor">
 				This content is styled by the decor stylesheet
 				</div>	
@@ -243,12 +243,12 @@ will be removed from the page before the decor is applied, e.g.
 		because it has no @id
 		</div>
 		
-		<div id="__irrelevant">
+		<div id="mk_irrelevant">
 		This content will be REMOVED from the page
 		assuming the decor has no element with matching @id
 		</div>
 
-		<div id="__content">
+		<div id="mk_content">
 		This content will be RETAINED in the page
 		assuming the decor has an element with matching @id
 		</div>
@@ -327,14 +327,14 @@ then the new nodes replace the old nodes directly, rather than transitioning thr
 	});
 	</script>
 	<style>
-	#__content { /\* assuming #__content is the page-specific content \*/
+	#mk_content { /\* assuming #mk_content is the page-specific content \*/
 		-webkit-transition: opacity 0.5s linear;
 		-moz-transition: opacity 0.5s linear;
 		-ms-transition: opacity 0.5s linear;
 		-o-transition: opacity 0.5s linear;
 		transition: opacity 0.5s linear;
 	}
-	#__content[hidden] {
+	#mk_content[hidden] {
 		display: block;
 		visibility: visible;
 		opacity: 0;
@@ -420,6 +420,34 @@ but BEFORE the page content is MERGED WITH the decor.
 - When panning occurs, scripts in the `<head>` of the next page are **enabled** AFTER all the content in the `<head>` of the next page is MERGED WITH the page. 
 Scripts in the `<body>` of the next page are **enabled** AFTER the content in the `<body>` of the next page is MERGED WITH the page.
 **RECOMMENDATION:** You do not need and SHOULD NOT have scripts in any page (other than the decor document). 
+
+
+Capturing
+---------
+
+<small> **This feature is in beta. It may be removed or redesigned.** </small>
+
+The **capturing** [boot option](#boot-options) prevents normal browser parsing of the *landing page*.  
+This allows HTMLDecor to manage parsing in the same way that AJAXed pages are handled.
+The main benefits of this would be:
+
+- normalizing landing-page content occurs before the content is rendered, and 
+
+- because `<link>` and `<img>` resources aren't automatically downloaded they can be changed (or removed) with no penalty.
+
+The drawbacks are:
+
+- parsing and displaying of content doesn't begin until the landing-page has fully down-loaded.
+  On long pages over slow networks this will have quite a noticeable delay before any content is viewable. 
+
+The article "[Capturing - Improving Performance of the Adaptive Web](https://hacks.mozilla.org/2013/03/capturing-improving-performance-of-the-adaptive-web/)"
+provides a short description and discussion of this approach.
+
+### Restrictions
+
+- The boot-script must be the first `<script>` in the page.
+- The boot-script must be within - or before - `<head>`.
+- If within `<head>` the boot-script may only be preceded by `<meta http-equiv>` elements.
 
 
 Debugging
@@ -509,6 +537,7 @@ When you want to:
 	- repeat step 3 with `path/to/HTMLDecor/boot.min.js`
 
 
+<a id="boot-options"></a>
 ### Boot options
 
 These options aren't specifically related to the operation of HTMLDecor. 
@@ -518,6 +547,7 @@ The boot-script has the following options (default values in **bold**).
 - log_level: "none", "error", **"warn"**, "info", "debug"
 - polling_interval: **50** (milliseconds)
 - autostart: **true**, false
+- capturing: true, **false**
 - hidden_timeout: **3000** (milliseconds)
 - html5\_block\_elements: **"article aside figcaption figure footer header hgroup main nav section"**
 - html5\_inline\_elements: **"abbr mark output"**
@@ -636,7 +666,7 @@ which will manipulate the DOM of `doc` into the appropriate format, e.g.
 		Meeko.panner.config({
 			normalize: function(doc) {
 				var content = doc.getElementsByTagName('main')[0];
-				content.id = '__content';
+				content.id = 'mk_content';
 				doc.body.innerHTML = '';
 				doc.body.appendChild(content);
 			}
