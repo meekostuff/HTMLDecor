@@ -427,15 +427,15 @@ extend(Future, {
  */
 var tagName = function(el) { return el.nodeType == 1 ? lc(el.tagName) : ""; }
 
-var $id = function(id, context) {
-	if (!context) context = document;
-	else if (context.nodeType != 9) context = context.ownerDocument;
+var $id = function(id, doc) {
 	if (!id) return;
-	var node = context.getElementById(id);
+	if (!doc) doc = document;
+	if (!doc.getElementById) throw 'Context for $id must be a Document node';
+	var node = doc.getElementById(id);
 	if (!node) return;
-	if (node.id == id) return node;
+	if (node.id === id) return node;
 	// work around for broken getElementById in old IE
-	var nodeList = context.getElementsByName(id);
+	var nodeList = doc.getElementsByName(id);
 	for (var n=nodeList.length, i=0; i<n; i++) {
 		node = nodeList[i];
 		if (node.id == id) return node;
@@ -1204,6 +1204,23 @@ decorate: function(decorDocument, decorURL) {
 	function() { return scriptQueue.empty(); }
 
 	]);
+
+	// NOTE decorate() returns now. The following functions are hoisted
+	
+	function placeContent(content, beforeReplace, afterReplace) { // this should work for content from both internal and external documents
+		var srcBody = content.parentNode;
+		forSiblings ("starting", content, function(node) { 
+			if (node.id && (target = $id(node.id)) !== node) { // FIXME Safari 3 returns *last* element with matching ID so this always fails
+				// TODO compat check between node and target
+				if (beforeReplace) beforeReplace(node, target);
+				try { replaceNode(target, node); } // NOTE fails in IE <= 8 if node is still loading
+				catch (error) { return; }
+				if (afterReplace) afterReplace(node, target);
+			}
+			else try { srcBody.removeChild(node); } catch (error) {}
+		});
+	}
+
 }
 
 });
@@ -1850,7 +1867,7 @@ var queue = [],
 	emptying = false;
 
 var testScript = document.createElement('script'),
-	supportsOnLoad = (testScript.setAttribute('onload', 'void(0)'), typeof testScript.onload === 'function'),
+	supportsOnLoad = (testScript.setAttribute('onload', ';'), typeof testScript.onload === 'function'),
 	supportsSync = (testScript.async === true);
 
 this.push = function(node) {
@@ -1876,8 +1893,9 @@ this.push = function(node) {
 	copyAttributes(script, node); 
 
 	// FIXME is this comprehensive?
-	try { script.innerHTML = node.innerHTML; }
-	catch (error) { script.text = node.text; }
+	if ('text' in node) script.text = node.text; // all IE, current non-IE
+	else if ('textContent' in node) script.textContent = node.textContent; // old non-IE
+	else if (node.firstChild) script.appendChild(document.createTextNode(node.firstChild.nodeValue)); // really old non-IE
 
 	if (script.getAttribute('defer')) { // @defer is not appropriate. Implement as @async
 		script.removeAttribute('defer');

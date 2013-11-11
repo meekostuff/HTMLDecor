@@ -3,7 +3,7 @@
  * Mozilla Public License v2.0 (http://mozilla.org/MPL/2.0/)
  */
 
-(function() {
+(function() { // NOTE throwing an error or returning from this wrapper function prematurely aborts booting
 
 var defaults = { // NOTE defaults also define the type of the associated config option
 	"no_boot": false, // WARN don't remove or change this line, otherwise no_boot when reloading after capture error won't be detected - infinite reload
@@ -192,7 +192,8 @@ function no_boot() {
 
 function $$(selector, context) { context = context || document; return context.getElementsByTagName(selector); }
 
-document.head = $$('head')[0]; // FIXME should abort if there is no <head>
+document.head = $$('head')[0];
+if (!document.head) throw 'ABORT: <head> not found. This implies a legacy browser.';
 
 function getBootScript() {
 	var script = document.currentScript;
