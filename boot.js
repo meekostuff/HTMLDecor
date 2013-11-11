@@ -194,22 +194,6 @@ function $$(selector, context) { context = context || document; return context.g
 
 document.head = $$('head')[0]; // FIXME should abort if there is no <head>
 
-function toStartTag(el) { // WARN outerHTML not available before Firefox 11
-	return el.outerHTML.replace(/>.*$/, '>\n');
-}
-
-function getDocTypeTag(doc) { // WARN doctype not available before IE 9
-	var doctype = doc.doctype;
-	return (doctype) ?
-
-		'<!DOCTYPE ' + doctype.name +
-		(doctype.publicId ? 'PUBLIC "' + doctype.publicId + '"': '') +
-		(doctype.systemId ? '"' + doctype.systemId + '"' : '') +
-		'>\n' :
-
-		'<!DOCTYPE html>\n';
-}
-
 function getBootScript() {
 	var script = document.currentScript;
 	if (script) return script;
@@ -559,6 +543,23 @@ getDocument: function() { // WARN this assumes HTMLDecor is ready
 }
 
 return Capture;
+
+function toStartTag(el) { // WARN outerHTML not available before Firefox 11
+	return el.outerHTML.replace(/>.*$/, '>\n');
+}
+
+function getDocTypeTag(doc) { // WARN doctype not available before IE 9
+	var doctype = doc.doctype;
+	return (doctype) ?
+
+		'<!DOCTYPE ' + doctype.name +
+		(doctype.publicId ? 'PUBLIC "' + doctype.publicId + '"': '') +
+		(doctype.systemId ? '"' + doctype.systemId + '"' : '') +
+		'>\n' :
+
+		'<!DOCTYPE html>\n';
+}
+
 
 })();
 
