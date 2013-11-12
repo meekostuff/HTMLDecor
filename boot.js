@@ -554,8 +554,8 @@ function getDocTypeTag(doc) { // WARN doctype not available before IE 9
 	return (doctype) ?
 
 		'<!DOCTYPE ' + doctype.name +
-		(doctype.publicId ? 'PUBLIC "' + doctype.publicId + '"': '') +
-		(doctype.systemId ? '"' + doctype.systemId + '"' : '') +
+		(doctype.publicId ? ' PUBLIC "' + doctype.publicId + '"': '') +
+		(doctype.systemId ? ' "' + doctype.systemId + '"' : '') +
 		'>\n' :
 
 		'<!DOCTYPE html>\n';
