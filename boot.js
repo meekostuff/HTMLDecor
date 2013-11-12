@@ -593,6 +593,10 @@ if (bootOptions['capturing']) {
 	Capture.start(); // NOTE this can also throw
 }
 
+// Capturing uses document.write, but after this point document.write, etc is forbidden
+document.write = document.writeln = document.open = document.close = function()  { throw 'document.write(), etc is incompatible with HTMLDecor'; }
+
+
 var timeout = bootOptions["hidden_timeout"];
 if (timeout > 0) {
 	Viewport.hide();
