@@ -537,7 +537,16 @@ var copyAttributes = function(node, srcNode) { // implements srcNode.cloneNode(f
 	var attrs = srcNode.attributes;
 	forEach(attrs, function(attr) {
 		if (!attr.specified) return;
-		node.setAttribute(attr.name, attr.value);
+		node.setAttribute(attr.name, attr.value); // FIXME does this work for @class?
+	});
+	return node;
+}
+
+var removeAttributes = function(node) {
+	var attrs = node.attributes;
+	forEach(attrs, function(attr) {
+		if (!attr.specified) return;
+		node.removeAttribute(attr.name); // FIXME does this work for @class?
 	});
 	return node;
 }
@@ -1176,10 +1185,13 @@ decorate: function(decorDocument, decorURL) {
 			type: "decorIn",
 			node: decorDocument
 		});
+		mergeElement(document.documentElement, decorDocument.documentElement);
+		mergeElement(document.head, decorDocument.head);
 		mergeHead(decorDocument, true);
 	},
 	function() { return scriptQueue.empty(); }, // FIXME this should be in mergeHead
 	function() {
+		mergeElement(document.body, decorDocument.body);
 		var contentStart = document.body.firstChild;
 		decor_insertBody(decorDocument);
 		notify({
@@ -1219,6 +1231,11 @@ decorate: function(decorDocument, decorURL) {
 			}
 			else try { srcBody.removeChild(node); } catch (error) {}
 		});
+	}
+	
+	function mergeElement(dst, src) { // TODO this removes all dst (= content) attrs and imports all src (= decor) attrs. Is this appropriate?
+		removeAttributes(dst);
+		copyAttributes(dst, src);
 	}
 
 }
