@@ -772,13 +772,38 @@ normalize: function(doc, details) {}
 
 });
 
+var supportsHTMLRequest = (function() { // FIXME more testing, especially Webkit
+	if (!window.XMLHttpRequest) return false;
+	var xhr = new XMLHttpRequest;
+	if (!('responseType' in xhr)) return false;
+	if (!('response' in xhr)) return false;
+	xhr.open('get', document.URL, true);
+
+	try { xhr.responseType = 'document'; } // not sure if any browser throws for this, but they should
+	catch (err) { return false; }
+
+	try { if (xhr.responseText == '') return false; } // Opera-12. Other browsers will throw
+	catch(err) { }
+
+	try { if (xhr.status) return false; } // this should be 0 but throws on Chrome and Safari-5.1
+	catch(err) { // Chrome and Safari-5.1
+		xhr.abort(); 
+		try { xhr.responseType = 'document'; } // throws on Safari-5.1 which doesn't support HTML requests 
+		catch(err2) { return false; }
+	}
+
+	console.log('supportsHTMLRequest');
+	return true;
+})();
+
 var doRequest = function(method, url, sendText, details) {
 return new Future(function() { var r = this;
 	var xhr = window.XMLHttpRequest ?
 		new XMLHttpRequest() :
-		new ActiveXObject("Microsoft.XMLHTTP");
+		new ActiveXObject("Microsoft.XMLHTTP"); // TODO stop supporting IE6
 	xhr.onreadystatechange = onchange;
 	xhr.open(method, url, true);
+	if (supportsHTMLRequest) xhr.responseType = 'document';
 	xhr.send(sendText);
 	function onchange() {
 		if (xhr.readyState != 4) return;
@@ -789,8 +814,36 @@ return new Future(function() { var r = this;
 		queueTask(onload); // Use delay to stop the readystatechange event interrupting other event handlers (on IE). 
 	}
 	function onload() {
-		var doc = parseHTML(new String(xhr.responseText), details.url);
-		r.accept(doc);
+		var doc;
+		if (supportsHTMLRequest) {
+			var pseudoDoc = doc = xhr.response;
+			forEach($$('script', pseudoDoc), function(node) {
+				if (!node.type || /^text\/javascript$/i.test(node.type)) node.type = "text/javascript?disabled";
+			});
+
+			var baseURL = URL(url);
+	
+			function resolveURLs(tag, attrName) { 
+				forEach($$(tag, pseudoDoc), function(el) {
+					var relURL = el.getAttribute(attrName);
+					if (relURL == null) return;
+					var mod = relURL.charAt(0);
+					var absURL =
+						('' == mod) ? relURL : // empty, but not null
+						('#' == mod) ? relURL : // NOTE anchor hrefs aren't normalized
+						('?' == mod) ? relURL : // NOTE query hrefs aren't normalized
+						baseURL.resolve(relURL);
+					if (absURL !== relURL) el.setAttribute(attrName, absURL);
+				});
+			}
+			each(hrefAttrs, resolveURLs);
+			each(srcAttrs, resolveURLs);
+			r.accept(doc);
+		}
+		else {
+			var doc = parseHTML(new String(xhr.responseText), details.url); // TODO should parseHTML be async?
+			r.accept(doc);
+		}
 	}
 });
 }
@@ -1191,8 +1244,12 @@ decorate: function(decorDocument, decorURL) {
 	},
 	function() { return scriptQueue.empty(); }, // FIXME this should be in mergeHead
 	function() {
-		mergeElement(document.body, decorDocument.body);
 		var contentStart = document.body.firstChild;
+		var decorEnd = document.createElement('plaintext');
+		decorEnd.setAttribute('style', 'display: none;');
+		document.body.insertBefore(decorEnd, contentStart);
+
+		mergeElement(document.body, decorDocument.body);
 		decor_insertBody(decorDocument);
 		notify({
 			module: "decor",
@@ -1209,29 +1266,12 @@ decorate: function(decorDocument, decorURL) {
 				node: decorDocument
 			});
 		});
-		var decorEnd = document.createElement('plaintext');
-		decorEnd.setAttribute('style', 'display: none;');
-		document.body.insertBefore(decorEnd, contentStart);
 	},
 	function() { return scriptQueue.empty(); }
 
 	]);
 
 	// NOTE decorate() returns now. The following functions are hoisted
-	
-	function placeContent(content, beforeReplace, afterReplace) { // this should work for content from both internal and external documents
-		var srcBody = content.parentNode;
-		forSiblings ("starting", content, function(node) { 
-			if (node.id && (target = $id(node.id)) !== node) { // FIXME Safari 3 returns *last* element with matching ID so this always fails
-				// TODO compat check between node and target
-				if (beforeReplace) beforeReplace(node, target);
-				try { replaceNode(target, node); } // NOTE fails in IE <= 8 if node is still loading
-				catch (error) { return; }
-				if (afterReplace) afterReplace(node, target);
-			}
-			else try { srcBody.removeChild(node); } catch (error) {}
-		});
-	}
 	
 	function mergeElement(dst, src) { // TODO this removes all dst (= content) attrs and imports all src (= decor) attrs. Is this appropriate?
 		removeAttributes(dst);
@@ -1852,8 +1892,7 @@ function decor_insertBody(doc) {
 		dstBody.insertBefore(node, content);
 	});
 
-	if (content) forSiblings ("before", content, enableScripts);
-	else forSiblings("ending", dstBody.lastChild, enableScripts);
+	forSiblings ("before", content, enableScripts);
 	
 	function enableScripts(node) {
 		if (node.nodeType !== 1) return;
