@@ -901,7 +901,7 @@ parse: function(html, url) {
 	});
 	var iframe = document.createElement("iframe"),
 	    docHead = document.head;
-	iframe.name = "_decor";
+	iframe.name = "meeko-parser";
 	docHead.insertBefore(iframe, docHead.firstChild);
 	var iframeDoc = iframe.contentWindow.document;
 
