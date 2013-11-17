@@ -879,26 +879,8 @@ parse: function(html, url) {
 	if (!url) throw "URL must be specified";
 	var parser = this;
 	
-	// TODO disabling URLs would be faster if done with one regexp replace()
-	// prevent resources (<img>, <link>, etc) from loading in parsing context, by renaming @src, @href to @meeko-src, @meeko-href
-	var disableURLs = function(tag, attrName) {
-		var vendorAttrName = vendorPrefix + "-" + attrName;
-		html = html.replace(RegExp("<" + tag + "\\b[^>]*>", "ig"), function(tagString) {
-			return tagString.replace(RegExp("\\b" + attrName + "=", "i"), vendorAttrName + "=");
-		});
-	}
-	each(hrefAttrs, disableURLs);
-	each(srcAttrs, disableURLs);
-	
-	// disable <script>
-	// TODO currently handles script @type=""|"text/javascript"
-	// What about "application/javascript", etc??
-	html = html.replace(/<script\b[^>]*>/ig, function(tag) {
-		if (/\btype=['"]?text\/javascript['"]?(?=\s|\>)/i.test(tag)) {
-			return tag.replace(/\btype=['"]?text\/javascript['"]?(?=\s|\>)/i, 'type="text/javascript?disabled"');
-		}
-		return tag.replace(/\>$/, ' type="text/javascript?disabled">');
-	});
+	html = preparse(html);
+
 	var iframe = document.createElement("iframe"),
 	    docHead = document.head;
 	iframe.name = "meeko-parser";
@@ -955,6 +937,31 @@ parse: function(html, url) {
 
 }); // end HTMLParser prototype
 
+
+function preparse(html) {
+	// TODO disabling URLs would be faster if done with one regexp replace()
+	// prevent resources (<img>, <link>, etc) from loading in parsing context, by renaming @src, @href to @meeko-src, @meeko-href
+	function disableURLs(tag, attrName) {
+		var vendorAttrName = vendorPrefix + "-" + attrName;
+		html = html.replace(RegExp("<" + tag + "\\b[^>]*>", "ig"), function(tagString) {
+			return tagString.replace(RegExp("\\b" + attrName + "=", "i"), vendorAttrName + "=");
+		});
+	}
+	each(hrefAttrs, disableURLs);
+	each(srcAttrs, disableURLs);
+	
+	// disable <script>
+	// TODO currently handles script @type=""|"text/javascript"
+	// What about "application/javascript", etc??
+	html = html.replace(/<script\b[^>]*>/ig, function(tag) {
+		if (/\btype=['"]?text\/javascript['"]?(?=\s|\>)/i.test(tag)) {
+			return tag.replace(/\btype=['"]?text\/javascript['"]?(?=\s|\>)/i, 'type="text/javascript?disabled"');
+		}
+		return tag.replace(/\>$/, ' type="text/javascript?disabled">');
+	});
+
+	return html;
+}
 
 // TODO should these functions be exposed on `DOM`?
 var importDocument = document.importNode ? // NOTE returns a pseudoDoc
