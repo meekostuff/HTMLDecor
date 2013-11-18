@@ -72,6 +72,9 @@ if (window.name != "meeko-parser") (function() {
 })();
 else alert("Error: script was executed in " + window.name + " document context");
 </script>
+<script type="text/plain">
+alert('Error: script with type "text/plain" was treated as Javascript');
+</script>
 
 </body>
 </html>
