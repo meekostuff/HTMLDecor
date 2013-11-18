@@ -938,30 +938,71 @@ parse: function(html, url) {
 }); // end HTMLParser prototype
 
 
-function preparse(html) {
-	// TODO disabling URLs would be faster if done with one regexp replace()
-	// prevent resources (<img>, <link>, etc) from loading in parsing context, by renaming @src, @href to @meeko-src, @meeko-href
-	function disableURLs(tag, attrName) {
-		var vendorAttrName = vendorPrefix + "-" + attrName;
-		html = html.replace(RegExp("<" + tag + "\\b[^>]*>", "ig"), function(tagString) {
-			return tagString.replace(RegExp("\\b" + attrName + "=", "i"), vendorAttrName + "=");
-		});
-	}
-	each(hrefAttrs, disableURLs);
-	each(srcAttrs, disableURLs);
+var preparse = (function() {
 	
-	// disable <script>
-	// TODO currently handles script @type=""|"text/javascript"
-	// What about "application/javascript", etc??
-	html = html.replace(/<script\b[^>]*>/ig, function(tag) {
-		if (/\btype=['"]?text\/javascript['"]?(?=\s|\>)/i.test(tag)) {
-			return tag.replace(/\btype=['"]?text\/javascript['"]?(?=\s|\>)/i, 'type="text/javascript?disabled"');
-		}
-		return tag.replace(/\>$/, ' type="text/javascript?disabled">');
-	});
+var urlElts = [], urlAttrs = {};
+each(srcAttrs, prepareUrlAttr);
+each(hrefAttrs, prepareUrlAttr);
+var preparseRegex = new RegExp('(<)(' + urlElts.join('|') + '|\\/script|style|\\/style)(?=\\s|\\/?>)([^>]+)?(>)', 'ig');
 
-	return html;
+function prepareUrlAttr(tagName, attrName) {
+	urlElts.push(tagName);
+	var neutralAttrName = vendorPrefix + "-" + attrName;
+	urlAttrs[tagName] = {
+		// name: attrName,
+		// neutralName: neutralAttrName,
+		regex: new RegExp('\\s' + attrName + '=', 'i'),
+		neutralText: ' ' + neutralAttrName + '='
+	}
 }
+
+function preparse(html) { // neutralize URL attrs @src, @href, etc
+
+	var mode = 'html';
+	html = html.replace(preparseRegex, function(tagString, lt, tag, attrsString, gt) {
+		var tagName = lc(tag);
+		if (!attrsString) attrsString = '';
+		if (tagName === '/script') {
+			if (mode === 'script') mode = 'html';
+			return tagString;
+		}
+		if (tagName === '/style') {
+			if (mode === 'style') mode = 'html';
+			return tagString;
+		}
+		if (mode === 'script' || mode === 'style') {
+			return tagString;
+		}
+		if (tagName === 'style') {
+			mode = 'style';
+			return tagString;
+		}
+		var attrDesc = urlAttrs[tagName];
+		attrsString = attrsString.replace(attrDesc.regex, attrDesc.neutralText);
+		if (tagName === 'script') {
+			mode = 'script';
+			attrsString = disableScript(attrsString);
+		}
+		return lt + tag + attrsString + gt;
+	});
+	
+	return new String(html);
+	
+	function disableScript(attrsString) {
+		var hasType = false;
+		var attrs = attrsString.replace(/(\stype=)['"]?([^\s'"]*)['"]?(?=\s|$)/i, function(m, $1, $2) {
+			hasType = true;
+			var isJS = ($2 === '' || /^text\/javascript$/i.test($2));
+			return isJS ? $1 + '"text/javascript?disabled"' : m;
+		}); 
+		return hasType ? attrs : attrsString + ' type="text/javascript?disabled"';
+	}
+
+}
+
+return preparse;
+
+})();
 
 // TODO should these functions be exposed on `DOM`?
 var importDocument = document.importNode ? // NOTE returns a pseudoDoc
