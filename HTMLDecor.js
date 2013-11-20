@@ -822,22 +822,8 @@ return new Future(function() { var r = this;
 			});
 
 			var baseURL = URL(url);
-	
-			function resolveURLs(tag, attrName) { 
-				forEach($$(tag, pseudoDoc), function(el) {
-					var relURL = el.getAttribute(attrName);
-					if (relURL == null) return;
-					var mod = relURL.charAt(0);
-					var absURL =
-						('' == mod) ? relURL : // empty, but not null
-						('#' == mod) ? relURL : // NOTE anchor hrefs aren't normalized
-						('?' == mod) ? relURL : // NOTE query hrefs aren't normalized
-						baseURL.resolve(relURL);
-					if (absURL !== relURL) el.setAttribute(attrName, absURL);
-				});
-			}
-			each(hrefAttrs, resolveURLs);
-			each(srcAttrs, resolveURLs);
+			resolveAll(pseudoDoc, baseURL, false);
+
 			r.accept(doc);
 		}
 		else {
@@ -852,12 +838,79 @@ return HTMLLoader;
 
 })();
 
-var srcAttrs = {}, hrefAttrs = {};
-forEach(words("link@<href script@<src img@<src iframe@<src video@<src audio@<src source@<src a@href area@href q@cite blockquote@cite ins@cite del@cite form@action input@formaction button@formaction"), function(text) {
-	var m = text.split("@"), tag = m[0], attrName = m[1];
-	if (attrName.charAt(0) == '<') srcAttrs[tag] = attrName.substr(1);
-	else hrefAttrs[tag] = attrName;
+var urlAttrs = {};
+var testURL = 'test.html';
+/*
+  IE <= 7 auto resolves some URL attributes.
+  After setting the attribute to a relative URL you might only be able to read the absolute URL.
+  Because HTMLParser writes into an iframe where contentDocument.URL is about:blank or document.URL
+  relative URLs can be resolved to the wrong URL.
+  canResolve() helps to detect this auto resolve behavior.
+*/
+var canResolve = (function() { 
+	var a;
+	try {
+		a = document.createElement('<a href="' + testURL +'">');
+		return !!a && a.tagName === 'A';
+	}
+	catch(err) { return false; }
+})();
+
+forEach(words("link@<href script@<src img@<longDesc,<src iframe@<longDesc,<src object@<data embed@<src video@<src audio@<src source@<src input@formAction,<src button@formAction,<src a@href area@href q@cite blockquote@cite ins@cite del@cite form@action"), function(text) {
+	var m = text.split("@"), tagName = m[0], attrs = m[1], attrName;
+	var attrLookup = urlAttrs[tagName] = {};
+	forEach(attrs.split(','), function(attr) {
+		var fetch = false;
+		if (attr.charAt(0) === '<') {
+			fetch = true;
+			attr = attr.substr(1);
+		}
+		var testEl = document.createElement(tagName);
+		var supported = attr in testEl;
+		attr = lc(attr); // NOTE for longDesc, etc
+		var resolves = false;
+		if (!fetch && supported && canResolve) {
+			testEl = document.createElement('<' + tagName + ' ' + attr + '="' + testURL + '">');
+			resolves = testEl.getAttribute(attr) !== testURL;
+		}
+		var neutralize = supported && (fetch || resolves);
+		attrLookup[attr] = { // attrDesc
+			fetch: fetch,
+			supported: supported,
+			resolves: resolves,
+			neutralize: neutralize
+		}
+		attrName = attr;
+		isSrc = fetch;
+	});
 });
+
+function resolveAll(doc, baseURL, isNeutralized) {
+	each(urlAttrs, function(tag, attrList) {
+		var elts;
+		function getElts() {
+			if (!elts) elts = $$(tag, doc);
+			return elts;
+		}
+
+		each(attrList, function(attrName, desc) {
+			var neutralized = isNeutralized && desc.neutralize;
+			var srcAttrName = neutralized ? desc.neutralName : attrName;
+			forEach(getElts(), function(el) {
+				var relURL = el.getAttribute(srcAttrName);
+				if (relURL == null) return;
+				if (neutralized) el.removeAttribute(srcAttrName);
+				var mod = relURL.charAt(0);
+				var absURL =
+					('' == mod) ? relURL : // empty, but not null
+					('#' == mod) ? relURL : // NOTE anchor hrefs aren't normalized
+					('?' == mod) ? relURL : // NOTE query hrefs aren't normalized
+					baseURL.resolve(relURL);
+				if (neutralized || absURL !== relURL) el.setAttribute(attrName, absURL);
+			});
+		});
+	});
+}
 
 var parseHTML = function(html, url) {
 	var parser = new HTMLParser();
@@ -888,7 +941,7 @@ parse: function(html, url) {
 	var iframeDoc = iframe.contentWindow.document;
 
 	if (parser.prepare) isolate(function() { parser.prepare(iframeDoc) }); // WARN external code
-	iframeDoc.open();
+	iframeDoc.open('text/html', 'replace');
 	iframeDoc.write(html);
 	iframeDoc.close();
 
@@ -898,36 +951,22 @@ parse: function(html, url) {
 	
 	// TODO not really sure how to handle <base href="..."> already in doc.
 	// For now just honor them if present
-	var base;
+	var baseHref;
 	forEach ($$("base", iframeDoc.head), function(node) {
-		if (!node.getAttribute("href")) return;
-		base = iframeDoc.head.removeChild(node);
+		var href = node.getAttribute("href");
+		if (!href) return;
+		baseHref = href;
+		node.removeAttribute('href');
 	});
-	if (base) baseURL = URL(baseURL.resolve(base.getAttribute('href')));
-	
+	if (baseHref) baseURL = URL(baseURL.resolve(baseHref));
+
 	forEach($$("style", iframeDoc.body), function(node) { // TODO support <style scoped>
 		iframeDoc.head.appendChild(node);
 	});
 	var pseudoDoc = importDocument(iframeDoc);
 	docHead.removeChild(iframe);
 
-	function enableURLs(tag, attrName) { 
-		var vendorAttrName = vendorPrefix + "-" + attrName;
-		forEach($$(tag, pseudoDoc), function(el) {
-			var relURL = el.getAttribute(vendorAttrName);
-			if (relURL == null) return;
-			el.removeAttribute(vendorAttrName);
-			var mod = relURL.charAt(0);
-			var absURL =
-				('' == mod) ? relURL : // empty, but not null
-				('#' == mod) ? relURL : // NOTE anchor hrefs aren't normalized
-				('?' == mod) ? relURL : // NOTE query hrefs aren't normalized
-				baseURL.resolve(relURL);
-			el.setAttribute(attrName, absURL);
-		});
-	}
-	each(hrefAttrs, enableURLs);
-	each(srcAttrs, enableURLs);
+	resolveAll(pseudoDoc, baseURL, true);
 
 	// FIXME need warning for doc property mismatches between page and decor
 	// eg. charset, doc-mode, content-type, etc
@@ -940,21 +979,23 @@ parse: function(html, url) {
 
 var preparse = (function() {
 	
-var urlElts = [], urlAttrs = {};
-each(srcAttrs, prepareUrlAttr);
-each(hrefAttrs, prepareUrlAttr);
-var preparseRegex = new RegExp('(<)(' + urlElts.join('|') + '|\\/script|style|\\/style)(?=\\s|\\/?>)([^>]+)?(>)', 'ig');
+var urlElts = [];
 
-function prepareUrlAttr(tagName, attrName) {
-	urlElts.push(tagName);
-	var neutralAttrName = vendorPrefix + "-" + attrName;
-	urlAttrs[tagName] = {
-		// name: attrName,
-		// neutralName: neutralAttrName,
-		regex: new RegExp('\\s' + attrName + '=', 'i'),
-		neutralText: ' ' + neutralAttrName + '='
-	}
-}
+each(urlAttrs, function(tagName, attrList) {
+	var neutralize; // supported = false, fetch = false, resolves = false;
+	each(attrList, function(attrName, desc) {
+		neutralize = desc.neutralize;
+		var neutralAttrName = vendorPrefix + "-" + attrName;
+		extend(desc, {
+			regex: new RegExp('\\s' + attrName + '=', 'i'),
+			neutralName: neutralAttrName,
+			neutralText: ' ' + neutralAttrName + '='
+		});
+	});
+	if (neutralize) urlElts.push(tagName);
+});
+
+var preparseRegex = new RegExp('(<)(' + urlElts.join('|') + '|\\/script|style|\\/style)(?=\\s|\\/?>)([^>]+)?(>)', 'ig');
 
 function preparse(html) { // neutralize URL attrs @src, @href, etc
 
@@ -977,8 +1018,9 @@ function preparse(html) { // neutralize URL attrs @src, @href, etc
 			mode = 'style';
 			return tagString;
 		}
-		var attrDesc = urlAttrs[tagName];
-		attrsString = attrsString.replace(attrDesc.regex, attrDesc.neutralText);
+		each(urlAttrs[tagName], function(attrName, attrDesc) {
+			if (attrDesc.resolves || attrDesc.fetch && attrDesc.supported) attrsString = attrsString.replace(attrDesc.regex, attrDesc.neutralText);
+		});
 		if (tagName === 'script') {
 			mode = 'script';
 			attrsString = disableScript(attrsString);
@@ -1834,25 +1876,15 @@ function pageIn(oldDoc, newDoc) {
 			_resolveAttr(el, attrName);
 		}
 		
-		function resolveAll(root, tag, attr) {
-			forEach($$(tag, root), function(el) { resolveAttr(el, attr); });
-		}
-		
-		function resolveTree(root, inHead) {
-			var tag = tagName(root);
-			if (tag in hrefAttrs) resolveAttr(root, hrefAttrs[tag]);
-			if (tag in srcAttrs) resolveAttr(root, srcAttrs[tag]);
-			if (inHead) return;
-			each(hrefAttrs, function(tag, attr) { resolveAll(root, tag, attr); });
-			each(srcAttrs, function(tag, attr) { resolveAll(root, tag, attr); });
-		}
-		
 		forSiblings("after", getSelfMarker(), function(node) {
-			resolveTree(node, true);
-		});
-		forEach(decor.placeHolders, function(node) {
-			var tree = $(node.id);
-			resolveTree(tree, false);
+			switch (tagName(node)) {
+			case 'script':
+				resolveAttr(node, 'src');
+				break;
+			case 'link':
+				resolveAttr(node, 'href');
+				break;
+			}
 		});
 	}
 
