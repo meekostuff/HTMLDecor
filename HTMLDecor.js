@@ -86,6 +86,28 @@ extend(Meeko.stuff, {
 	uc: uc, lc: lc, forEach: forEach, every: every, words: words, each: each, extend: extend, config: config, trim: trim
 });
 
+
+/*
+ ### Logger (minimal implementation - can be over-ridden)
+ */
+var logger = Meeko.logger || (Meeko.logger = new function() {
+
+var levels = this.levels = words("none error warn info debug");
+
+forEach(levels, function(name, num) {
+	
+levels[name] = num;
+this[name] = !window.console && function() {} ||
+	console[name] && function() { if (num <= this.LOG_LEVEL) console[name].apply(console, arguments); } ||
+	function() { if (num <= this.LOG_LEVEL) console.log.apply(console, arguments); }
+
+}, this);
+
+this.LOG_LEVEL = levels[defaults['log_level']]; // DEFAULT
+
+}); // end logger defn
+
+
 /*
  ### Task queuing and isolation
  */
@@ -792,7 +814,7 @@ var supportsHTMLRequest = (function() { // FIXME more testing, especially Webkit
 		catch(err2) { return false; }
 	}
 
-	console.log('supportsHTMLRequest');
+	logger.info('supportsHTMLRequest');
 	return true;
 })();
 
@@ -1163,23 +1185,6 @@ extend(DOM, {
 
 
 polyfill();
-
-var logger = Meeko.logger || (Meeko.logger = new function() {
-
-var levels = this.levels = words("none error warn info debug");
-
-forEach(levels, function(name, num) {
-	
-levels[name] = num;
-this[name] = !window.console && function() {} ||
-	console[name] && function() { if (num <= this.LOG_LEVEL) console[name].apply(console, arguments); } ||
-	function() { if (num <= this.LOG_LEVEL) console.log.apply(console, arguments); }
-
-}, this);
-
-this.LOG_LEVEL = levels[defaults['log_level']]; // DEFAULT
-
-}); // end logger defn
 
 
 var decor = Meeko.decor = {};
