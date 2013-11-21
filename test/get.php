@@ -5,6 +5,7 @@
 <html>
 <head>
 <meta charset="UTF-8" />
+<title>get.php</title>
 <link rel="meeko-decor" type="text/html" href="decor/decor.html" />
 <link rel="stylesheet" href="normal.css" />
 <style type="text/css">
