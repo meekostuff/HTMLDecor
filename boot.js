@@ -598,17 +598,6 @@ if (bootOptions['capturing']) {
 document.write = document.writeln = document.open = document.close = function()  { throw 'document.write(), etc is incompatible with HTMLDecor'; }
 
 
-var timeout = bootOptions["hidden_timeout"];
-if (timeout > 0) {
-	Viewport.hide();
-	setTimeout(Viewport.unhide, timeout);
-}
-
-var log_index = logger.levels[bootOptions["log_level"]];
-if (log_index != null) logger.LOG_LEVEL = log_index;
-
-html5prepare(); // no doc arg means use document and add block element styles
-
 /*
 	The self-marker is inserted by HTMLDecor (if not already present)
 	to mark the head elements associated with the content document
@@ -622,6 +611,17 @@ selfMarker.rel = 'meeko-self';
 selfMarker.href = document.URL;
 document.head.insertBefore(selfMarker, bootScript.parentNode === document.head ? bootScript : document.head.firstChild);
 
+
+var timeout = bootOptions["hidden_timeout"];
+if (timeout > 0) {
+	Viewport.hide();
+	setTimeout(Viewport.unhide, timeout);
+}
+
+var log_index = logger.levels[bootOptions["log_level"]];
+if (log_index != null) logger.LOG_LEVEL = log_index;
+
+html5prepare(); // no doc arg means use document and add block element styles
 
 function config() {
 	Meeko.DOM.ready = domReady;
