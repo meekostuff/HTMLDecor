@@ -565,10 +565,12 @@ var copyAttributes = function(node, srcNode) { // implements srcNode.cloneNode(f
 }
 
 var removeAttributes = function(node) {
-	var attrs = node.attributes;
-	forEach(attrs, function(attr) {
-		if (!attr.specified) return;
-		node.removeAttribute(attr.name); // FIXME does this work for @class?
+	var attrs = [];
+	forEach(node.attributes, function(attr) {
+		if (attr.specified) attrs.push(attr.name);
+	});
+	forEach(attrs, function(attrName) {
+		node.removeAttribute(attrName); // FIXME does this work for @class?
 	});
 	return node;
 }
