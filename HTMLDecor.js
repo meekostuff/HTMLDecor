@@ -1242,6 +1242,8 @@ start: function(startOptions) {
 	function() {
 		return wait(function() { return !!document.body; });		
 	},
+
+	function() { resolveURLs(); },
 	
 	function() { // the order of normalize, decorate, pageIn depends on whether content is from external document or the default document
 		if (startOptions && startOptions.contentDocument) return pipe(null, [
@@ -1300,6 +1302,40 @@ start: function(startOptions) {
 	}
 	
 	]);
+
+	// start() returns now. The following are hoisted
+	
+	function resolveURLs() { // NOTE resolve URLs in landing page
+		// TODO could be merged with code in parseHTML
+		var baseURL = URL(document.URL);
+		function _resolveAttr(el, attrName) {
+			var relURL = el.getAttribute(attrName);
+			if (relURL == null) return;
+			var absURL = baseURL.resolve(relURL);
+			el.setAttribute(attrName, absURL);
+		}
+		
+		function resolveAttr(el, attrName) {
+			if (tagName(el) != 'script') return _resolveAttr(el, attrName);		
+			var scriptType = el.type;
+			var isJS = (!scriptType || /^text\/javascript/i.test(scriptType));
+			if (isJS) el.type = "text/javascript?complete"; // IE6 and IE7 will re-execute script if @src is modified (even to same path)
+			_resolveAttr(el, attrName);
+		}
+		
+		forSiblings("after", getSelfMarker(), function(node) {
+			switch (tagName(node)) {
+			case 'script':
+				resolveAttr(node, 'src');
+				break;
+			case 'link':
+				resolveAttr(node, 'href');
+				break;
+			}
+		});
+	}
+
+
 },
 
 decorate: function(decorDocument, decorURL) {
@@ -1734,6 +1770,7 @@ var pan = function(oldState, newState) {
 		separateHead(false, function(target) {
 			oldDoc.head.appendChild(target); // FIXME will need to use some of mergeHead()
 		});
+
 		each(decor.placeHolders, function(id, node) {
 			var target = $id(id);
 			replaceNode(target, node);
@@ -1790,7 +1827,9 @@ function pageIn(oldDoc, newDoc) {
 		if (newDoc) mergeHead(newDoc, false, function(target) {
 			if (oldDoc) oldDoc.head.appendChild(target);
 		});
-
+	},
+	
+	function() {
 		var decorEnd;
 		if (!newDoc) decorEnd = $$('plaintext')[0];
 		var afterInsertFu;
@@ -1833,8 +1872,6 @@ function pageIn(oldDoc, newDoc) {
 
 	function() { return scriptQueue.empty(); },
 	
-	function() { if (!newDoc) resolveDocURL(); },
-
 	function() { // after pageIn
 		notify({
 			module: "panner",
@@ -1860,36 +1897,6 @@ function pageIn(oldDoc, newDoc) {
 				if (afterReplace) afterReplace(node, target);
 			}
 			else try { srcBody.removeChild(node); } catch (error) {}
-		});
-	}
-
-	function resolveDocURL() { // NOTE resolve URLs in landing page
-		// TODO could be merged with code in parseHTML
-		var baseURL = URL(document.URL);
-		function _resolveAttr(el, attrName) {
-			var relURL = el.getAttribute(attrName);
-			if (relURL == null) return;
-			var absURL = baseURL.resolve(relURL);
-			el.setAttribute(attrName, absURL);
-		}
-		
-		function resolveAttr(el, attrName) {
-			if (tagName(el) != 'script') return _resolveAttr(el, attrName);		
-			var scriptType = el.type;
-			var isJS = (!scriptType || /^text\/javascript/i.test(scriptType));
-			if (isJS) el.type = "text/javascript?complete"; // IE6 and IE7 will re-execute script if @src is modified (even to same path)
-			_resolveAttr(el, attrName);
-		}
-		
-		forSiblings("after", getSelfMarker(), function(node) {
-			switch (tagName(node)) {
-			case 'script':
-				resolveAttr(node, 'src');
-				break;
-			case 'link':
-				resolveAttr(node, 'href');
-				break;
-			}
 		});
 	}
 
