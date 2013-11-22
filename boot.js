@@ -546,7 +546,8 @@ getDocument: function() { // WARN this assumes HTMLDecor is ready
 return Capture;
 
 function toStartTag(el) { // WARN outerHTML not available before Firefox 11
-	return el.outerHTML.replace(/>.*$/, '>\n');
+	var html = el.outerHTML;
+	return html.substr(0, html.indexOf('>') + 1);
 }
 
 function getDocTypeTag(doc) { // WARN doctype not available before IE 9
