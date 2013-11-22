@@ -1842,7 +1842,7 @@ function pageIn(oldDoc, newDoc) {
 			if (contentStart) placeContent(
 				contentStart,
 				function(node, target) {
-					decor.placeHolders[target.id] = target;
+					if (!oldDoc) decor.placeHolders[target.id] = target;
 					notify({
 						module: "panner",
 						stage: "before",
