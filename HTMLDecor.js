@@ -1033,7 +1033,7 @@ each(urlAttrs, function(tagName, attrList) {
 	if (neutralize) urlElts.push(tagName);
 });
 
-var preparseRegex = new RegExp('(<)(' + urlElts.join('|') + '|\\/script|style|\\/style)(?=\\s|\\/?>)([^>]+)?(>)', 'ig');
+var preparseRegex = new RegExp('(<)(' + urlElts.join('|') + '|\\/script|style|\\/style|body)(?=\\s|\\/?>)([^>]+)?(>)', 'ig');
 
 function preparse(html) { // neutralize URL attrs @src, @href, etc
 
@@ -1054,6 +1054,10 @@ function preparse(html) { // neutralize URL attrs @src, @href, etc
 		}
 		if (tagName === 'style') {
 			mode = 'style';
+			return tagString;
+		}
+		if (tagName === 'body') {
+			tagString = lt + tag + attrsString + ' style="display: none;"' + gt;
 			return tagString;
 		}
 		each(urlAttrs[tagName], function(attrName, attrDesc) {
@@ -1423,6 +1427,7 @@ decorate: function(decorDocument, decorURL) {
 	function mergeElement(dst, src) { // TODO this removes all dst (= content) attrs and imports all src (= decor) attrs. Is this appropriate?
 		removeAttributes(dst);
 		copyAttributes(dst, src);
+		dst.removeAttribute('style'); // FIXME is this appropriate? There should at least be a warning
 	}
 
 }
