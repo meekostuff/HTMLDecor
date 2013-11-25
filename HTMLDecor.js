@@ -846,12 +846,12 @@ return new Future(function() { var r = this;
 			});
 
 			var baseURL = URL(url);
-			resolveAll(pseudoDoc, baseURL, false);
-
+			var mustResolve = !(details.mustResolve === false); // WARN mustResolve is true unless explicitly false
+			resolveAll(mustResolve ? pseudoDoc : pseudoDoc.head, baseURL, false, mustResolve);
 			r.accept(doc);
 		}
 		else {
-			var doc = parseHTML(new String(xhr.responseText), details.url); // TODO should parseHTML be async?
+			var doc = parseHTML(new String(xhr.responseText), details); // TODO should parseHTML be async?
 			r.accept(doc);
 		}
 	}
@@ -909,7 +909,10 @@ forEach(words("link@<href script@<src img@<longDesc,<src iframe@<longDesc,<src o
 	});
 });
 
-function resolveAll(doc, baseURL, isNeutralized) {
+function resolveAll(doc, baseURL, isNeutralized, mustResolve) { // NOTE mustResolve is true unless explicitly `false`
+
+	mustResolve = !(mustResolve === false); 
+
 	each(urlAttrs, function(tag, attrList) {
 		var elts;
 		function getElts() {
@@ -917,28 +920,39 @@ function resolveAll(doc, baseURL, isNeutralized) {
 			return elts;
 		}
 
+		var force = !!mustResolve || tag === 'script';
+
 		each(attrList, function(attrName, desc) {
 			var neutralized = isNeutralized && desc.neutralize;
+
+			if (!neutralized && !force) return; // if not neutralized and don't have to resolve then don't
+
 			var srcAttrName = neutralized ? desc.neutralName : attrName;
 			forEach(getElts(), function(el) {
 				var relURL = el.getAttribute(srcAttrName);
 				if (relURL == null) return;
 				if (neutralized) el.removeAttribute(srcAttrName);
-				var mod = relURL.charAt(0);
-				var absURL =
-					('' == mod) ? relURL : // empty, but not null
-					('#' == mod) ? relURL : // NOTE anchor hrefs aren't normalized
-					('?' == mod) ? relURL : // NOTE query hrefs aren't normalized
-					baseURL.resolve(relURL);
-				if (neutralized || absURL !== relURL) el.setAttribute(attrName, absURL);
+				var finalURL = relURL;
+				if (force) switch (relURL.charAt(0)) {
+				
+					case '': // empty, but not null
+					case '#': // NOTE anchor hrefs aren't normalized
+					case '?': // NOTE query hrefs aren't normalized
+						break;
+					
+					default:
+						finalURL = baseURL.resolve(relURL);
+						break;
+				}
+				if (neutralized || finalURL !== relURL) el.setAttribute(attrName, finalURL);
 			});
 		});
 	});
 }
 
-var parseHTML = function(html, url) {
+var parseHTML = function(html, details) {
 	var parser = new HTMLParser();
-	return parser.parse(html, url);
+	return parser.parse(html, details);
 }
 
 var HTMLParser = (function() {
@@ -952,10 +966,11 @@ var HTMLParser = function() { // TODO should this receive options like HTMLLoade
 
 extend(HTMLParser.prototype, {
 
-parse: function(html, url) {
+parse: function(html, details) {
+	var url = details.url;
 	if (!url) throw "URL must be specified";
 	var parser = this;
-	
+
 	html = preparse(html);
 
 	var iframe = document.createElement("iframe"),
@@ -990,8 +1005,7 @@ parse: function(html, url) {
 	var pseudoDoc = importDocument(iframeDoc);
 	docHead.removeChild(iframe);
 
-	resolveAll(pseudoDoc, baseURL, true);
-
+	resolveAll(pseudoDoc, baseURL, true, details.mustResolve);
 	// FIXME need warning for doc property mismatches between page and decor
 	// eg. charset, doc-mode, content-type, etc
 	return pseudoDoc;
@@ -1325,7 +1339,7 @@ start: function(startOptions) {
 			_resolveAttr(el, attrName);
 		}
 		
-		forSiblings("after", getSelfMarker(), function(node) {
+		forSiblings("starting", document.head.firstChild, function(node) {
 			switch (tagName(node)) {
 			case 'script':
 				resolveAttr(node, 'src');
@@ -1678,6 +1692,7 @@ panner.options = {
 	duration: 0,
 	load: function(method, url, data, details) {
 		var loader = new HTMLLoader(panner.options);
+		details.mustResolve = false;
 		return loader.load(method, url, data, details);
 	}
 	/* The following options are also available *
