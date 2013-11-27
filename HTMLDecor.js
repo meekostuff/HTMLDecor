@@ -840,19 +840,13 @@ return new Future(function() { var r = this;
 	function onload() {
 		var doc;
 		if (supportsHTMLRequest) {
-			var pseudoDoc = doc = xhr.response;
-			forEach($$('script', pseudoDoc), function(node) {
-				if (!node.type || /^text\/javascript$/i.test(node.type)) node.type = "text/javascript?disabled";
-			});
-
-			var baseURL = URL(url);
-			var mustResolve = !(details.mustResolve === false); // WARN mustResolve is true unless explicitly false
-			resolveAll(mustResolve ? pseudoDoc : pseudoDoc.head, baseURL, false, mustResolve);
+			var doc = xhr.response;
+			prenormalize(doc, details);
 			r.accept(doc);
 		}
 		else {
-			var doc = parseHTML(new String(xhr.responseText), details); // TODO should parseHTML be async?
-			r.accept(doc);
+			var parserFu = parseHTML(new String(xhr.responseText), details); // TODO should parseHTML be async?
+			r.resolve(parserFu);
 		}
 	}
 });
@@ -881,7 +875,7 @@ var canResolve = (function() {
 })();
 
 forEach(words("link@<href script@<src img@<longDesc,<src iframe@<longDesc,<src object@<data embed@<src video@<src audio@<src source@<src input@formAction,<src button@formAction,<src a@href area@href q@cite blockquote@cite ins@cite del@cite form@action"), function(text) {
-	var m = text.split("@"), tagName = m[0], attrs = m[1], attrName;
+	var m = text.split("@"), tagName = m[0], attrs = m[1];
 	var attrLookup = urlAttrs[tagName] = {};
 	forEach(attrs.split(','), function(attr) {
 		var fetch = false;
@@ -904,8 +898,6 @@ forEach(words("link@<href script@<src img@<longDesc,<src iframe@<longDesc,<src o
 			resolves: resolves,
 			neutralize: neutralize
 		}
-		attrName = attr;
-		isSrc = fetch;
 	});
 });
 
@@ -950,6 +942,24 @@ function resolveAll(doc, baseURL, isNeutralized, mustResolve) { // NOTE mustReso
 	});
 }
 
+function prenormalize(doc, details) { // NOTE normalize natively parsed documents
+	polyfill(doc);
+
+	forEach($$('script', doc), function(node) {
+		if (!node.type || /^text\/javascript$/i.test(node.type)) node.type = "text/javascript?disabled";
+	});
+
+	forEach($$("style", doc.body), function(node) { // TODO support <style scoped>
+		doc.head.appendChild(node);
+	});
+
+	var baseURL = URL(details.url);
+	var mustResolve = !(details.mustResolve === false); // WARN mustResolve is true unless explicitly false
+	resolveAll(mustResolve ? doc : doc.head, baseURL, false, mustResolve);
+
+	return doc;	
+}
+
 var parseHTML = function(html, details) {
 	var parser = new HTMLParser();
 	return parser.parse(html, details);
@@ -964,56 +974,90 @@ var HTMLParser = function() { // TODO should this receive options like HTMLLoade
 	return new HTMLParser();
 }
 
-extend(HTMLParser.prototype, {
+var supportsNativeParser = (function() {
 
-parse: function(html, details) {
-	var url = details.url;
-	if (!url) throw "URL must be specified";
-	var parser = this;
+	try {
+		var doc = (new DOMParser).parseFromString('', 'text/html');
+		return !!doc;
+	}
+	catch(err) { return false; }
 
-	html = preparse(html);
+})();
 
-	var iframe = document.createElement("iframe"),
-	    docHead = document.head;
-	iframe.name = "meeko-parser";
-	docHead.insertBefore(iframe, docHead.firstChild);
-	var iframeDoc = iframe.contentWindow.document;
+function nativeParser(html, details) {
 
-	if (parser.prepare) isolate(function() { parser.prepare(iframeDoc) }); // WARN external code
-	iframeDoc.open('text/html', 'replace');
-	iframeDoc.write(html);
-	iframeDoc.close();
-
-	polyfill(iframeDoc);
-
-	var baseURL = URL(url);
+	return pipe(null, [
+		
+	function() {
+		var doc = (new DOMParser).parseFromString(html, 'text/html');
+		prenormalize(doc, details);
+		return doc;		
+	}
 	
-	// TODO not really sure how to handle <base href="..."> already in doc.
-	// For now just honor them if present
-	var baseHref;
-	forEach ($$("base", iframeDoc.head), function(node) {
-		var href = node.getAttribute("href");
-		if (!href) return;
-		baseHref = href;
-		node.removeAttribute('href');
-	});
-	if (baseHref) baseURL = URL(baseURL.resolve(baseHref));
+	]);
 
-	forEach($$("style", iframeDoc.body), function(node) { // TODO support <style scoped>
-		iframeDoc.head.appendChild(node);
-	});
-	var pseudoDoc = importDocument(iframeDoc);
-	docHead.removeChild(iframe);
-
-	resolveAll(pseudoDoc, baseURL, true, details.mustResolve);
-	// FIXME need warning for doc property mismatches between page and decor
-	// eg. charset, doc-mode, content-type, etc
-	return pseudoDoc;
 }
 
+function iframeParser(html, details) {
+	var parser = this;
+	
+	return pipe(null, [
+	
+	function() {
+		html = preparse(html);
 
-}); // end HTMLParser prototype
+		var iframe = document.createElement("iframe");
+		iframe.name = "meeko-parser";
+		var head = document.head;
+		head.insertBefore(iframe, head.firstChild);
+		var iframeDoc = iframe.contentWindow.document;
+	
+		if (parser.prepare) isolate(function() { parser.prepare(iframeDoc); }); // WARN external code
+		iframeDoc.open('text/html', 'replace');
+		
+		var bodyIndex = html.search(/<body(?=\s|>)/);
+		bodyIndex = html.indexOf('>', bodyIndex) + 1;
 
+		iframeDoc.write(html.substr(0, bodyIndex));
+		iframeDoc.close();
+
+		polyfill(iframeDoc);
+
+		var baseURL = URL(details.url);
+		
+		// TODO not really sure how to handle <base href="..."> already in doc.
+		// For now just honor them if present
+		// TODO also not sure how to handle <base target="...">, etc
+		var baseHref;
+		forEach ($$("base", iframeDoc.head), function(node) {
+			var href = node.getAttribute("href");
+			if (!href) return;
+			baseHref = href;
+			node.removeAttribute('href');
+		});
+		if (baseHref) baseURL = URL(baseURL.resolve(baseHref));
+
+		var doc = importDocument(iframeDoc);
+	
+		document.head.removeChild(iframe);
+
+		doc.body.innerHTML = '<wbr />' + html.substr(bodyIndex); // one simple trick to get IE <= 8 to behave
+		doc.body.removeChild(doc.body.firstChild);
+
+		forEach($$("style", doc.body), function(node) { // TODO support <style scoped>
+			doc.head.appendChild(node);
+		});
+
+		resolveAll(doc, baseURL, true, details.mustResolve);
+		// FIXME need warning for doc property mismatches between page and decor
+		// eg. charset, doc-mode, content-type, etc
+	
+		return doc;
+	}
+
+	]);	
+	
+}
 
 var preparse = (function() {
 	
@@ -1033,7 +1077,7 @@ each(urlAttrs, function(tagName, attrList) {
 	if (neutralize) urlElts.push(tagName);
 });
 
-var preparseRegex = new RegExp('(<)(' + urlElts.join('|') + '|\\/script|style|\\/style|body)(?=\\s|\\/?>)([^>]+)?(>)', 'ig');
+var preparseRegex = new RegExp('(<)(' + urlElts.join('|') + '|\\/script|style|\\/style)(?=\\s|\\/?>)([^>]+)?(>)', 'ig');
 
 function preparse(html) { // neutralize URL attrs @src, @href, etc
 
@@ -1054,10 +1098,6 @@ function preparse(html) { // neutralize URL attrs @src, @href, etc
 		}
 		if (tagName === 'style') {
 			mode = 'style';
-			return tagString;
-		}
-		if (tagName === 'body') {
-			tagString = lt + tag + attrsString + ' style="display: none;"' + gt;
 			return tagString;
 		}
 		each(urlAttrs[tagName], function(attrName, attrDesc) {
@@ -1088,13 +1128,15 @@ return preparse;
 
 })();
 
+
 // TODO should these functions be exposed on `DOM`?
 var importDocument = document.importNode ? // NOTE returns a pseudoDoc
 function(srcDoc) {
-	var docEl = document.importNode(srcDoc.documentElement, true);
 	var doc = createDocument();
+	var docEl = document.importNode(srcDoc.documentElement, true);
 	doc.appendChild(docEl);
 	polyfill(doc);
+
 	// WARN sometimes IE9 doesn't read the content of inserted <style>
 	forEach($$("style", doc), function(node) {
 		if (node.styleSheet && node.styleSheet.cssText == "") node.styleSheet.cssText = node.innerHTML;		
@@ -1103,8 +1145,10 @@ function(srcDoc) {
 	return doc;
 } :
 function(srcDoc) {
+	var doc = createDocument();
+
 	var docEl = importNode(srcDoc.documentElement),
-	    docHead = importNode(srcDoc.head),
+		docHead = importNode(srcDoc.head),
 		docBody = importNode(srcDoc.body);
 
 	docEl.appendChild(docHead);
@@ -1116,20 +1160,22 @@ function(srcDoc) {
 
 	docEl.appendChild(docBody);
 	
-	var doc = createDocument();
 	doc.appendChild(docEl);
 	polyfill(doc);
 
 	/*
-	 * WARN on IE6 `element.innerHTML = ...` will drop all leading <script>'s
+	 * WARN on IE6 `element.innerHTML = ...` will drop all leading <script> and <style>
 	 * Work-around this by prepending some benign element to the src <body>
 	 * and removing it from the dest <body> after the copy is done
 	 */
-	var srcBody = srcDoc.body;
-	// FIXME why can't we just use srcBody.cloneNode(true)??
+	// NOTE we can't just use srcBody.cloneNode(true) because html5shiv doesn't work
 	if (HTMLParser.prototype.prepare) HTMLParser.prototype.prepare(doc); // TODO maybe this should be in createDocument
+
+	var srcBody = srcDoc.body;
 	srcBody.insertBefore(srcDoc.createElement('wbr'), srcBody.firstChild);
-	docBody.innerHTML = srcDoc.body.innerHTML; 
+
+	var html = srcBody.innerHTML; // NOTE timing the innerHTML getter and setter showed that all the overhead is in the iframe
+	docBody.innerHTML = html; // setting innerHTML in the pseudoDoc has minimal overhead.
 
 	docBody.removeChild(docBody.firstChild); // TODO assert firstChild.tagName == 'wbr'
 
@@ -1143,6 +1189,10 @@ function(srcNode) {
 } :
 composeNode; 
 
+
+extend(HTMLParser.prototype, {
+	parse: supportsNativeParser ? nativeParser : iframeParser
+});
 
 return HTMLParser;
 
