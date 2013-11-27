@@ -31,7 +31,7 @@ var Meeko = window.Meeko || (window.Meeko = {});
 var document = window.document;
 
 function each(object, fn, context) { // WARN doesn't check hasOwnProperty()
-	for (slot in object) fn.call(context, slot, object[slot], object);
+	for (var slot in object) fn.call(context, slot, object[slot], object);
 }
 
 function some(a, fn, context) { 
@@ -69,7 +69,8 @@ this._log = function(data) {
         if (this.write) this.write(data);
 }
 
-this.startTime = +(new Date), padding = "      ";
+this.startTime = +(new Date);
+var padding = "      ";
 
 this.write = (window.console) && function(data) { 
 	var offset = padding + (data.timeStamp - this.startTime), 
