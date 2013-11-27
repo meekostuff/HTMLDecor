@@ -27,6 +27,10 @@ Meeko.panner.config({
 </script>
 </head>
 <body>
+<style>
+.style-in-body-fail { display: none; }
+</style>
+
 <h1>HTMLDecor Tests</h1>
 <nav>
 <ul>
@@ -44,6 +48,11 @@ Meeko.panner.config({
 <div class="style-fail" style="background-color: red;">
 If you can see this then &lt;style&gt; elements
 from the decor document aren't being imported.
+</div> 
+
+<div class="style-in-body-fail" style="background-color: red;">
+If you can see this then &lt;style&gt; elements
+in the &lt;body&gt; of the decor document aren't being imported.
 </div> 
 
 <div id="decor-header" class="section">
