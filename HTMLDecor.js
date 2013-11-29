@@ -48,12 +48,9 @@ var remove = function(a, item) { // remove the first instance of `item` in `a`
 }
 var forEach = function(a, fn, context) { for (var n=a.length, i=0; i<n; i++) fn.call(context, a[i], i, a); }
 
-var every = function(a, fn, context) { 
-	for (var n=a.length, i=0; i<n; i++) {
-		if (!fn.call(context, a[i], i, a)) return false; 
-	}
-	return true;
-}
+var some = function(a, fn, context) { for (var n=a.length, i=0; i<n; i++) { if (fn.call(context, a[i], i, a)) return true; } return false; }
+
+var every = function(a, fn, context) { for (var n=a.length, i=0; i<n; i++) { if (!fn.call(context, a[i], i, a)) return false; } return true; }
 
 var words = function(text) { return text.split(/\s+/); }
 
@@ -83,7 +80,7 @@ function(str) { return str.replace(/^\s+/, '').replace(/\s+$/, ''); }
 
 if (!Meeko.stuff) Meeko.stuff = {}
 extend(Meeko.stuff, {
-	uc: uc, lc: lc, forEach: forEach, every: every, words: words, each: each, extend: extend, config: config, trim: trim
+	uc: uc, lc: lc, forEach: forEach, some: some, every: every, words: words, each: each, extend: extend, config: config, trim: trim
 });
 
 
@@ -823,7 +820,7 @@ var supportsHTMLRequest = (function() { // FIXME more testing, especially Webkit
 var doRequest = function(method, url, sendText, details) {
 return new Future(function() { var r = this;
 	var xhr = window.XMLHttpRequest ?
-		new XMLHttpRequest() :
+		new XMLHttpRequest :
 		new ActiveXObject("Microsoft.XMLHTTP"); // TODO stop supporting IE6
 	xhr.onreadystatechange = onchange;
 	xhr.open(method, url, true);
@@ -1642,38 +1639,7 @@ replace: function(url) {
 	});
 },
 
-navigate: function(options) {
-return new Future(function() { var r = this;
-	var url = options.url;
-	var decorURL = decor.options.lookup(url);
-	if (typeof decorURL !== "string" || URL(document.URL).resolve(decorURL) !== decor.current.url) {
-		var modifier = options.replace ? "replace" : "assign";
-		location[modifier](url);
-		r.accept();	// TODO should this be an error??
-		return;
-	}
-
-	var oldState = panner.state;
-	var newState = panner.createState({ // FIXME
-		url: url
-	});
-
-	pan(oldState, newState)
-	.done(function(msg) {
-		var oURL = URL(newState.url);
-		scrollToId(oURL.hash && oURL.hash.substr(1));
-
-		panner.saveScroll();
-
-		r.accept(msg);
-	});
-	
-	// Change document.URL
-	// FIXME When should this happen?
-	panner.commitState(newState, options.replace);
-
-});
-},
+navigate: history.pushState ? navigate : defaultNavigate,
 
 bfcache: {},
 
@@ -1723,6 +1689,48 @@ restoreScroll: function(state) {
 }
 
 });
+
+function navigate(options) {
+return new Future(function() { var r = this;
+	var url = options.url;
+	var decorURL = decor.options.lookup(url);
+	if (typeof decorURL !== "string" || URL(document.URL).resolve(decorURL) !== decor.current.url) {
+		var modifier = options.replace ? "replace" : "assign";
+		location[modifier](url);
+		r.accept();	// TODO should this be an error??
+		return;
+	}
+
+	var oldState = panner.state;
+	var newState = panner.createState({ // FIXME
+		url: url
+	});
+
+	pan(oldState, newState)
+	.done(function(msg) {
+		var oURL = URL(newState.url);
+		scrollToId(oURL.hash && oURL.hash.substr(1));
+
+		panner.saveScroll();
+
+		r.accept(msg);
+	});
+	
+	// Change document.URL
+	// FIXME When should this happen?
+	panner.commitState(newState, options.replace);
+
+});
+}
+
+function defaultNavigate(options) {
+return new Future(function() { var r = this;
+	var url = options.url;			  
+	var modifier = options.replace ? "replace" : "assign";
+	location[modifier](url);
+	r.accept();
+});
+}
 
 /*
  Paging handlers are either a function, or an object with `before` and / or `after` listeners. 
