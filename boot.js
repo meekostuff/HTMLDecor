@@ -513,9 +513,9 @@ start: function() {
 		if (node === bootScript) return false; // boot-script is ok. TODO should be last node in <head>
 		if (node.tagName === 'TITLE' && node.firstChild === null) return false; // IE6 adds a dummy <title>
 		if (node.tagName !== 'META') return true; 
-		if (node.httpEquiv) return false; // <meta http-equiv> are ok
+		if (node.httpEquiv || node.getAttribute('charset')) return false; // <meta http-equiv> are ok
 		return true;
-	})) throw 'When capturing, only <meta http-equiv> nodes may precede boot-script';
+	})) throw 'When capturing, only <meta http-equiv> or <meta charset> nodes may precede boot-script';
 	capturedHTML += getDocTypeTag(document); // WARN relies on document.doctype
 	capturedHTML += toStartTag(document.documentElement); // WARN relies on element.outerHTML
 	capturedHTML += toStartTag(document.head);
