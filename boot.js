@@ -13,7 +13,7 @@ var defaults = { // NOTE defaults also define the type of the associated config 
 	"hidden_timeout": 3000,
 	"polling_interval": 50,
 	"html5_block_elements": 'article aside figcaption figure footer header hgroup main nav section',
-	"html5_inline_elements": 'abbr mark output time',
+	"html5_inline_elements": 'abbr mark output time audio video picture',
 	"htmldecor_script": '{bootscriptdir}HTMLDecor.js',
 	"config_script": '{bootscriptdir}config.js'
 }
@@ -97,7 +97,7 @@ getItem: function(sKey) { // See https://developer.mozilla.org/en-US/docs/DOM/St
 
 }
 
-var reloadOptions = Meeko.reloadOptions = window.sessionStorage && (function() {
+var reloadOptions = Meeko.reloadOptions = window.sessionStorage && window.JSON && (function() {
 
 var optionsKey = 'Meeko.reloadOptions';
 var text = sessionStorage.getItem(optionsKey);
