@@ -444,7 +444,7 @@ extend(Future, {
 /*
  ### DOM utility functions
  */
-var tagName = function(el) { return el.nodeType == 1 ? lc(el.tagName) : ""; }
+var tagName = function(el) { return el && el.nodeType === 1 ? lc(el.tagName) : ""; }
 
 var $id = function(id, doc) {
 	if (!id) return;
@@ -871,7 +871,7 @@ var canResolve = (function() {
 	catch(err) { return false; }
 })();
 
-forEach(words("link@<href script@<src img@<longDesc,<src iframe@<longDesc,<src object@<data embed@<src video@<src audio@<src source@<src input@formAction,<src button@formAction,<src a@href area@href q@cite blockquote@cite ins@cite del@cite form@action"), function(text) {
+forEach(words("link@<href script@<src img@<longDesc,<src iframe@<longDesc,<src object@<data embed@<src video@<src,<poster audio@<src source@<src input@formAction,<src button@formAction,<src a@href area@href q@cite blockquote@cite ins@cite del@cite form@action"), function(text) {
 	var m = text.split("@"), tagName = m[0], attrs = m[1];
 	var attrLookup = urlAttrs[tagName] = {};
 	forEach(attrs.split(','), function(attr) {
@@ -898,7 +898,21 @@ forEach(words("link@<href script@<src img@<longDesc,<src iframe@<longDesc,<src o
 	});
 });
 
-function resolveAll(doc, baseURL, isNeutralized, mustResolve) { // NOTE mustResolve is true unless explicitly `false`
+/*
+	IE9 swallows <source> elements that aren't inside <video> or <audio>
+	See http://www.w3.org/community/respimg/2012/03/06/js-implementation-problem-with/
+*/
+var IE9_SOURCE_ELEMENT_BUG = (function() { 
+	var frag = document.createDocumentFragment();
+	var doc = frag.createElement ? frag : document;
+	doc.createElement('source'); // See html5shiv. Already done by previous code, but IE <= 7 need this to be done on the fragment
+	var div = doc.createElement('div');
+	frag.appendChild(div);
+	div.innerHTML = '<source />';
+	return 'source' !== tagName(div.firstChild);
+})();
+
+var resolveAll = function(doc, baseURL, isNeutralized, mustResolve) { // NOTE mustResolve is true unless explicitly `false`
 
 	mustResolve = !(mustResolve === false); 
 
@@ -938,6 +952,29 @@ function resolveAll(doc, baseURL, isNeutralized, mustResolve) { // NOTE mustReso
 		});
 	});
 }
+
+if (IE9_SOURCE_ELEMENT_BUG) {
+
+var _resolveAll = resolveAll;
+resolveAll = function(doc) {
+	
+	var elts = $$('img', doc);
+	for (var i=elts.length-1; i>=0; i--) {
+		var el = elts[i];
+		var realTag = el.getAttribute('meeko-tag');
+		if (realTag) {
+			el.removeAttribute('meeko-tag');
+			var realEl = doc.createElement(realTag);
+			copyAttributes(realEl, el);
+			el.parentNode.replaceChild(realEl, el);
+		}
+	}
+	
+	_resolveAll.apply(null, arguments);
+}
+
+} // end if IE9_SOURCE_ELEMENT_BUG
+
 
 function prenormalize(doc, details) { // NOTE normalize natively parsed documents
 	polyfill(doc);
@@ -1096,6 +1133,9 @@ function preparse(html) { // neutralize URL attrs @src, @href, etc
 		if (tagName === 'style') {
 			mode = 'style';
 			return tagString;
+		}
+		if (IE9_SOURCE_ELEMENT_BUG && tagName === 'source') {
+			tag = 'img meeko-tag="source"';
 		}
 		each(urlAttrs[tagName], function(attrName, attrDesc) {
 			if (attrDesc.resolves || attrDesc.fetch && attrDesc.supported) attrsString = attrsString.replace(attrDesc.regex, attrDesc.neutralText);
@@ -1320,7 +1360,7 @@ start: function(startOptions) {
 		function() {
 			return startOptions.contentDocument
 				.then(function(doc) {
-					if (panner.options.normalize) isolate(function() { panner.options.normalize(doc, { url: document.URL }); });				
+					if (panner.options.normalize) isolate(function() { panner.options.normalize(doc, { url: document.URL }); });
 					return pageIn(null, doc);
 				});
 		}
