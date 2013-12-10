@@ -871,7 +871,7 @@ var canResolve = (function() {
 	catch(err) { return false; }
 })();
 
-forEach(words("link@<href script@<src img@<longDesc,<src iframe@<longDesc,<src object@<data embed@<src video@<src,<poster audio@<src source@<src input@formAction,<src button@formAction,<src a@href area@href q@cite blockquote@cite ins@cite del@cite form@action"), function(text) {
+forEach(words("link@<href script@<src img@<longDesc,<src iframe@<longDesc,<src object@<data embed@<src video@<poster,<src audio@<src source@<src input@formAction,<src button@formAction,<src a@href area@href q@cite blockquote@cite ins@cite del@cite form@action"), function(text) {
 	var m = text.split("@"), tagName = m[0], attrs = m[1];
 	var attrLookup = urlAttrs[tagName] = {};
 	forEach(attrs.split(','), function(attr) {
@@ -901,6 +901,7 @@ forEach(words("link@<href script@<src img@<longDesc,<src iframe@<longDesc,<src o
 /*
 	IE9 swallows <source> elements that aren't inside <video> or <audio>
 	See http://www.w3.org/community/respimg/2012/03/06/js-implementation-problem-with/
+	Safari-4 also has this issue
 */
 var IE9_SOURCE_ELEMENT_BUG = (function() { 
 	var frag = document.createDocumentFragment();
@@ -908,8 +909,8 @@ var IE9_SOURCE_ELEMENT_BUG = (function() {
 	doc.createElement('source'); // See html5shiv. Already done by previous code, but IE <= 7 need this to be done on the fragment
 	var div = doc.createElement('div');
 	frag.appendChild(div);
-	div.innerHTML = '<source />';
-	return 'source' !== tagName(div.firstChild);
+	div.innerHTML = '<div><source /><div>';
+	return 'source' !== tagName(div.firstChild.firstChild);
 })();
 
 var resolveAll = function(doc, baseURL, isNeutralized, mustResolve) { // NOTE mustResolve is true unless explicitly `false`
