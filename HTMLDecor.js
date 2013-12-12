@@ -766,7 +766,11 @@ load: function(method, url, data, details) {
 	
 	return htmlLoader.request(method, url, data, details) // NOTE this returns the future that .then returns
 		.then(
-			function(doc) { if (htmlLoader.normalize) htmlLoader.normalize(doc, details); return doc; },
+			function(doc) {
+				if (htmlLoader.normalize) htmlLoader.normalize(doc, details);
+				if (details.isNeutralized) deneutralizeAll(doc);
+				return doc;
+			},
 			function(err) { logger.error(err); throw (err); }
 		);
 },
@@ -793,7 +797,7 @@ normalize: function(doc, details) {}
 
 });
 
-var supportsHTMLRequest = (function() { // FIXME more testing, especially Webkit
+var HTML_IN_XHR = (function() { // FIXME more testing, especially Webkit. Probably should use data-uri testing
 	if (!window.XMLHttpRequest) return false;
 	var xhr = new XMLHttpRequest;
 	if (!('responseType' in xhr)) return false;
@@ -813,7 +817,6 @@ var supportsHTMLRequest = (function() { // FIXME more testing, especially Webkit
 		catch(err2) { return false; }
 	}
 
-	logger.info('supportsHTMLRequest');
 	return true;
 })();
 
@@ -824,7 +827,7 @@ return new Future(function() { var r = this;
 		new ActiveXObject("Microsoft.XMLHTTP"); // TODO stop supporting IE6
 	xhr.onreadystatechange = onchange;
 	xhr.open(method, url, true);
-	if (supportsHTMLRequest) xhr.responseType = 'document';
+	if (HTML_IN_XHR) xhr.responseType = 'document';
 	xhr.send(sendText);
 	function onchange() {
 		if (xhr.readyState != 4) return;
@@ -836,7 +839,7 @@ return new Future(function() { var r = this;
 	}
 	function onload() {
 		var doc;
-		if (supportsHTMLRequest) {
+		if (HTML_IN_XHR) {
 			var doc = xhr.response;
 			prenormalize(doc, details);
 			r.accept(doc);
@@ -853,7 +856,45 @@ return HTMLLoader;
 
 })();
 
-var urlAttrs = {};
+/*
+	STAGING_DOCUMENT_IS_NEUTRAL indicates whether resource URLs - like img@src -
+	need to be neutralized so they don't start downloading until after the document is normalized. 
+	The normalize function might discard them in which case downloading is a waste. 
+*/
+
+var STAGING_DOCUMENT_IS_NEUTRAL = (function() {
+
+	try { var doc = document.implementation.createHTMLDocument(''); }
+	catch (error) { return false; } // IE <= 8
+	if (doc.URL !== document.URL) return true; // FF, Webkit, Chrome
+	var img = doc.createElement('img');
+	/*
+		Use a data-uri image to see if browser will try to fetch.
+		The smallest such image might be a 1x1 white gif,
+		see http://proger.i-forge.net/The_smallest_transparent_pixel/eBQ
+	*/
+	img.src = 'data:';
+	img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACwAAAAAAQABAAACAkQBADs=';
+	if (!img.complete) return true; // IE10+ 
+	return false; // IE9, Opera-12
+
+})();
+
+/*
+	IE9 swallows <source> elements that aren't inside <video> or <audio>
+	See http://www.w3.org/community/respimg/2012/03/06/js-implementation-problem-with/
+	Safari-4 also has this issue
+*/
+var IE9_SOURCE_ELEMENT_BUG = (function() { 
+	var frag = document.createDocumentFragment();
+	var doc = frag.createElement ? frag : document;
+	doc.createElement('source'); // See html5shiv
+	var div = doc.createElement('div');
+	frag.appendChild(div);
+	div.innerHTML = '<div><source /><div>';
+	return 'source' !== tagName(div.firstChild.firstChild);
+})();
+
 var testURL = 'test.html';
 /*
   IE <= 7 auto resolves some URL attributes.
@@ -871,7 +912,8 @@ var canResolve = (function() {
 	catch(err) { return false; }
 })();
 
-forEach(words("link@<href script@<src img@<longDesc,<src iframe@<longDesc,<src object@<data embed@<src video@<poster,<src audio@<src source@<src input@formAction,<src button@formAction,<src a@href area@href q@cite blockquote@cite ins@cite del@cite form@action"), function(text) {
+var urlAttrs = {};
+forEach(words("link@<href script@<src img@<longDesc,<src iframe@<longDesc,<src object@<data embed@<src video@<poster,<src audio@<src source@<src input@formAction,<src button@formAction,<src a@ping,href area@href q@cite blockquote@cite ins@cite del@cite form@action"), function(text) {
 	var m = text.split("@"), tagName = m[0], attrs = m[1];
 	var attrLookup = urlAttrs[tagName] = {};
 	forEach(attrs.split(','), function(attr) {
@@ -888,33 +930,31 @@ forEach(words("link@<href script@<src img@<longDesc,<src iframe@<longDesc,<src o
 			testEl = document.createElement('<' + tagName + ' ' + attr + '="' + testURL + '">');
 			resolves = testEl.getAttribute(attr) !== testURL;
 		}
-		var neutralize = supported && (fetch || resolves);
+		var neutralize = !STAGING_DOCUMENT_IS_NEUTRAL && supported && fetch;
+		var deref = supported && (fetch || resolves);
 		attrLookup[attr] = { // attrDesc
 			fetch: fetch,
 			supported: supported,
 			resolves: resolves,
-			neutralize: neutralize
+			neutralize: neutralize,
+			deref: deref
 		}
 	});
 });
 
-/*
-	IE9 swallows <source> elements that aren't inside <video> or <audio>
-	See http://www.w3.org/community/respimg/2012/03/06/js-implementation-problem-with/
-	Safari-4 also has this issue
-*/
-var IE9_SOURCE_ELEMENT_BUG = (function() { 
-	var frag = document.createDocumentFragment();
-	var doc = frag.createElement ? frag : document;
-	doc.createElement('source'); // See html5shiv. Already done by previous code, but IE <= 7 need this to be done on the fragment
-	var div = doc.createElement('div');
-	frag.appendChild(div);
-	div.innerHTML = '<div><source /><div>';
-	return 'source' !== tagName(div.firstChild.firstChild);
-})();
+var neutralProtocol = vendorPrefix + '-href:';
+var neutralProtocolLen = neutralProtocol.length;
+function neutralizeURL(url) {
+	return neutralProtocol + url;
+}
+function deneutralizeURL(url, tagName, attrName) {
+	var confirmed = url.indexOf(neutralProtocol) === 0;
+	if (confirmed) return url.substr(neutralProtocolLen);
+	logger.warn('Expected neutralized attribute: ' + tagName + '@' + attrName);
+	return url;
+}
 
 var resolveAll = function(doc, baseURL, isNeutralized, mustResolve) { // NOTE mustResolve is true unless explicitly `false`
-
 	mustResolve = !(mustResolve === false); 
 
 	each(urlAttrs, function(tag, attrList) {
@@ -924,18 +964,18 @@ var resolveAll = function(doc, baseURL, isNeutralized, mustResolve) { // NOTE mu
 			return elts;
 		}
 
-		var force = !!mustResolve || tag === 'script';
+		var force = !!mustResolve || tag === 'script'; // WARN scripts MUST be resolved because they stay in the page after panning
 
 		each(attrList, function(attrName, desc) {
-			var neutralized = isNeutralized && desc.neutralize;
+			var derefed = isNeutralized && desc.deref;
+			var neutralize = isNeutralized && desc.neutralize;
 
-			if (!neutralized && !force) return; // if not neutralized and don't have to resolve then don't
+			if (!derefed && !force) return; // if not neutralized and don't have to resolve then don't
 
-			var srcAttrName = neutralized ? desc.neutralName : attrName;
 			forEach(getElts(), function(el) {
-				var relURL = el.getAttribute(srcAttrName);
-				if (relURL == null) return;
-				if (neutralized) el.removeAttribute(srcAttrName);
+				var url = el.getAttribute(attrName);
+				if (url == null) return;
+				var relURL = (derefed) ? deneutralizeURL(url, tag, attrName) : trim(url);
 				var finalURL = relURL;
 				if (force) switch (relURL.charAt(0)) {
 				
@@ -948,7 +988,33 @@ var resolveAll = function(doc, baseURL, isNeutralized, mustResolve) { // NOTE mu
 						finalURL = baseURL.resolve(relURL);
 						break;
 				}
-				if (neutralized || finalURL !== relURL) el.setAttribute(attrName, finalURL);
+				if (neutralize) finalURL = neutralizeURL(finalURL);
+				if (finalURL !== url) el.setAttribute(attrName, finalURL);
+			});
+		});
+	});
+	return isNeutralized && !STAGING_DOCUMENT_IS_NEUTRAL;
+}
+
+var deneutralizeAll = function(doc) {
+
+	each(urlAttrs, function(tag, attrList) {
+		var elts;
+		function getElts() {
+			if (!elts) elts = $$(tag, doc);
+			return elts;
+		}
+
+		each(attrList, function(attrName, desc) {
+			var neutralized = desc.neutralize;
+
+			if (!neutralized) return;
+
+			forEach(getElts(), function(el) {
+				var url = el.getAttribute(attrName);
+				if (url == null) return;
+				var finalURL = deneutralizeURL(url, tag, attrName);
+				if (finalURL !== url) el.setAttribute(attrName, finalURL);
 			});
 		});
 	});
@@ -971,13 +1037,13 @@ resolveAll = function(doc) {
 		}
 	}
 	
-	_resolveAll.apply(null, arguments);
+	return _resolveAll.apply(null, arguments);
 }
 
 } // end if IE9_SOURCE_ELEMENT_BUG
 
 
-function prenormalize(doc, details) { // NOTE normalize natively parsed documents
+function prenormalize(doc, details) { // NOTE only for native parser
 	polyfill(doc);
 
 	forEach($$('script', doc), function(node) {
@@ -1009,7 +1075,7 @@ var HTMLParser = function() { // TODO should this receive options like HTMLLoade
 	return new HTMLParser();
 }
 
-var supportsNativeParser = (function() {
+var HTML_IN_DOMPARSER = (function() {
 
 	try {
 		var doc = (new DOMParser).parseFromString('', 'text/html');
@@ -1050,7 +1116,7 @@ function iframeParser(html, details) {
 		if (parser.prepare) isolate(function() { parser.prepare(iframeDoc); }); // WARN external code
 		iframeDoc.open('text/html', 'replace');
 		
-		var bodyIndex = html.search(/<body(?=\s|>)/);
+		var bodyIndex = html.search(/<body(?=\s|>)/); // FIXME assumes "<body" not in a script or style comment somewhere 
 		bodyIndex = html.indexOf('>', bodyIndex) + 1;
 
 		iframeDoc.write(html.substr(0, bodyIndex));
@@ -1083,10 +1149,10 @@ function iframeParser(html, details) {
 			doc.head.appendChild(node);
 		});
 
-		resolveAll(doc, baseURL, true, details.mustResolve);
+		details.isNeutralized = resolveAll(doc, baseURL, true, details.mustResolve);
 		// FIXME need warning for doc property mismatches between page and decor
 		// eg. charset, doc-mode, content-type, etc
-	
+
 		return doc;
 	}
 
@@ -1099,17 +1165,14 @@ var preparse = (function() {
 var urlElts = [];
 
 each(urlAttrs, function(tagName, attrList) {
-	var neutralize; // supported = false, fetch = false, resolves = false;
+	var deref = false;
 	each(attrList, function(attrName, desc) {
-		neutralize = desc.neutralize;
-		var neutralAttrName = vendorPrefix + "-" + attrName;
+		if (desc.deref) deref = true;
 		extend(desc, {
-			regex: new RegExp('\\s' + attrName + '=', 'i'),
-			neutralName: neutralAttrName,
-			neutralText: ' ' + neutralAttrName + '='
+			regex: new RegExp('(\\s)(' + attrName + ')\\s*=\\s*([\'"])?\\s*(?=\\S)', 'ig') // captures preSpace, attrName, quote. discards other space
 		});
 	});
-	if (neutralize) urlElts.push(tagName);
+	if (deref) urlElts.push(tagName);
 });
 
 var preparseRegex = new RegExp('(<)(' + urlElts.join('|') + '|\\/script|style|\\/style)(?=\\s|\\/?>)([^>]+)?(>)', 'ig');
@@ -1139,7 +1202,9 @@ function preparse(html) { // neutralize URL attrs @src, @href, etc
 			tag = 'img meeko-tag="source"';
 		}
 		each(urlAttrs[tagName], function(attrName, attrDesc) {
-			if (attrDesc.resolves || attrDesc.fetch && attrDesc.supported) attrsString = attrsString.replace(attrDesc.regex, attrDesc.neutralText);
+			if (attrDesc.deref) attrsString = attrsString.replace(attrDesc.regex, function(all, preSpace, attrName, quote) {
+				return preSpace + attrName + '=' + (quote || '') + neutralProtocol;
+			});
 		});
 		if (tagName === 'script') {
 			mode = 'script';
@@ -1147,7 +1212,7 @@ function preparse(html) { // neutralize URL attrs @src, @href, etc
 		}
 		return lt + tag + attrsString + gt;
 	});
-	
+
 	return new String(html);
 	
 	function disableScript(attrsString) {
@@ -1229,7 +1294,7 @@ composeNode;
 
 
 extend(HTMLParser.prototype, {
-	parse: supportsNativeParser ? nativeParser : iframeParser
+	parse: HTML_IN_DOMPARSER ? nativeParser : iframeParser
 });
 
 return HTMLParser;
