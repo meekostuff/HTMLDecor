@@ -28,7 +28,7 @@ When someone viewing your page clicks on a link to another page that uses the sa
 then AJAX updates the real content
 and `history.pushState()` updates the browser URL. 
 
-HTMLDecor.js is less than 10kB when minified and gzipped.
+HTMLDecor.js is around 10kB when minified and gzipped.
 
 To see it in action visit my [blog](http://meekostuff.net/blog/).
 Make sure you view the page source and check that it is just raw content.
