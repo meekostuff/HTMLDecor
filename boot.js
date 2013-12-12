@@ -533,8 +533,8 @@ getDocument: function() { // WARN this assumes HTMLDecor is ready
 					plaintext.parentNode.removeChild(plaintext);
 					
 					if (!/\s*<!DOCTYPE/i.test(html)) html = capturedHTML + html;
-					var doc = Meeko.DOM.parseHTML(new String(html), { url: document.URL, mustResolve: false });
-					r.accept(doc);
+					var fu = Meeko.DOM.parseHTML(new String(html), { url: document.URL, mustResolve: false });
+					r.resolve(fu);
 				});
 			});
 		}
