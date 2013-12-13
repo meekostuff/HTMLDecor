@@ -857,12 +857,12 @@ return HTMLLoader;
 })();
 
 /*
-	STAGING_DOCUMENT_IS_NEUTRAL indicates whether resource URLs - like img@src -
+	STAGING_DOCUMENT_IS_INERT indicates whether resource URLs - like img@src -
 	need to be neutralized so they don't start downloading until after the document is normalized. 
 	The normalize function might discard them in which case downloading is a waste. 
 */
 
-var STAGING_DOCUMENT_IS_NEUTRAL = (function() {
+var STAGING_DOCUMENT_IS_INERT = (function() {
 
 	try { var doc = document.implementation.createHTMLDocument(''); }
 	catch (error) { return false; } // IE <= 8
@@ -917,27 +917,29 @@ forEach(words("link@<href script@<src img@<longDesc,<src iframe@<longDesc,<src o
 	var m = text.split("@"), tagName = m[0], attrs = m[1];
 	var attrLookup = urlAttrs[tagName] = {};
 	forEach(attrs.split(','), function(attr) {
-		var fetch = false;
+		var loads = false;
 		if (attr.charAt(0) === '<') {
-			fetch = true;
+			loads = true;
 			attr = attr.substr(1);
 		}
 		var testEl = document.createElement(tagName);
 		var supported = attr in testEl;
 		attr = lc(attr); // NOTE for longDesc, etc
 		var resolves = false;
-		if (!fetch && supported && canResolve) {
+		if (supported && canResolve) {
 			testEl = document.createElement('<' + tagName + ' ' + attr + '="' + testURL + '">');
 			resolves = testEl.getAttribute(attr) !== testURL;
 		}
-		var neutralize = !STAGING_DOCUMENT_IS_NEUTRAL && supported && fetch;
-		var deref = supported && (fetch || resolves);
+		var neutralize = !supported ? 0 :
+			!loads && !resolves ? 0 :
+			STAGING_DOCUMENT_IS_INERT ? -1 :
+			!loads ? -1 :
+			1;
 		attrLookup[attr] = { // attrDesc
-			fetch: fetch,
+			loads: loads,
 			supported: supported,
 			resolves: resolves,
-			neutralize: neutralize,
-			deref: deref
+			neutralize: neutralize
 		}
 	});
 });
@@ -967,15 +969,15 @@ var resolveAll = function(doc, baseURL, isNeutralized, mustResolve) { // NOTE mu
 		var force = !!mustResolve || tag === 'script'; // WARN scripts MUST be resolved because they stay in the page after panning
 
 		each(attrList, function(attrName, desc) {
-			var derefed = isNeutralized && desc.deref;
-			var neutralize = isNeutralized && desc.neutralize;
+			var neutralized = isNeutralized && !!desc.neutralize;
+			var stayNeutral = isNeutralized && desc.neutralize > 0;
 
-			if (!derefed && !force) return; // if not neutralized and don't have to resolve then don't
+			if (!neutralized && !force) return; // if not neutralized and don't have to resolve then don't
 
 			forEach(getElts(), function(el) {
 				var url = el.getAttribute(attrName);
 				if (url == null) return;
-				var relURL = (derefed) ? deneutralizeURL(url, tag, attrName) : trim(url);
+				var relURL = (neutralized) ? deneutralizeURL(url, tag, attrName) : trim(url);
 				var finalURL = relURL;
 				if (force) switch (relURL.charAt(0)) {
 				
@@ -988,12 +990,12 @@ var resolveAll = function(doc, baseURL, isNeutralized, mustResolve) { // NOTE mu
 						finalURL = baseURL.resolve(relURL);
 						break;
 				}
-				if (neutralize) finalURL = neutralizeURL(finalURL);
+				if (stayNeutral) finalURL = neutralizeURL(finalURL);
 				if (finalURL !== url) el.setAttribute(attrName, finalURL);
 			});
 		});
 	});
-	return isNeutralized && !STAGING_DOCUMENT_IS_NEUTRAL;
+	return isNeutralized && !STAGING_DOCUMENT_IS_INERT;
 }
 
 var deneutralizeAll = function(doc) {
@@ -1006,7 +1008,7 @@ var deneutralizeAll = function(doc) {
 		}
 
 		each(attrList, function(attrName, desc) {
-			var neutralized = desc.neutralize;
+			var neutralized = desc.neutralize > 0;
 
 			if (!neutralized) return;
 
@@ -1165,14 +1167,14 @@ var preparse = (function() {
 var urlElts = [];
 
 each(urlAttrs, function(tagName, attrList) {
-	var deref = false;
+	var neutralized = false;
 	each(attrList, function(attrName, desc) {
-		if (desc.deref) deref = true;
+		if (desc.neutralize) neutralized = true;
 		extend(desc, {
 			regex: new RegExp('(\\s)(' + attrName + ')\\s*=\\s*([\'"])?\\s*(?=\\S)', 'ig') // captures preSpace, attrName, quote. discards other space
 		});
 	});
-	if (deref) urlElts.push(tagName);
+	if (neutralized) urlElts.push(tagName);
 });
 
 var preparseRegex = new RegExp('(<)(' + urlElts.join('|') + '|\\/script|style|\\/style)(?=\\s|\\/?>)([^>]+)?(>)', 'ig');
@@ -1202,7 +1204,7 @@ function preparse(html) { // neutralize URL attrs @src, @href, etc
 			tag = 'img meeko-tag="source"';
 		}
 		each(urlAttrs[tagName], function(attrName, attrDesc) {
-			if (attrDesc.deref) attrsString = attrsString.replace(attrDesc.regex, function(all, preSpace, attrName, quote) {
+			if (attrDesc.neutralize) attrsString = attrsString.replace(attrDesc.regex, function(all, preSpace, attrName, quote) {
 				return preSpace + attrName + '=' + (quote || '') + neutralProtocol;
 			});
 		});
