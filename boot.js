@@ -524,7 +524,7 @@ start: function() {
 
 getDocument: function() { // WARN this assumes HTMLDecor is ready
 	var loader = new Meeko.DOM.HTMLLoader({
-		request: function() {
+		request: function(method, url, data, details) {
 			return new Meeko.Future(function() { var r = this;
 				domReady(function() {
 					var elts = $$('plaintext');
@@ -533,13 +533,13 @@ getDocument: function() { // WARN this assumes HTMLDecor is ready
 					plaintext.parentNode.removeChild(plaintext);
 					
 					if (!/\s*<!DOCTYPE/i.test(html)) html = capturedHTML + html;
-					var fu = Meeko.DOM.parseHTML(new String(html), { url: document.URL, mustResolve: false });
+					var fu = Meeko.DOM.parseHTML(new String(html), details);
 					r.resolve(fu);
 				});
 			});
 		}
 	});
-	return loader.load();	
+	return loader.load('get', document.URL, null, { mustResolve: false });
 }
 
 }
@@ -580,7 +580,7 @@ else {
 
 
 var urlParams = Meeko.bootParams = { // WARN this dictionary can be modified during the boot sequence
-	bootscriptdir: bootScript.src.replace(/\/[^\/]*$/, '/') // TODO this assumes no ?search or #hash
+	bootscriptdir: resolveURL(bootScript.src).replace(/\/[^\/]*$/, '/') // NOTE on IE9 in IE7-mode bootScript.src is NOT already resolved
 }
 
 if (Meeko.bootConfig) Meeko.bootConfig(); // TODO try / catch ??
