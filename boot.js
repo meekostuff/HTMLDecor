@@ -408,7 +408,7 @@ function queue(fnList, oncomplete, onerror) {
 				}
 			}
 			else { // NOTE the only other option is a prepared script
-				enableScript(fn);
+				setTimeout(function() { enableScript(fn); });
 				return;
 			}
 		}
