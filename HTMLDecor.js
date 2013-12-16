@@ -912,36 +912,62 @@ var canResolve = (function() {
 	catch(err) { return false; }
 })();
 
-var urlAttrs = {};
-forEach(words("link@<href script@<src img@<longDesc,<src iframe@<longDesc,<src object@<data embed@<src video@<poster,<src audio@<src source@<src input@formAction,<src button@formAction,<src a@ping,href area@href q@cite blockquote@cite ins@cite del@cite form@action"), function(text) {
-	var m = text.split("@"), tagName = m[0], attrs = m[1];
-	var attrLookup = urlAttrs[tagName] = {};
-	forEach(attrs.split(','), function(attr) {
-		var loads = false;
-		if (attr.charAt(0) === '<') {
-			loads = true;
-			attr = attr.substr(1);
-		}
-		var testEl = document.createElement(tagName);
-		var supported = attr in testEl;
-		attr = lc(attr); // NOTE for longDesc, etc
-		var resolves = false;
-		if (supported && canResolve) {
-			testEl = document.createElement('<' + tagName + ' ' + attr + '="' + testURL + '">');
-			resolves = testEl.getAttribute(attr) !== testURL;
-		}
-		var neutralize = !supported ? 0 :
-			!loads && !resolves ? 0 :
-			STAGING_DOCUMENT_IS_INERT ? -1 :
-			!loads ? -1 :
-			1;
-		attrLookup[attr] = { // attrDesc
-			loads: loads,
-			supported: supported,
-			resolves: resolves,
-			neutralize: neutralize
-		}
+var AttrDesc = function(tagName, attrName, loads) {
+	var testEl = document.createElement(tagName);
+	var supported = attrName in testEl;
+	lcAttr = lc(attrName); // NOTE for longDesc, etc
+	var resolves = false;
+	if (supported && canResolve) {
+		testEl = document.createElement('<' + tagName + ' ' + lcAttr + '="' + testURL + '">');
+		resolves = testEl.getAttribute(lcAttr) !== testURL;
+	}
+	var neutralize = !supported ? 0 :
+		!loads && !resolves ? 0 :
+		STAGING_DOCUMENT_IS_INERT ? -1 :
+		!loads ? -1 :
+		1;
+	extend(this, { // attrDesc
+		tagName: tagName,
+		attrName: attrName,
+		loads: loads,
+		supported: supported,
+		resolves: resolves,
+		mustResolve: false,
+		neutralize: neutralize
 	});
+}
+
+extend(AttrDesc.prototype, {
+
+resolve: function(el, baseURL, force, neutralized, stayNeutral) {
+	var attrName = this.attrName;
+	var url = el.getAttribute(attrName);
+	if (url == null) return;
+	var finalURL = this.resolveURL(url, baseURL, force, neutralized, stayNeutral)
+	if (finalURL !== url) el.setAttribute(attrName, finalURL);
+},
+
+resolveURL: function(url, baseURL, force, neutralized, stayNeutral) {
+	var relURL = trim(url);
+	if (neutralized) {
+		relURL = deneutralizeURL(url);
+		if (relURL === url) logger.warn('Expected neutralized attribute: ' + this.tagName + '@' + this.attrName);
+	}
+	var finalURL = relURL;
+	if (force) switch (relURL.charAt(0)) {
+		case '': // empty, but not null
+		case '#': // NOTE anchor hrefs aren't normalized
+		case '?': // NOTE query hrefs aren't normalized
+			break;
+		
+		default:
+			finalURL = baseURL.resolve(relURL);
+			break;
+	}
+	if (stayNeutral) finalURL = neutralizeURL(finalURL);
+	return finalURL;
+}
+
 });
 
 var neutralProtocol = vendorPrefix + '-href:';
@@ -949,11 +975,45 @@ var neutralProtocolLen = neutralProtocol.length;
 function neutralizeURL(url) {
 	return neutralProtocol + url;
 }
-function deneutralizeURL(url, tagName, attrName) {
+function deneutralizeURL(url) {
 	var confirmed = url.indexOf(neutralProtocol) === 0;
 	if (confirmed) return url.substr(neutralProtocolLen);
-	logger.warn('Expected neutralized attribute: ' + tagName + '@' + attrName);
 	return url;
+}
+
+
+var urlAttrs = {};
+forEach(words("link@<href script@<src img@<longDesc,<src,srcset iframe@<longDesc,<src object@<data embed@<src video@<poster,<src audio@<src source@<src,srcset input@formAction,<src button@formAction,<src a@ping,href area@href q@cite blockquote@cite ins@cite del@cite form@action"), function(text) {
+	var m = text.split("@"), tagName = m[0], attrs = m[1];
+	var attrList = urlAttrs[tagName] = {};
+	forEach(attrs.split(','), function(attrName) {
+		var downloads = false;
+		if (attrName.charAt(0) === '<') {
+			downloads = true;
+			attrName = attrName.substr(1);
+		}
+		attrList[attrName] = new AttrDesc(tagName, attrName, downloads);
+	});
+});
+
+urlAttrs['script']['src'].mustResolve = true;
+
+urlAttrs['img']['srcset'].resolveURL = function(urlSet, baseURL, force) { // img@srcset will never be neutralized
+	if (!force) return urlSet;
+	var urlList = urlSet.split(/\s*,\s*/); // WARN this assumes URLs don't contain ','
+	forEach(urlList, function(urlDesc, i) {
+		urlList[i] = urlDesc.replace(/^\s*(\S+)(?=\s|$)/, function(all, url) { return baseURL.resolve(url); });
+	});
+	return urlList.join(', ');
+}
+
+urlAttrs['a']['ping'].resolveURL = function(urlSet, baseURL, force) { // a@ping will never be neutralized
+	if (!force) return urlSet;
+	var urlList = urlSet.split(/\s+/);
+	forEach(urlList, function(url, i) {
+		urlList[i] = baseURL.resolve(url);
+	});
+	return urlList.join(' ');
 }
 
 var resolveAll = function(doc, baseURL, isNeutralized, mustResolve) { // NOTE mustResolve is true unless explicitly `false`
@@ -966,35 +1026,19 @@ var resolveAll = function(doc, baseURL, isNeutralized, mustResolve) { // NOTE mu
 			return elts;
 		}
 
-		var force = !!mustResolve || tag === 'script'; // WARN scripts MUST be resolved because they stay in the page after panning
+		each(attrList, function(attrName, attrDesc) {
+			var force = !!mustResolve || attrDesc.mustResolve; // WARN scripts MUST be resolved because they stay in the page after panning
+			var neutralized = isNeutralized && !!attrDesc.neutralize;
+			var stayNeutral = isNeutralized && attrDesc.neutralize > 0;
 
-		each(attrList, function(attrName, desc) {
-			var neutralized = isNeutralized && !!desc.neutralize;
-			var stayNeutral = isNeutralized && desc.neutralize > 0;
-
-			if (!neutralized && !force) return; // if not neutralized and don't have to resolve then don't
+			if (!force && (!neutralized || neutralized && stayNeutral)) return; // if don't have to resolve and neutralization doesn't change then skip
 
 			forEach(getElts(), function(el) {
-				var url = el.getAttribute(attrName);
-				if (url == null) return;
-				var relURL = (neutralized) ? deneutralizeURL(url, tag, attrName) : trim(url);
-				var finalURL = relURL;
-				if (force) switch (relURL.charAt(0)) {
-				
-					case '': // empty, but not null
-					case '#': // NOTE anchor hrefs aren't normalized
-					case '?': // NOTE query hrefs aren't normalized
-						break;
-					
-					default:
-						finalURL = baseURL.resolve(relURL);
-						break;
-				}
-				if (stayNeutral) finalURL = neutralizeURL(finalURL);
-				if (finalURL !== url) el.setAttribute(attrName, finalURL);
+				attrDesc.resolve(el, baseURL, force, neutralized, stayNeutral);
 			});
 		});
 	});
+	
 	return isNeutralized && !STAGING_DOCUMENT_IS_INERT;
 }
 
@@ -1007,8 +1051,8 @@ var deneutralizeAll = function(doc) {
 			return elts;
 		}
 
-		each(attrList, function(attrName, desc) {
-			var neutralized = desc.neutralize > 0;
+		each(attrList, function(attrName, attrDesc) {
+			var neutralized = attrDesc.neutralize > 0;
 
 			if (!neutralized) return;
 
@@ -1168,9 +1212,9 @@ var urlElts = [];
 
 each(urlAttrs, function(tagName, attrList) {
 	var neutralized = false;
-	each(attrList, function(attrName, desc) {
-		if (desc.neutralize) neutralized = true;
-		extend(desc, {
+	each(attrList, function(attrName, attrDesc) {
+		if (attrDesc.neutralize) neutralized = true;
+		extend(attrDesc, {
 			regex: new RegExp('(\\s)(' + attrName + ')\\s*=\\s*([\'"])?\\s*(?=\\S)', 'ig') // captures preSpace, attrName, quote. discards other space
 		});
 	});
