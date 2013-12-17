@@ -749,7 +749,7 @@ var HTMLLoader = function(options) {
 	if (!options) return;
 	var htmlLoader = this;
 	each(options, function(key, val) {
-		if (key == 'load') return;
+		if (key === 'load') return;
 		if (!(key in htmlLoader)) return;
 		htmlLoader[key] = val;
 	});
@@ -771,7 +771,7 @@ load: function(method, url, data, details) {
 				if (details.isNeutralized) deneutralizeAll(doc);
 				return doc;
 			},
-			function(err) { logger.error(err); throw (err); }
+			function(err) { logger.error(err); throw (err); } // FIXME
 		);
 },
 
@@ -1464,7 +1464,7 @@ start: function(startOptions) {
 
 	function() { resolveURLs(); },
 	
-	function() { // the order of normalize, decorate, pageIn depends on whether content is from external document or the default document
+	function() { // the order of decorate, pageIn (and whether to normalize) depends on whether content is from external document or the default document
 		if (startOptions && startOptions.contentDocument) return pipe(null, [
 		function() {
 			return decor.decorate(decorDocument, decorURL); // FIXME what if decorate fails??
@@ -1472,7 +1472,6 @@ start: function(startOptions) {
 		function() {
 			return startOptions.contentDocument
 				.then(function(doc) {
-					if (panner.options.normalize) isolate(function() { panner.options.normalize(doc, { url: document.URL }); });
 					return pageIn(null, doc);
 				});
 		}
@@ -1909,7 +1908,25 @@ panner.options = {
 		var loader = new HTMLLoader(panner.options);
 		details.mustResolve = false;
 		return loader.load(method, url, data, details);
-	}
+	},
+	loadFromString: function(textFu, url, details) { // for capturing. TODO ideally this functionality is refactored into HTMLLoader
+		var loader = this;
+		if (!details) details = {};
+		if (!details.url) details.url = url;
+		if (!details.method) details.method = 'get';
+		
+		return pipe(textFu, [
+		function(text) {
+			return parseHTML(new String(text), details);
+		},
+		function(doc) {
+			if (loader.normalize) loader.normalize(doc, details);
+			if (details.isNeutralized) deneutralizeAll(doc);
+			return doc;
+		}
+		]);
+	},
+
 	/* The following options are also available *
 	nodeRemoved: { before: hide, after: show },
 	nodeInserted: { before: hide, after: show },

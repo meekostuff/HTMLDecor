@@ -523,23 +523,20 @@ start: function() {
 },
 
 getDocument: function() { // WARN this assumes HTMLDecor is ready
-	var loader = new Meeko.DOM.HTMLLoader({
-		request: function(method, url, data, details) {
-			return new Meeko.Future(function() { var r = this;
-				domReady(function() {
-					var elts = $$('plaintext');
-					var plaintext = elts[elts.length - 1]; // NOTE There should only be one, but take the last just to be sure
-					var html = plaintext.firstChild.nodeValue;
-					plaintext.parentNode.removeChild(plaintext);
-					
-					if (!/\s*<!DOCTYPE/i.test(html)) html = capturedHTML + html;
-					var fu = Meeko.DOM.parseHTML(new String(html), details);
-					r.resolve(fu);
-				});
-			});
-		}
+	return new Meeko.Future(function() { var r = this;
+		domReady(function() {
+			var elts = $$('plaintext');
+			var plaintext = elts[elts.length - 1]; // NOTE There should only be one, but take the last just to be sure
+			var html = plaintext.firstChild.nodeValue;
+			plaintext.parentNode.removeChild(plaintext);
+			
+			if (!/\s*<!DOCTYPE/i.test(html)) html = capturedHTML + html;
+			r.accept(new String(html));
+		});
+	})
+	.then(function(text) {
+		return Meeko.panner.options.loadFromString(text, document.URL, { mustResolve: false });
 	});
-	return loader.load('get', document.URL, null, { mustResolve: false });
 }
 
 }
