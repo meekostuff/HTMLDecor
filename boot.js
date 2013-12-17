@@ -11,6 +11,7 @@ var defaults = { // NOTE defaults also define the type of the associated config 
 	"capturing": false,
 	"log_level": "warn",
 	"hidden_timeout": 3000,
+	"startup_timeout": 10000, // abort if startup takes longer than this
 	"polling_interval": 50,
 	"html5_block_elements": 'article aside figcaption figure footer header hgroup main nav section',
 	"html5_inline_elements": 'abbr mark output time audio video picture',
@@ -288,7 +289,7 @@ return domReady;
  ### async functions
  */
 
-var queue = (function() {
+var taskQueue = (function() {
 
 var head = document.head;
 var marker = head.firstChild;
@@ -369,8 +370,12 @@ function disableScript(script) {
 	script.parentNode.removeChild(script);
 }
 
-function queue(fnList, oncomplete, onerror) {
-	var list = [];
+var list = [];
+var oncomplete, onerror;
+
+function queue(fnList, callback, errCallback) {
+	oncomplete = callback;
+	onerror = errCallback;
 	forEach(fnList, function(fn) {
 		switch(typeof fn) {
 		case "string":
@@ -384,40 +389,47 @@ function queue(fnList, oncomplete, onerror) {
 		}
 	});
 	queueback();
+}
 
-	function errorback() {
-		var fn;
-		while (fn = list.shift()) {
-			if (typeof fn == 'function') continue;
-			// NOTE the only other option is a prepared script
-			disableScript(fn);
-		}
-		if (onerror) onerror();
+function abort() {
+	if (list.length) errorback();
+}
+
+function errorback() {
+	var fn;
+	while (fn = list.shift()) {
+		if (typeof fn == 'function') continue;
+		// NOTE the only other option is a prepared script
+		disableScript(fn);
 	}
+	if (onerror) onerror();
+}
 
-	function queueback() {
-		var fn;
-		while (list.length) {
-			fn = list.shift();
-			if (typeof fn == "function") {
-				try { fn(); continue; }
-				catch(err) {
-					setTimeout(function() { throw err; });
-					errorback();
-					return;
-				}
-			}
-			else { // NOTE the only other option is a prepared script
-				setTimeout(function() { enableScript(fn); });
+function queueback() {
+	var fn;
+	while (list.length) {
+		fn = list.shift();
+		if (typeof fn == "function") {
+			try { fn(); continue; }
+			catch(err) {
+				setTimeout(function() { throw err; });
+				errorback();
 				return;
 			}
 		}
-		if (oncomplete) oncomplete();
-		return;
+		else { // NOTE the only other option is a prepared script
+			setTimeout(function() { enableScript(fn); });
+			return;
+		}
 	}
+	if (oncomplete) oncomplete();
+	return;
 }
 
-return queue;
+return {
+	queue: queue,
+	abort: abort
+}
 
 })();
 
@@ -610,10 +622,10 @@ selfMarker.href = document.URL;
 document.head.insertBefore(selfMarker, bootScript.parentNode === document.head ? bootScript : document.head.firstChild);
 
 
-var timeout = bootOptions["hidden_timeout"];
-if (timeout > 0) {
+var hidden_timeout = bootOptions["hidden_timeout"];
+if (hidden_timeout > 0) {
 	Viewport.hide();
-	setTimeout(Viewport.unhide, timeout);
+	setTimeout(Viewport.unhide, hidden_timeout);
 }
 
 var log_index = logger.levels[bootOptions["log_level"]];
@@ -670,13 +682,20 @@ var startupSequence = [].concat(
 	start
 );
 
-queue(startupSequence, null, function() {
+taskQueue.queue(startupSequence, null, function() {
 	if (bootOptions['capturing']) 	domReady(function() { // TODO would it be better to do this with document.write()?
-		reloadOptions.setItem('no_boot', true);
+		reloadOptions.setItem('no_boot', true); // TODO should this just be in sessionOptions?
 		reloadOptions.save();
 		location.reload();
 	});
 	else Viewport.unhide();
 });
+
+var startup_timeout = bootOptions["startup_timeout"];
+if (startup_timeout > 0) {
+	setTimeout(function() {
+		taskQueue.abort(); // if the queue is not empty this will trigger its error callback		
+	}, startup_timeout);
+}
 
 })();

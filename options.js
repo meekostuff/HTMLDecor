@@ -16,6 +16,7 @@ Meeko.options = { // these are the default values
 	"log_level": "warn", // debug, info, warn, error, none
 	"no_cookie_options": false,
 	"hidden_timeout": 3000,
+	"startup_timeout": 10000, // abort if startup takes longer than this
 	"polling_interval": 50,
 	"html5_block_elements": 'article aside figcaption figure footer header hgroup main nav section',
 	"html5_inline_elements": 'abbr mark output time audio video picture',
