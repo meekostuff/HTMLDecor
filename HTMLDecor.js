@@ -998,7 +998,7 @@ forEach(words("link@<href script@<src img@<longDesc,<src,srcset iframe@<longDesc
 
 urlAttrs['script']['src'].mustResolve = true;
 
-urlAttrs['img']['srcset'].resolveURL = function(urlSet, baseURL, force) { // img@srcset will never be neutralized
+function resolveSrcset(urlSet, baseURL, force) { // img@srcset will never be neutralized
 	if (!force) return urlSet;
 	var urlList = urlSet.split(/\s*,\s*/); // WARN this assumes URLs don't contain ','
 	forEach(urlList, function(urlDesc, i) {
@@ -1006,6 +1006,9 @@ urlAttrs['img']['srcset'].resolveURL = function(urlSet, baseURL, force) { // img
 	});
 	return urlList.join(', ');
 }
+
+urlAttrs['img']['srcset'].resolveURL = resolveSrcset;
+urlAttrs['source']['srcset'].resolveURL = resolveSrcset;
 
 urlAttrs['a']['ping'].resolveURL = function(urlSet, baseURL, force) { // a@ping will never be neutralized
 	if (!force) return urlSet;
