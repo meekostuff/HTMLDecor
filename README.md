@@ -59,7 +59,7 @@ Installation
 	- boxes with **red** background or borders. 
 	- boxes that claim to be styled with colored borders but just have the default border. 
 	
-3. Source the HTMLDecor boot-script into your pages, with this line in the `<head>` of each page 
+3. Source the HTMLDecor boot-script into your pages with this line in the `<head>` of each page 
 	
 		`<script src="/path/to/HTMLDecor/boot.js"></script>`
 		
@@ -550,7 +550,7 @@ The boot-script has the following options (default values in **bold**).
 - capturing: true, **false**
 - hidden_timeout: **3000** (milliseconds)
 - html5\_block\_elements: **"article aside figcaption figure footer header hgroup main nav section"**
-- html5\_inline\_elements: **"abbr mark output"**
+- html5\_inline\_elements: **"abbr mark output time audio video picture"**
 - config_script: **"{bootscriptdir}config.js"**
 
 Sources for options are detailed below. 

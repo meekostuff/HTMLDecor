@@ -683,7 +683,7 @@ var startupSequence = [].concat(
 );
 
 taskQueue.queue(startupSequence, null, function() {
-	if (bootOptions['capturing']) 	domReady(function() { // TODO would it be better to do this with document.write()?
+	if (bootOptions['capturing']) domReady(function() { // TODO would it be better to do this with document.write()?
 		reloadOptions.setItem('no_boot', true); // TODO should this just be in sessionOptions?
 		reloadOptions.save();
 		location.reload();
