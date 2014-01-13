@@ -867,6 +867,7 @@ var STAGING_DOCUMENT_IS_INERT = (function() {
 	try { var doc = document.implementation.createHTMLDocument(''); }
 	catch (error) { return false; } // IE <= 8
 	if (doc.URL !== document.URL) return true; // FF, Webkit, Chrome
+	// FIXME the following fails because the data: images need time to parse
 	var img = doc.createElement('img');
 	/*
 		Use a data-uri image to see if browser will try to fetch.
@@ -2199,8 +2200,7 @@ function mergeHead(doc, isDecor, afterRemove) { // FIXME more callback than just
 		switch (tagName(srcNode)) {
 		case "title":
 			if (!srcNode.innerHTML) return; // IE will add a title even if non-existant
-			var dstNode = firstChild(dstHead, "title");
-			if (dstNode && dstNode.innerHTML) return;
+			if (isDecor) return; // ignore <title> in decor. FIXME what if topic content has no <title>?
 			break;
 		case "link": // FIXME no duplicates @rel, @href pairs
 			break;
