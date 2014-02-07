@@ -867,17 +867,19 @@ var STAGING_DOCUMENT_IS_INERT = (function() {
 	try { var doc = document.implementation.createHTMLDocument(''); }
 	catch (error) { return false; } // IE <= 8
 	if (doc.URL !== document.URL) return true; // FF, Webkit, Chrome
-	// FIXME the following fails because the data: images need time to parse
-	var img = doc.createElement('img');
+	// TODO the following feature detection needs more cross-browser testing
 	/*
 		Use a data-uri image to see if browser will try to fetch.
 		The smallest such image might be a 1x1 white gif,
 		see http://proger.i-forge.net/The_smallest_transparent_pixel/eBQ
 	*/
-	img.src = 'data:';
+	var img = doc.createElement('img');
+	if (img.complete) img.src = 'data:'; // Opera-12
+	if (img.complete) return false; // paranoia
 	img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACwAAAAAAQABAAACAkQBADs=';
-	if (!img.complete) return true; // IE10+ 
-	return false; // IE9, Opera-12
+	if (img.width) return false; // IE9, Opera-12 will have width == 1 / height == 1 
+	if (img.complete) return false; // Opera-12 sets this immediately. IE9 sets it after a delay. 
+	return true; // Presumably IE10
 
 })();
 
