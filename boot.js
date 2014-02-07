@@ -372,8 +372,13 @@ function disableScript(script) {
 
 var list = [];
 var oncomplete, onerror;
+var aborted = false;
 
 function queue(fnList, callback, errCallback) {
+	if (aborted) {
+		setTimeout(errCallback);
+		return;
+	}
 	oncomplete = callback;
 	onerror = errCallback;
 	forEach(fnList, function(fn) {
@@ -392,6 +397,8 @@ function queue(fnList, callback, errCallback) {
 }
 
 function abort() {
+	if (aborted) return;
+	aborted = true;
 	if (list.length) errorback();
 }
 
@@ -682,14 +689,24 @@ var startupSequence = [].concat(
 	start
 );
 
-taskQueue.queue(startupSequence, null, function() {
-	if (bootOptions['capturing']) domReady(function() { // TODO would it be better to do this with document.write()?
-		reloadOptions.setItem('no_boot', true); // TODO should this just be in sessionOptions?
-		reloadOptions.save();
-		location.reload();
+function startup() {
+	taskQueue.queue(startupSequence, null, function() {
+		if (bootOptions['capturing']) domReady(function() { // TODO would it be better to do this with document.write()?
+			reloadOptions.setItem('no_boot', true); // TODO should this just be in sessionOptions?
+			reloadOptions.save();
+			location.reload();
+		});
+		else Viewport.unhide();
 	});
-	else Viewport.unhide();
-});
+}
+
+if (bootOptions['capturing']) {
+	domReady(function() {
+		if (window.stop) window.stop();
+		setTimeout(startup);
+	});
+}
+else setTimeout(startup);
 
 var startup_timeout = bootOptions["startup_timeout"];
 if (startup_timeout > 0) {
