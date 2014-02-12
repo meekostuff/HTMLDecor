@@ -1154,25 +1154,37 @@ function nativeParser(html, details) {
 function iframeParser(html, details) {
 	var parser = this;
 	
+	var iframe = document.createElement("iframe");
+	iframe.name = "meeko-parser";
+
 	return pipe(null, [
 	
-	function() {
-		html = preparse(html);
-
-		var iframe = document.createElement("iframe");
-		iframe.name = "meeko-parser";
-		var head = document.head;
-		head.insertBefore(iframe, head.firstChild);
-		var iframeDoc = iframe.contentWindow.document;
+	function() { return new Future(function() { var r = this;
+			html = preparse(html);
 	
-		if (parser.prepare) isolate(function() { parser.prepare(iframeDoc); }); // WARN external code
-		iframeDoc.open('text/html', 'replace');
+			var bodyIndex = html.search(/<body(?=\s|>)/); // FIXME assumes "<body" not in a script or style comment somewhere 
+			bodyIndex = html.indexOf('>', bodyIndex) + 1;
+			var iframeHTML = html.substr(0, bodyIndex);
+			html = html.substr(bodyIndex);
+	
+			var head = document.head;
+			head.insertBefore(iframe, head.firstChild);
+			var iframeWin = iframe.contentWindow;
+			var iframeDoc = iframeWin.document;
 		
-		var bodyIndex = html.search(/<body(?=\s|>)/); // FIXME assumes "<body" not in a script or style comment somewhere 
-		bodyIndex = html.indexOf('>', bodyIndex) + 1;
+			if (parser.prepare) isolate(function() { parser.prepare(iframeDoc); }); // WARN external code
+			iframeDoc.open('text/html', 'replace');
+	
+			iframeWin.onload = function() {
+				r.accept(iframeDoc);
+			}
 
-		iframeDoc.write(html.substr(0, bodyIndex));
-		iframeDoc.close();
+			iframeDoc.write(iframeHTML);
+			iframeDoc.close();
+		});
+	},
+	
+	function(iframeDoc) {
 
 		polyfill(iframeDoc);
 
@@ -1194,7 +1206,7 @@ function iframeParser(html, details) {
 	
 		document.head.removeChild(iframe);
 
-		doc.body.innerHTML = '<wbr />' + html.substr(bodyIndex); // one simple trick to get IE <= 8 to behave
+		doc.body.innerHTML = '<wbr />' + html; // one simple trick to get IE <= 8 to behave
 		doc.body.removeChild(doc.body.firstChild);
 
 		forEach($$("style", doc.body), function(node) { // TODO support <style scoped>
