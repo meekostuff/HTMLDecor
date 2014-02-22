@@ -183,179 +183,168 @@ return isolate;
 
 
 /*
- ### Future
- WARN: This was based on an early DOM Future specification. 
+ ### Promise
+ WARN: This was based on early DOM Futures specification. This has been evolved towards ES6 Promises.
  */
 
-var Future = Meeko.Future = function(init) { // `init` is called as init.call(resolver)
-	if (!(this instanceof Future)) return new Future(init);
+var Promise = Meeko.Promise = function(init) { // `init` is called as init(resolve, reject)
+	if (!(this instanceof Promise)) return new Promise(init);
 	
-	var future = this;
-	future._initialize();
+	var promise = this;
+	promise._initialize();
 
 	if (init === undefined) return;
 
-	var resolver = future._resolver;
-	try { init.call(resolver); }
-	catch(error) { future._reject(error); }
-	// NOTE future is returned by `new` invocation
+	function resolve(result) { promise._resolve(result); }
+	function reject(error) { promise._reject(error); }
+
+	try { init(resolve, reject); }
+	catch(error) { reject(error); }
+	// NOTE promise is returned by `new` invocation
 }
 
-extend(Future.prototype, {
+extend(Promise.prototype, {
 
 _initialize: function() {
-	var future = this;
-	future._acceptCallbacks = [];
-	future._rejectCallbacks = [];
-	future._accepted = null;
-	future._result = null;
-	future._processing = false;	
-	future._resolver = {
-		accept: function(value) { future._accept(value); },
-		resolve: function(value) { future._resolve(value); },
-		reject: function(value) { future._reject(value); }
-	}
+	var promise = this;
+	promise._acceptCallbacks = [];
+	promise._rejectCallbacks = [];
+	promise._accepted = null;
+	promise._result = null;
+	promise._willCatch = false;
+	promise._processing = false;
 },
 
 _accept: function(result, sync) { // NOTE equivalent to "accept algorithm". External calls MUST NOT use sync
-	var future = this;
-	if (future._accepted != null) return;
-	future._accepted = true;
-	future._result = result;
-	future._requestProcessing(sync);
+	var promise = this;
+	if (promise._accepted != null) return;
+	promise._accepted = true;
+	promise._result = result;
+	promise._requestProcessing(sync);
 },
 
 _resolve: function(value, sync) { // NOTE equivalent to "resolve algorithm". External calls MUST NOT use sync
-	var future = this;
-	if (future._accepted != null) return;
+	var promise = this;
+	if (promise._accepted != null) return;
 	if (value != null && typeof value.then === 'function') {
 		try {
 			value.then(
-				function(result) { future._resolve(result); },
-				function(error) { future._reject(error); }
+				function(result) { promise._resolve(result); },
+				function(error) { promise._reject(error); }
 			);
 		}
 		catch(error) {
-			future._reject(error, sync);
+			promise._reject(error, sync);
 		}
 		return;
 	}
 	// else
-	future._accept(value, sync);
+	promise._accept(value, sync);
 },
 
 _reject: function(error, sync) { // NOTE equivalent to "reject algorithm". External calls MUST NOT use sync
-	var future = this;
-	if (future._accepted != null) return;
-	future._accepted = false;
-	future._result = error;
-	future._requestProcessing(sync);
+	var promise = this;
+	if (promise._accepted != null) return;
+	promise._accepted = false;
+	promise._result = error;
+	if (!promise._willCatch) {
+		queueTask(function() {
+			if (!promise._willCatch) throw error;
+		});
+	}
+	else promise._requestProcessing(sync);
 },
 
 _requestProcessing: function(sync) { // NOTE schedule callback processing. TODO may want to disable sync option
-	var future = this;
-	if (future._accepted == null) return;
-	if (future._processing) return;
+	var promise = this;
+	if (promise._accepted == null) return;
+	if (promise._processing) return;
 	if (sync) {
-		future._processing = true;
-		future._process();
-		future._processing = false;
+		promise._processing = true;
+		promise._process();
+		promise._processing = false;
 	}
 	else {
 		queueTask(function() {
-			future._processing = true;
-			future._process();
-			future._processing = false;
+			promise._processing = true;
+			promise._process();
+			promise._processing = false;
 		});
 	}
 },
 
-_process: function() { // NOTE process a futures callbacks
-	var future = this;
-	var result = future._result;
+_process: function() { // NOTE process a promises callbacks
+	var promise = this;
+	var result = promise._result;
 	var callbacks, cb;
-	if (future._accepted) {
-		future._rejectCallbacks.length = 0;
-		callbacks = future._acceptCallbacks;
+	if (promise._accepted) {
+		promise._rejectCallbacks.length = 0;
+		callbacks = promise._acceptCallbacks;
 	}
 	else {
-		future._acceptCallbacks.length = 0;
-		callbacks = future._rejectCallbacks;
+		promise._acceptCallbacks.length = 0;
+		callbacks = promise._rejectCallbacks;
 	}
 	while (callbacks.length) {
 		cb = callbacks.shift();
-		if (typeof cb === 'function') isolate(function() { cb(result); });
+		if (typeof cb === 'function') cb(result);
 	}
 },
 
-done: function(acceptCallback, rejectCallback) {
-	var future = this;
-	future._acceptCallbacks.push(acceptCallback);
-	future._rejectCallbacks.push(rejectCallback);
-	future._requestProcessing();
-},
-
-thenfu: function(acceptCallback, rejectCallback) {
-	var future = this;
-	var newResolver, newFuture = new Future(function() { newResolver = this; });
+then: function(acceptCallback, rejectCallback) {
+	var promise = this;
+	var resolve, reject, newPromise = new Promise(function(res, rej) { resolve = res; reject = rej; });
 	var acceptWrapper = acceptCallback ?
-		wrapfuCallback(acceptCallback, newResolver, newFuture) :
-		function(value) { newFuture._accept(value); }
+		wrapResolve(acceptCallback, resolve, reject) :
+		function(value) { resolve(value); }
 
 	var rejectWrapper = rejectCallback ? 
-		wrapfuCallback(rejectCallback, newResolver, newFuture) :
-		function(error) { newFuture._reject(error); }
+		wrapResolve(rejectCallback, resolve, reject) :
+		function(error) { reject(error); }
 
-	future.done(acceptWrapper, rejectWrapper);
+	promise._acceptCallbacks.push(acceptWrapper);
+	promise._rejectCallbacks.push(rejectWrapper);
+
+	promise._willCatch = true;
+
+	promise._requestProcessing();
 	
-	return newFuture;
-}
-
-});
-
-/* Functional composition wrapper for `thenfu` */
-function wrapfuCallback(callback, resolver, future) {
-	return function() {
-		try {
-			callback.apply(resolver, arguments);
-		}
-		catch (error) {
-			future._reject(error, true);
-		}
-	}
-}
-
-extend(Future.prototype, {
-	
-then: function(acceptCallback, rejectCallback) {
-	var future = this;
-	var acceptWrapper = acceptCallback && wrapResolve(acceptCallback);
-	var rejectWrapper = rejectCallback && wrapResolve(rejectCallback);
-	return future.thenfu(acceptWrapper, rejectWrapper);
+	return newPromise;
 },
 
 'catch': function(rejectCallback) { // FIXME 'catch' is unexpected identifier in IE8-
-	var future = this;
-	return future.then(null, rejectCallback);
+	var promise = this;
+	return promise.then(null, rejectCallback);
 }
 
 });
 
+
 /* Functional composition wrapper for `then` */
-function wrapResolve(callback) { // prewrap in .then() before passing to .pipefu() and thence to wrapfu
+function wrapResolve(callback, resolve, reject) {
 	return function() {
-		var value = callback.apply(null, arguments); 
-		this.resolve(value, true);
+		try {
+			var value = callback.apply(undefined, arguments); 
+			resolve(value);
+		} catch(error) {
+			reject(error);
+		}
 	}
 }
 
 
-extend(Future, {
+extend(Promise, {
 
-resolve: function(value) { // NOTE equivalent to "resolve wrap"
-	var resolver, future = new Future(function() { resolver = this; });
-	resolver.resolve(value);
-	return future;
+resolve: function(value) {
+	var resolve, promise = new Promise(function(res, rej) { resolve = res; });
+	resolve(value);
+	return promise;
+},
+
+reject: function(error) {
+	var reject, promise = new Promise(function(res, rej) { reject = rej; });
+	reject(error);
+	return promise;	
 }
 
 });
@@ -364,7 +353,8 @@ resolve: function(value) { // NOTE equivalent to "resolve wrap"
 /*
  ### Async functions
    wait(test) waits until test() returns true
-   delay(timeout, fn) makes one call to fn() after timeout ms
+   asap(fn) returns a promise which is fulfilled / rejected by fn which is run asap after the current micro-task
+   delay(timeout) returns a promise which fulfils after timeout ms
    pipe(startValue, [fn1, fn2, ...]) will call functions sequentially
  */
 var wait = (function() { // TODO wait() isn't used much. Can it be simpler?
@@ -372,13 +362,13 @@ var wait = (function() { // TODO wait() isn't used much. Can it be simpler?
 var timerId, tests = [];
 
 function wait(fn) {
-	var resolver, future = new Future(function() { resolver = this; });
+	var resolver, promise = new Promise(function(resolve, reject) { resolver = { resolve: resolve, reject: reject }; });
 	tests.push({
 		fn: fn,
 		resolver: resolver
 	});
-	if (!timerId) timerId = window.setInterval(poller, Future.pollingInterval); // NOTE polling-interval is configured below		
-	return future;
+	if (!timerId) timerId = window.setInterval(poller, Promise.pollingInterval); // NOTE polling-interval is configured below		
+	return promise;
 }
 
 function poller() {
@@ -390,7 +380,7 @@ function poller() {
 			done = fn();
 			if (done) {
 				tests.splice(i,1);
-				resolver.accept(done);
+				resolver.resolve(done);
 			}
 			else i++;
 		}
@@ -409,34 +399,83 @@ return wait;
 
 })();
 
-function delay(timeout, fn) { // NOTE fn is optional
-	var resolver, future = new Future(function() { resolver = this; });
+var asap = function(fn) { return Promise.resolve().then(fn) }
+
+function delay(timeout) {
+	var resolve, promise = new Promise(function(res, rej) { resolve = res; });
 	window.setTimeout(function() {
-		var result;
-		try {
-			result = fn && fn();
-			resolver.accept(result);
-		}
-		catch(error) {
-			resolver.reject(error);
-		}
+		resolve();
 	}, timeout);
-	return future;
+	return promise;
 }
 
 function pipe(startValue, fnList) {
-	var future = Future.resolve(startValue);
+	var promise = Promise.resolve(startValue);
 	while (fnList.length) { 
 		var fn = fnList.shift();
-		future = future.then(fn);
+		promise = promise.then(fn);
 	}
-	return future;
+	return promise;
 }
 
-Future.pollingInterval = defaults['polling_interval'];
+function preach(src, fn) {
+	var resolve, reject, promise = new Promise(function(res, rej) { resolve = res; reject = rej; });
+	var mode =
+		(typeof src === 'function') ? 'function' :
+		('length' in src) ? 'array' :
+		'object';
+	if (mode === 'object') {
+		var keys = [], n = 0;
+		each(src, function(k, v) { keys[n++] = k; });
+	}
 
-extend(Future, {
-	isolate: isolate, queue: queueTask, delay: delay, wait: wait, pipe: pipe
+	var i = 0;
+	next();
+	return promise;
+
+	function next() {
+		asap(callback)['catch'](errCallback);		
+	}
+	function callback() {
+		var key, value;
+		switch (mode) {
+		case 'function':
+			key = i;
+			value = src(key);
+			break;
+		case 'array':
+			key = i;
+			value = src[key];
+			break;
+		case 'object':
+			key = keys[i];
+			value = src[key];
+			break;
+		}
+		i++;
+		Promise.resolve(value)
+			.then(function(val) {
+				if (mode === 'function' && typeof val === 'undefined') {
+					resolve();
+					return;
+				}
+				fn(key, val, src);
+				if (mode === 'array' && i >= src.length || mode === 'object' && i >= keys.length) {
+					resolve();
+					return;
+				}
+				next();
+			}, errCallback);
+	}
+	function errCallback(error) {
+		reject(error);
+	}
+}
+
+Promise.pollingInterval = defaults['polling_interval'];
+
+extend(Promise, {
+	isolate: isolate, asap: asap, delay: delay, wait: wait, pipe: pipe
 });
 
 
@@ -669,7 +708,7 @@ var overrideDefaultAction = function(e, fn) {
 	}
 	window.addEventListener(e.type, backstop, false);
 	
-	queueTask(function() {
+	asap(function() {
 		window.removeEventListener(e.type, backstop, false);
 		if (defaultPrevented) return;
 		fn(e);
@@ -764,7 +803,7 @@ load: function(method, url, data, details) {
 	if (!details.url) details.method = method;	
 	if (!details.url) details.url = url;
 	
-	return htmlLoader.request(method, url, data, details) // NOTE this returns the future that .then returns
+	return htmlLoader.request(method, url, data, details) // NOTE this returns the promise that .then returns
 		.then(
 			function(doc) {
 				if (htmlLoader.normalize) htmlLoader.normalize(doc, details);
@@ -821,7 +860,7 @@ var HTML_IN_XHR = (function() { // FIXME more testing, especially Webkit. Probab
 })();
 
 var doRequest = function(method, url, sendText, details) {
-return new Future(function() { var r = this;
+return new Promise(function(resolve, reject) {
 	var xhr = window.XMLHttpRequest ?
 		new XMLHttpRequest :
 		new ActiveXObject("Microsoft.XMLHTTP"); // TODO stop supporting IE6
@@ -832,21 +871,21 @@ return new Future(function() { var r = this;
 	function onchange() {
 		if (xhr.readyState != 4) return;
 		if (xhr.status != 200) { // FIXME what about other status codes?
-			r.reject(xhr.status); // FIXME what should status be??
+			reject(xhr.status); // FIXME what should status be??
 			return;
 		}
-		queueTask(onload); // Use delay to stop the readystatechange event interrupting other event handlers (on IE). 
+		asap(onload); // Use delay to stop the readystatechange event interrupting other event handlers (on IE). 
 	}
 	function onload() {
 		var doc;
 		if (HTML_IN_XHR) {
 			var doc = xhr.response;
 			prenormalize(doc, details);
-			r.accept(doc);
+			resolve(doc);
 		}
 		else {
 			var parserFu = parseHTML(new String(xhr.responseText), details); // TODO should parseHTML be async?
-			r.resolve(parserFu);
+			resolve(parserFu);
 		}
 	}
 });
@@ -1156,27 +1195,40 @@ function iframeParser(html, details) {
 	
 	var iframe = document.createElement("iframe");
 	iframe.name = "meeko-parser";
+	var iframeHTML = '';
 
 	return pipe(null, [
 	
-	function() { return new Future(function() { var r = this;
-			html = preparse(html);
+	function() {
+		html = preparse(html);
+
+		var bodyIndex = html.search(/<body(?=\s|>)/); // FIXME assumes "<body" not in a script or style comment somewhere 
+		bodyIndex = html.indexOf('>', bodyIndex) + 1;
+		iframeHTML = html.substr(0, bodyIndex);
+		html = html.substr(bodyIndex);
+
+		var head = document.head;
+		head.insertBefore(iframe, head.firstChild);
+		var iframeDoc = iframe.contentWindow.document;
+		iframeDoc.open('text/html', 'replace');
+		return iframeDoc;
+	},
 	
-			var bodyIndex = html.search(/<body(?=\s|>)/); // FIXME assumes "<body" not in a script or style comment somewhere 
-			bodyIndex = html.indexOf('>', bodyIndex) + 1;
-			var iframeHTML = html.substr(0, bodyIndex);
-			html = html.substr(bodyIndex);
-	
-			var head = document.head;
-			head.insertBefore(iframe, head.firstChild);
-			var iframeWin = iframe.contentWindow;
-			var iframeDoc = iframeWin.document;
-		
-			if (parser.prepare) isolate(function() { parser.prepare(iframeDoc); }); // WARN external code
-			iframeDoc.open('text/html', 'replace');
-	
-			iframeWin.onload = function() {
-				r.accept(iframeDoc);
+	function(iframeDoc) {
+		if (parser.prepare) parser.prepare(iframeDoc); // WARN external code
+		return iframeDoc;
+	},		
+
+	function(iframeDoc) {
+		return new Promise(function(resolve, reject) {
+			// NOTE need to wait for iframeWin.onload on Android 2.3, others??
+			var iframeWin = iframe.contentWindow, complete = false;
+			iframeWin.onload = iframeDoc.onreadystatechange = function() { // WARN sometimes `onload` doesn't fire on IE6
+				if (complete) return;
+				var readyState = iframeDoc.readyState;
+				if (readyState && readyState !== 'complete') return;
+				complete = true;
+				resolve(iframeDoc);
 			}
 
 			iframeDoc.write(iframeHTML);
@@ -1216,7 +1268,6 @@ function iframeParser(html, details) {
 		details.isNeutralized = resolveAll(doc, baseURL, true, details.mustResolve);
 		// FIXME need warning for doc property mismatches between page and decor
 		// eg. charset, doc-mode, content-type, etc
-
 		return doc;
 	}
 
@@ -1446,8 +1497,8 @@ start: function(startOptions) {
 	decor.started = true;
 	var domReadyFu = startOptions && startOptions.contentDocument ?
 		startOptions.contentDocument :
-		new Future(function() { var r = this;
-			DOM.ready(function() { r.accept(document); });
+		new Promise(function(resolve, reject) {
+			DOM.ready(function() { resolve(document); });
 		});
 
 	var options = decor.options;
@@ -1469,7 +1520,7 @@ start: function(startOptions) {
 		decor.current.url = decorURL;
 		var method = 'get';
 		var f = decor.options.load(method, decorURL, null, { method: method, url: decorURL });
-		f.done(
+		f.then(
 			function(result) { decorDocument = result; },
 			function(error) { logger.error("HTMLLoader failed for " + decorURL); } // FIXME need decorError notification / handling
 		);
@@ -1497,7 +1548,7 @@ start: function(startOptions) {
 		else return pipe(null, [
 		function() {
 			if (panner.options.normalize) return domReadyFu.then(function() {
-				isolate(function() { panner.options.normalize(document, { url: document.URL }); });
+				panner.options.normalize(document, { url: document.URL });
 			});
 		},			
 		function() {
@@ -1599,12 +1650,14 @@ decorate: function(decorDocument, decorURL) {
 	},
 	
 	function() {
-		notify({
+		return notify({
 			module: "decor",
 			stage: "before",
 			type: "decorIn",
 			node: decorDocument
 		});
+	},
+	function() {
 		mergeElement(document.documentElement, decorDocument.documentElement);
 		mergeElement(document.head, decorDocument.head);
 		mergeHead(decorDocument, true);
@@ -1618,20 +1671,24 @@ decorate: function(decorDocument, decorURL) {
 
 		mergeElement(document.body, decorDocument.body);
 		decor_insertBody(decorDocument);
-		notify({
+	},
+	function() {
+		return notify({
 			module: "decor",
 			stage: "after",
 			type: "decorIn",
 			node: decorDocument
 		});
-		var decorReadyFu = wait(function() { return checkStyleSheets(); });
-		decorReadyFu.done(function() {
-			notify({
-				module: "decor",
-				stage: "after",
-				type: "decorReady",
-				node: decorDocument
-			});
+	},
+	function() {	
+		return wait(function() { return checkStyleSheets(); });
+	},
+	function() {
+		return notify({
+			module: "decor",
+			stage: "after",
+			type: "decorReady",
+			node: decorDocument
 		});
 	},
 	function() { return scriptQueue.empty(); }
@@ -1760,15 +1817,15 @@ onPopState: function(e) {
 	var newURL = URL(newState.url).nohash;
 	if (newURL != URL(oldState.url).nohash) {
 		pan(oldState, newState)
-		.done(function() {
+		.then(function() {
 			panner.restoreScroll(newState);
 			complete = true;
 		});
 	}
-	else queueTask(function() {
+	else asap(function() {
 		panner.restoreScroll(newState);
 		complete = true;
-	}, Future.pollingInterval);
+	});
 	
 	/*
 	  All browsers seem to scroll the page around the popstate event.
@@ -1860,13 +1917,13 @@ restoreScroll: function(state) {
 });
 
 function navigate(options) {
-return new Future(function() { var r = this;
+return new Promise(function(resolve, reject) {
 	var url = options.url;
 	var decorURL = decor.options.lookup(url);
 	if (typeof decorURL !== "string" || URL(document.URL).resolve(decorURL) !== decor.current.url) {
 		var modifier = options.replace ? "replace" : "assign";
 		location[modifier](url);
-		r.accept();	// TODO should this be an error??
+		resolve();	// TODO should this be an error??
 		return;
 	}
 
@@ -1876,13 +1933,13 @@ return new Future(function() { var r = this;
 	});
 
 	pan(oldState, newState)
-	.done(function(msg) {
+	.then(function(msg) {
 		var oURL = URL(newState.url);
 		scrollToId(oURL.hash && oURL.hash.substr(1));
 
 		panner.saveScroll();
 
-		r.accept(msg);
+		resolve(msg);
 	});
 	
 	// Change document.URL
@@ -1893,11 +1950,11 @@ return new Future(function() { var r = this;
 }
 
 function defaultNavigate(options) {
-return new Future(function() { var r = this;
+return new Promise(function(resolve, reject) {
 	var url = options.url;			  
 	var modifier = options.replace ? "replace" : "assign";
 	location[modifier](url);
-	r.accept();
+	resolve();
 });
 }
 
@@ -1943,7 +2000,7 @@ panner.options = {
 			return doc;
 		}
 		]);
-	},
+	}
 
 	/* The following options are also available *
 	nodeRemoved: { before: hide, after: show },
@@ -1977,7 +2034,12 @@ var notify = function(msg) {
 		break;
 	}
 
-	if (typeof listener == "function") isolate(function() { listener(msg); }); // TODO isFunction(listener)
+	if (typeof listener == "function") {
+		var promise = asap(function() { listener(msg); }); // TODO isFunction(listener)
+		promise['catch'](function(err) { throw err; });
+		return promise;
+	}
+	else return Promise.resolve();
 }
 
 var pan = function(oldState, newState) {
@@ -1994,12 +2056,12 @@ var pan = function(oldState, newState) {
 
 	var newDoc, newDocFu;
 	newDoc = panner.bfcache[newState.timeStamp];
-	if (newDoc) newDocFu = Future.resolve(newDoc);
+	if (newDoc) newDocFu = Promise.resolve(newDoc);
 	else {
 		var url = newState.url;
 		var method = 'get'; // newState.method
 		newDocFu = panner.options.load(method, url, null, { method: method, url: url });
-		newDocFu.done(
+		newDocFu.then(
 			function(result) {
 				newDoc = result;
 				panner.bfcache[newState.timeStamp] = newDoc;
@@ -2010,16 +2072,18 @@ var pan = function(oldState, newState) {
 	
 	return pipe(null, [
 		
-	function() { // before pageOut / nodeRemoved
-		notify({
+	function() { // before pageOut 
+		return notify({
 			module: "panner",
 			stage: "before",
 			type: "pageOut",
 			target: document
 		});
-		each(decor.placeHolders, function(id, node) {
+	},
+	function() { // before nodeRemoved
+		return preach(decor.placeHolders, function(id, node) {
 			var target = $id(id);
-			notify({
+			return notify({
 				module: "panner",
 				stage: "before",
 				type: "nodeRemoved",
@@ -2038,20 +2102,22 @@ var pan = function(oldState, newState) {
 			oldDoc.head.appendChild(target); // FIXME will need to use some of mergeHead()
 		});
 
-		each(decor.placeHolders, function(id, node) {
+		return preach(decor.placeHolders, function(id, node) {
 			var target = $id(id);
 			replaceNode(target, node);
 			oldDoc.body.appendChild(target); // FIXME should use adoptNode()
-			notify({
+			return notify({
 				module: "panner",
 				stage: "after",
 				type: "nodeRemoved",
 				target: document.body,
 				node: target
 			});
-		});
-		oldDocSaved = true;
-		notify({
+		})
+		.then(function() { oldDocSaved = true; });
+	},
+	function() {
+		return notify({
 			module: "panner",
 			stage: "after",
 			type: "pageOut",
@@ -2081,7 +2147,7 @@ function pageIn(oldDoc, newDoc) {
 	return pipe(null, [
 		
 	function() { // before pageIn
-		notify({
+		return notify({
 			module: "panner",
 			stage: "before",
 			type: "pageIn",
@@ -2121,7 +2187,8 @@ function pageIn(oldDoc, newDoc) {
 					nodeList.push(node);
 				}
 			);
-			afterInsertFu = delay(0, function() {
+			afterInsertFu = delay(0)
+			.then(function() {
 				forEach(nodeList, function(node) {
 					notify({
 						module: "panner",
@@ -2140,7 +2207,7 @@ function pageIn(oldDoc, newDoc) {
 	function() { return scriptQueue.empty(); },
 	
 	function() { // after pageIn
-		notify({
+		return notify({
 			module: "panner",
 			stage: "after",
 			type: "pageIn",
@@ -2264,7 +2331,7 @@ var scriptQueue = new function() {
 /*
  WARN: This description comment was from the former scriptQueue implementation.
  It is still a correct description of behavior,
- but doesn't give a great insight into the current Futures-based implementation.
+ but doesn't give a great insight into the current Promises-based implementation.
  
  We want <script>s to execute in document order (unless @async present)
  but also want <script src>s to download in parallel.
@@ -2289,7 +2356,7 @@ this.push = function(node) {
 	
 	// TODO assert node is in document
 
-	var completeRe, completeFu = new Future(function() { completeRe = this; });	
+	var completeRe, completeFu = new Promise(function(resolve, reject) { completeRe = { resolve: resolve, reject: reject }; });	
 
 	if (!/^text\/javascript\?disabled$/i.test(node.type)) {
 		completeRe.reject("Unsupported script-type " + node.type);
@@ -2300,8 +2367,8 @@ this.push = function(node) {
 
 	// preloadedFu is needed for IE <= 8
 	// On other browsers (and for inline scripts) it is pre-accepted
-	var preloadedRe, preloadedFu = new Future(function() { preloadedRe = this; }); 
-	if (!node.src || supportsOnLoad) preloadedRe.accept(); // WARN must use `node.src` because attrs not copied to `script` yet
+	var preloadedRe, preloadedFu = new Promise(function(resolve, reject) { preloadedRe = { resolve: resolve, reject: reject }; }); 
+	if (!node.src || supportsOnLoad) preloadedRe.resolve(); // WARN must use `node.src` because attrs not copied to `script` yet
 	if (node.src) addListeners(); // WARN must use `node.src` because attrs not copied to `script` yet
 	
 	copyAttributes(script, node); 
@@ -2320,7 +2387,7 @@ this.push = function(node) {
 	script.type = "text/javascript";
 	
 	// enabledFu resolves after script is inserted
-	var enabledRe, enabledFu = new Future(function() { enabledRe = this; }); 
+	var enabledRe, enabledFu = new Promise(function(resolve, reject) { enabledRe = { resolve: resolve, reject: reject }; }); 
 	
 	var prev = queue[queue.length - 1], prevScript = prev && prev.script;
 
@@ -2329,7 +2396,7 @@ this.push = function(node) {
 		if (hasAttribute(prevScript, 'async') || supportsSync && !hasAttribute(script, 'async')) triggerFu = prev.enabled;
 		else triggerFu = prev.complete; 
 	}
-	else triggerFu = Future.resolve();
+	else triggerFu = Promise.resolve();
 	
 	triggerFu.then(enable, enable);
 
@@ -2343,17 +2410,17 @@ this.push = function(node) {
 	}
 	function _enable() {
 		replaceNode(node, script);
-		enabledRe.accept(); 
+		enabledRe.resolve(); 
 		if (!script.src) {
 			remove(queue, current);
-			completeRe.accept();
+			completeRe.resolve();
 		}
 	}
 	
 	function onLoad(e) {
 		removeListeners();
 		remove(queue, current);
-		completeRe.accept();
+		completeRe.resolve();
 	}
 
 	function onError(e) {
@@ -2381,7 +2448,7 @@ this.push = function(node) {
 	function onChange(e) { // for IE <= 8 which don't support script.onload
 		var readyState = script.readyState;
 		if (!script.parentNode) {
-			if (readyState === 'loaded') preloadedRe.accept(); 
+			if (readyState === 'loaded') preloadedRe.resolve(); 
 			return;
 		}
 		switch (readyState) {
@@ -2400,22 +2467,22 @@ this.push = function(node) {
 this.empty = function() {
 	emptying = true;
 	
-	var resolver, future = new Future(function() { resolver = this; });
+	var resolver, promise = new Promise(function(resolve, reject) { resolver = { resolve: resolve, reject: reject }; });
 	if (queue.length <= 0) {
 		emptying = false;
-		resolver.accept();
-		return future;
+		resolver.resolve();
+		return promise;
 	}
 	forEach(queue, function(value, i) {
 		var acceptCallback = function() {
 			if (queue.length <= 0) {
 				emptying = false;
-				resolver.accept();
+				resolver.resolve();
 			}
 		}
-		value.complete.done(acceptCallback, acceptCallback);
+		value.complete.then(acceptCallback, acceptCallback);
 	});
-	return future;
+	return promise;
 }
 
 } // end scriptQueue
