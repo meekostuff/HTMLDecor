@@ -293,23 +293,23 @@ _process: function() { // NOTE process a promises callbacks
 
 then: function(acceptCallback, rejectCallback) {
 	var promise = this;
-	var resolve, reject, newPromise = new Promise(function(res, rej) { resolve = res; reject = rej; });
-	var acceptWrapper = acceptCallback ?
-		wrapResolve(acceptCallback, resolve, reject) :
-		function(value) { resolve(value); }
-
-	var rejectWrapper = rejectCallback ? 
-		wrapResolve(rejectCallback, resolve, reject) :
-		function(error) { reject(error); }
-
-	promise._acceptCallbacks.push(acceptWrapper);
-	promise._rejectCallbacks.push(rejectWrapper);
-
-	promise._willCatch = true;
-
-	promise._requestProcessing();
+	return new Promise(function(resolve, reject) {
+		var acceptWrapper = acceptCallback ?
+			wrapResolve(acceptCallback, resolve, reject) :
+			function(value) { resolve(value); }
 	
-	return newPromise;
+		var rejectWrapper = rejectCallback ? 
+			wrapResolve(rejectCallback, resolve, reject) :
+			function(error) { reject(error); }
+	
+		promise._acceptCallbacks.push(acceptWrapper);
+		promise._rejectCallbacks.push(rejectWrapper);
+	
+		promise._willCatch = true;
+	
+		promise._requestProcessing();
+		
+	});
 },
 
 'catch': function(rejectCallback) { // FIXME 'catch' is unexpected identifier in IE8-
@@ -336,15 +336,15 @@ function wrapResolve(callback, resolve, reject) {
 extend(Promise, {
 
 resolve: function(value) {
-	var resolve, promise = new Promise(function(res, rej) { resolve = res; });
+return new Promise(function(resolve, reject) {
 	resolve(value);
-	return promise;
+});
 },
 
 reject: function(error) {
-	var reject, promise = new Promise(function(res, rej) { reject = rej; });
+return new Promise(function(resolve, reject) {
 	reject(error);
-	return promise;	
+});
 }
 
 });
@@ -362,9 +362,10 @@ var wait = (function() { // TODO wait() isn't used much. Can it be simpler?
 var timerId = null, tests = [];
 
 function wait(fn) {
-	var test, promise = new Promise(function(res, rej) { test = { fn: fn, resolve: res, reject: rej }; });
+return new Promise(function(resolve, reject) {
+	var test = { fn: fn, resolve: resolve, reject: reject };
 	asapTest(test);
-	return promise;
+});
 }
 
 function asapTest(test) {
@@ -399,11 +400,11 @@ return wait;
 var asap = function(fn) { return Promise.resolve().then(fn); }
 
 function delay(timeout) {
-	var resolve, promise = new Promise(function(res, rej) { resolve = res; });
+return new Promise(function(resolve, reject) {
 	window.setTimeout(function() {
 		resolve();
 	}, timeout);
-	return promise;
+});
 }
 
 function pipe(startValue, fnList) {
@@ -1687,6 +1688,7 @@ decorate: function(decorDocument, decorURL) {
 			node: decorDocument
 		});
 	},
+	function() { return scriptQueue.empty(); },
 	function() {	
 		return wait(function() { return checkStyleSheets(); });
 	},
@@ -1697,9 +1699,7 @@ decorate: function(decorDocument, decorURL) {
 			type: "decorReady",
 			node: decorDocument
 		});
-	},
-	function() { return scriptQueue.empty(); }
-
+	}
 	]);
 
 	// NOTE decorate() returns now. The following functions are hoisted
@@ -2472,24 +2472,25 @@ this.push = function(node) {
 }
 
 this.empty = function() {
-	emptying = true;
+return new Promise(function(resolve, reject) {
 	
-	var resolver, promise = new Promise(function(resolve, reject) { resolver = { resolve: resolve, reject: reject }; });
+	emptying = true;
 	if (queue.length <= 0) {
 		emptying = false;
-		resolver.resolve();
-		return promise;
+		resolve();
+		return;
 	}
 	forEach(queue, function(value, i) {
 		var acceptCallback = function() {
 			if (queue.length <= 0) {
 				emptying = false;
-				resolver.resolve();
+				resolve();
 			}
 		}
 		value.complete.then(acceptCallback, acceptCallback);
 	});
-	return promise;
+
+});
 }
 
 } // end scriptQueue
