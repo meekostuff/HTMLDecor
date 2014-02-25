@@ -359,47 +359,44 @@ reject: function(error) {
  */
 var wait = (function() { // TODO wait() isn't used much. Can it be simpler?
 	
-var timerId, tests = [];
+var timerId = null, tests = [];
 
 function wait(fn) {
-	var resolver, promise = new Promise(function(resolve, reject) { resolver = { resolve: resolve, reject: reject }; });
-	tests.push({
-		fn: fn,
-		resolver: resolver
-	});
-	if (!timerId) timerId = window.setInterval(poller, Promise.pollingInterval); // NOTE polling-interval is configured below		
+	var test, promise = new Promise(function(res, rej) { test = { fn: fn, resolve: res, reject: rej }; });
+	asapTest(test);
 	return promise;
 }
 
+function asapTest(test) {
+	return asap(test.fn)
+	.then(function(done) {
+		if (done) test.resolve();
+		else deferTest(test);
+	},
+	function(error) {
+		test.reject(error);
+	});
+}
+
+function deferTest(test) {
+	tests.push(test);
+	if (timerId == null) timerId = window.setTimeout(poller, Promise.pollingInterval); // NOTE polling-interval is configured below
+}
+
 function poller() {
-	var test, i = 0;
-	while ((test = tests[i])) {
-		var fn = test.fn, resolver = test.resolver;
-		var done;
-		try {
-			done = fn();
-			if (done) {
-				tests.splice(i,1);
-				resolver.resolve(done);
-			}
-			else i++;
-		}
-		catch(error) {
-			tests.splice(i,1);
-			resolver.reject(error);
-		}
-	}
-	if (tests.length <= 0) {
-		window.clearInterval(timerId); // FIXME probably shouldn't use intervals cause it may screw up debuggers
-		timerId = null;
-	}
+	var currentTests = tests;
+	tests = [];
+	timerId = null;
+	preach(currentTests, function(i, test) {
+		return asapTest(test);
+	});
 }
 
 return wait;
 
 })();
 
-var asap = function(fn) { return Promise.resolve().then(fn) }
+var asap = function(fn) { return Promise.resolve().then(fn); }
 
 function delay(timeout) {
 	var resolve, promise = new Promise(function(res, rej) { resolve = res; });
@@ -419,11 +416,14 @@ function pipe(startValue, fnList) {
 }
 
 function preach(src, fn) {
-	var resolve, reject, promise = new Promise(function(res, rej) { resolve = res; reject = rej; });
+return new Promise(function(resolve, reject) {
+
 	var mode =
 		(typeof src === 'function') ? 'function' :
+		(src == null) ? 'null' :
 		('length' in src) ? 'array' :
 		'object';
+	if (mode === 'null') throw 'src cannot be null in preach(src, fn)';
 	if (mode === 'object') {
 		var keys = [], n = 0;
 		each(src, function(k, v) { keys[n++] = k; });
@@ -431,7 +431,7 @@ function preach(src, fn) {
 
 	var i = 0;
 	next();
-	return promise;
+	return;
 
 	function next() {
 		asap(callback)['catch'](errCallback);		
@@ -444,32 +444,39 @@ function preach(src, fn) {
 			value = src(key);
 			break;
 		case 'array':
+			if (i >= src.length) {
+				resolve();
+				return;
+			}
 			key = i;
 			value = src[key];
 			break;
 		case 'object':
+			if (i >= keys.length) {
+				resolve();
+				return;
+			}
 			key = keys[i];
 			value = src[key];
 			break;
 		}
 		i++;
-		Promise.resolve(value)
-			.then(function(val) {
-				if (mode === 'function' && typeof val === 'undefined') {
-					resolve();
-					return;
-				}
-				fn(key, val, src);
-				if (mode === 'array' && i >= src.length || mode === 'object' && i >= keys.length) {
-					resolve();
-					return;
-				}
-				next();
-			}, errCallback);
+		var current = Promise.resolve(value)
+		.then(function(val) {
+			if (mode === 'function' && typeof val === 'undefined') {
+				resolve();
+				return;
+			}
+			return fn(key, val, src);
+		});
+		current.then(next);
+		return current;
 	}
 	function errCallback(error) {
 		reject(error);
 	}
+	
+});
 }
 
 Promise.pollingInterval = defaults['polling_interval'];
