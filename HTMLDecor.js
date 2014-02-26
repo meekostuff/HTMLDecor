@@ -2178,7 +2178,7 @@ function pageIn(oldDoc, newDoc) {
 		if (!newDoc) decorEnd = $$('plaintext')[0];
 		
 		var nodeList = [];
-		var afterFu, done, afterDoneFu = new Promise(function(res, rej) { done = res; });
+		var afterReplaceFu = Promise.resolve();
 		
 		return preach(function(i) {
 			if (newDoc) return newDoc.body.firstChild;
@@ -2191,7 +2191,6 @@ function pageIn(oldDoc, newDoc) {
 				// TODO compat check between node and target
 				return beforeReplace(node, target)
 				.then(function() {
-					if (!oldDoc) decor.placeHolders[target.id] = target;
 					return wait(function() {
 						try { replaceNode(target, node); } // NOTE fails in IE <= 8 if node is still loading
 						catch (error) { return false; } // FIXME what error does IE throw??
@@ -2206,7 +2205,7 @@ function pageIn(oldDoc, newDoc) {
 				return true;
 			});
 		})
-		.then(function() { return afterDoneFu; }); // this will be the last `afterDoneFu`
+		.then(function() { return afterReplaceFu; }); // this will be the last `afterReplaceFu`
 
 		function beforeReplace(node, target) {
 			return notify({
@@ -2219,11 +2218,12 @@ function pageIn(oldDoc, newDoc) {
 		}
 		function afterReplace(node, target) {
 			if (oldDoc) oldDoc.body.appendChild(target);
+			if (!oldDoc) decor.placeHolders[target.id] = target;
+			var started = nodeList.length > 0;
 			nodeList.push(node);
-			if (!afterFu) afterFu = delay(0).then(_afterReplace);
+			if (!started) afterReplaceFu = delay(0).then(_afterReplace);
 		}
 		function _afterReplace() {
-			afterFu = null;
 			var currentNodes = nodeList;
 			nodeList = [];
 			return preach(currentNodes, function(i, node) {
