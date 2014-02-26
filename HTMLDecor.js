@@ -464,13 +464,14 @@ return new Promise(function(resolve, reject) {
 		i++;
 		var current = Promise.resolve(value)
 		.then(function(val) {
-			if (mode === 'function' && typeof val === 'undefined') {
+			if (mode === 'function' && val == null) {
 				resolve();
 				return;
 			}
-			return fn(key, val, src);
+			var result = fn(key, val, src);
+			current.then(next);
+			return result;
 		});
-		current.then(next);
 		return current;
 	}
 	function errCallback(error) {
@@ -2172,43 +2173,66 @@ function pageIn(oldDoc, newDoc) {
 	function() {
 		var decorEnd;
 		if (!newDoc) decorEnd = $$('plaintext')[0];
-		var afterInsertFu;
 		
-		return wait(function() {
-			var nodeList = [];
-			var contentStart = newDoc ? newDoc.body.firstChild : decorEnd.nextSibling;
-			if (contentStart) placeContent(
-				contentStart,
-				function(node, target) {
+		var nodeList = [];
+		var afterFu, done, afterDoneFu = new Promise(function(res, rej) { done = res; });
+		
+		return preach(function(i) {
+			if (newDoc) return newDoc.body.firstChild;
+			return wait(function() { return contentLoaded || decorEnd.nextSibling; })
+			.then(function() { return decorEnd.nextSibling; });
+		},
+		function(i, node) {
+			var target;
+			if (node.id && (target = $id(node.id)) != node) {
+				// TODO compat check between node and target
+				return beforeReplace(node, target)
+				.then(function() {
 					if (!oldDoc) decor.placeHolders[target.id] = target;
-					notify({
-						module: "panner",
-						stage: "before",
-						type: "nodeInserted",
-						target: document.body,
-						node: node
+					return wait(function() {
+						try { replaceNode(target, node); } // NOTE fails in IE <= 8 if node is still loading
+						catch (error) { return false; } // FIXME what error does IE throw??
+						return true;
 					});
-				},
-				function(node, target) {
-					if (oldDoc) oldDoc.body.appendChild(target);
-					nodeList.push(node);
-				}
-			);
-			afterInsertFu = delay(0)
-			.then(function() {
-				forEach(nodeList, function(node) {
-					notify({
-						module: "panner",
-						stage: "after",
-						type: "nodeInserted",
-						target: document.body,
-						node: node
-					});
+				}).
+				then(function() { afterReplace(node, target); });
+			}
+			else return wait(function() {
+				try { node.parentNode.removeChild(node); }
+				catch (error) { return false; }
+				return true;
+			});
+		})
+		.then(function() { return afterDoneFu; }); // this will be the last `afterDoneFu`
+
+		function beforeReplace(node, target) {
+			return notify({
+				module: "panner",
+				stage: "before",
+				type: "nodeInserted",
+				target: document.body,
+				node: node
+			});
+		}
+		function afterReplace(node, target) {
+			if (oldDoc) oldDoc.body.appendChild(target);
+			nodeList.push(node);
+			if (!afterFu) afterFu = delay(0).then(_afterReplace);
+		}
+		function _afterReplace() {
+			afterFu = null;
+			var currentNodes = nodeList;
+			nodeList = [];
+			return preach(currentNodes, function(i, node) {
+				return notify({
+					module: "panner",
+					stage: "after",
+					type: "nodeInserted",
+					target: document.body,
+					node: node
 				});
 			});
-			return contentLoaded;
-		})
-		.then(function() { return afterInsertFu; }); // this will be the last `afterInsertFu`
+		}
 	},
 
 	function() { return scriptQueue.empty(); },
@@ -2223,23 +2247,6 @@ function pageIn(oldDoc, newDoc) {
 	}
 	
 	]);
-	
-	// NOTE pageIn() returns now. The following functions are hoisted
-	
-	function placeContent(content, beforeReplace, afterReplace) { // this should work for content from both internal and external documents
-		var srcBody = content.parentNode;
-		forSiblings ("starting", content, function(node) { 
-			var target;
-			if (node.id && (target = $id(node.id)) != node) {
-				// TODO compat check between node and target
-				if (beforeReplace) beforeReplace(node, target);
-				try { replaceNode(target, node); } // NOTE fails in IE <= 8 if node is still loading
-				catch (error) { return; }
-				if (afterReplace) afterReplace(node, target);
-			}
-			else try { srcBody.removeChild(node); } catch (error) {}
-		});
-	}
 
 }
 
