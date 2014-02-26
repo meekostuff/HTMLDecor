@@ -109,7 +109,10 @@ this.LOG_LEVEL = levels[defaults['log_level']]; // DEFAULT
  ### Task queuing and isolation
  */
 
-var queueTask = window.setImmediate || (function() {
+// NOTE queueTask could be mapped to window.setImmediate, except for
+// IE10 CPU contention bugs http://codeforhire.com/2013/09/21/setimmediate-and-messagechannel-broken-on-internet-explorer-10/
+
+var queueTask = (function() { 
 
 var taskQueue = [];
 var scheduled = false;
