@@ -2405,7 +2405,8 @@ this.push = function(node) {
 	var completeRe, completeFu = new Promise(function(resolve, reject) { completeRe = { resolve: resolve, reject: reject }; });	
 
 	if (!/^text\/javascript\?disabled$/i.test(node.type)) {
-		completeRe.reject("Unsupported script-type " + node.type);
+		completeRe.resolve();
+		logger.info("Unsupported script-type " + node.type);
 		return completeFu;
 	}
 
