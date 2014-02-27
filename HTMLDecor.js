@@ -109,38 +109,67 @@ this.LOG_LEVEL = levels[defaults['log_level']]; // DEFAULT
  ### Task queuing and isolation
  */
 
-// NOTE queueTask could be mapped to window.setImmediate, except for
+// NOTE Task.asap could use window.setImmediate, except for
 // IE10 CPU contention bugs http://codeforhire.com/2013/09/21/setimmediate-and-messagechannel-broken-on-internet-explorer-10/
 
-var queueTask = (function() { 
+var Task = (function() {
 
-var taskQueue = [];
+var asapQueue = [];
+var deferQueue = [];
 var scheduled = false;
+var processing = false;
 
-function queueTask(fn) {
-	taskQueue.push(fn);
+function asap(fn) {
+	asapQueue.push(fn);
+	if (processing) return;
 	if (scheduled) return;
 	schedule(processTasks);
 	scheduled = true;
+}
+
+function defer(fn) {
+	if (processing) {
+		deferQueue.push(fn);
+		return;
+	}
+	asap(fn);
+}
+
+function delay(fn, timeout) {
+	if (timeout <= 0 || timeout == null) {
+		defer(fn);
+		return;
+	}
+
+	setTimeout(function() {
+		isolate(fn);
+		processTasks();
+	}, timeout);
 }
 
 // NOTE schedule used to be approx: setImmediate || postMessage || setTimeout
 var schedule = window.setTimeout;
 
 function processTasks() {
+	processing = true;
 	var task;
-	while (taskQueue.length) {
-		task = taskQueue.shift();
+	while (asapQueue.length) {
+		task = asapQueue.shift();
 		if (typeof task !== 'function') continue;
 		var success = isolate(task);
 		// FIXME then what??
 	}
 	scheduled = false;
+	processing = false;
+	
+	asapQueue = deferQueue;
+	deferQueue = [];
+	if (asapQueue.length) {
+		schedule(processTasks);
+		scheduled = true;
+	}
 }
 
-return queueTask;
-
-})();
 
 var isolate = (function() { // TODO maybe it isn't worth isolating on platforms that don't have dispatchEvent()
 
@@ -184,6 +213,15 @@ else isolate = function(fn) {
 return isolate;
 })();
 
+
+return {
+	asap: asap,
+	defer: defer,
+	delay: delay,
+	isolate: isolate
+};
+
+})(); // END Task
 
 /*
  ### Promise
@@ -251,7 +289,7 @@ _reject: function(error, sync) { // NOTE equivalent to "reject algorithm". Exter
 	promise._accepted = false;
 	promise._result = error;
 	if (!promise._willCatch) {
-		queueTask(function() {
+		Task.asap(function() {
 			if (!promise._willCatch) throw error;
 		});
 	}
@@ -268,7 +306,7 @@ _requestProcessing: function(sync) { // NOTE schedule callback processing. TODO 
 		promise._processing = false;
 	}
 	else {
-		queueTask(function() {
+		Task.asap(function() {
 			promise._processing = true;
 			promise._process();
 			promise._processing = false;
@@ -362,7 +400,7 @@ return new Promise(function(resolve, reject) {
  */
 var wait = (function() { // TODO wait() isn't used much. Can it be simpler?
 	
-var timerId = null, tests = [];
+var tests = [];
 
 function wait(fn) {
 return new Promise(function(resolve, reject) {
@@ -383,14 +421,14 @@ function asapTest(test) {
 }
 
 function deferTest(test) {
+	var started = tests.length > 0;
 	tests.push(test);
-	if (timerId == null) timerId = window.setTimeout(poller, Promise.pollingInterval); // NOTE polling-interval is configured below
+	if (!started) Task.delay(poller, Promise.pollingInterval); // NOTE polling-interval is configured below
 }
 
 function poller() {
 	var currentTests = tests;
 	tests = [];
-	timerId = null;
 	preach(currentTests, function(i, test) {
 		return asapTest(test);
 	});
@@ -404,9 +442,8 @@ var asap = function(fn) { return Promise.resolve().then(fn); }
 
 function delay(timeout) {
 return new Promise(function(resolve, reject) {
-	window.setTimeout(function() {
-		resolve();
-	}, timeout);
+	if (timeout <= 0 || timeout == null) Task.defer(resolve);
+	else Task.delay(resolve, timeout);
 });
 }
 
@@ -487,7 +524,7 @@ return new Promise(function(resolve, reject) {
 Promise.pollingInterval = defaults['polling_interval'];
 
 extend(Promise, {
-	isolate: isolate, asap: asap, delay: delay, wait: wait, pipe: pipe
+	asap: asap, delay: delay, wait: wait, pipe: pipe
 });
 
 
@@ -2151,10 +2188,6 @@ var pan = function(oldState, newState) {
 
 function pageIn(oldDoc, newDoc) {
 	
-	var contentLoaded = false;
-	if (newDoc) contentLoaded = true;
-	else DOM.ready(function() { contentLoaded = true; }); // src doc is `document`
-
 	return pipe(null, [
 		
 	function() { // before pageIn
@@ -2177,13 +2210,15 @@ function pageIn(oldDoc, newDoc) {
 		var decorEnd;
 		if (!newDoc) decorEnd = $$('plaintext')[0];
 		
-		var nodeList = [];
 		var afterReplaceFu = Promise.resolve();
 		
-		return preach(function(i) {
+		return preach(function(i) { // NOTE if this sourcing function returns nothing (or a promise that resolves with nothing) then preach() terminates
 			if (newDoc) return newDoc.body.firstChild;
-			return wait(function() { return contentLoaded || decorEnd.nextSibling; })
-			.then(function() { return decorEnd.nextSibling; });
+			return new Promise(function(resolve, reject) { // start a promise race
+				DOM.ready(resolve);
+				wait(function() { return !!decorEnd.nextSibling; }).then(resolve);
+			})
+			.then(function() { return decorEnd.nextSibling; }); 
 		},
 		function(i, node) {
 			var target;
@@ -2197,7 +2232,7 @@ function pageIn(oldDoc, newDoc) {
 						return true;
 					});
 				}).
-				then(function() { afterReplace(node, target); });
+				then(function() { afterReplaceFu = afterReplace(node, target); });
 			}
 			else return wait(function() {
 				try { node.parentNode.removeChild(node); }
@@ -2219,14 +2254,7 @@ function pageIn(oldDoc, newDoc) {
 		function afterReplace(node, target) {
 			if (oldDoc) oldDoc.body.appendChild(target);
 			if (!oldDoc) decor.placeHolders[target.id] = target;
-			var started = nodeList.length > 0;
-			nodeList.push(node);
-			if (!started) afterReplaceFu = delay(0).then(_afterReplace);
-		}
-		function _afterReplace() {
-			var currentNodes = nodeList;
-			nodeList = [];
-			return preach(currentNodes, function(i, node) {
+			return delay(0).then(function() {
 				return notify({
 					module: "panner",
 					stage: "after",
