@@ -247,7 +247,7 @@ function domReady(fn) {
 }
 
 function processQueue() {
-	forEach(queue, setTimeout);
+	forEach(queue, function(fn) { setTimeout(fn); });
 	queue.length = 0;
 }
 
