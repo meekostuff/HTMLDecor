@@ -702,6 +702,7 @@ var loaded = readyState ? readyStateLookup[readyState] : true;
 var queue = [];
 
 function domReady(fn) {
+	if (typeof fn !== 'function') return;
 	queue.push(fn);
 	if (loaded) processQueue();
 }

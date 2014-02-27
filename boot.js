@@ -241,12 +241,13 @@ var loaded = false;
 var queue = [];
 
 function domReady(fn) {
+	if (typeof fn !== 'function') return;
 	queue.push(fn);
 	if (loaded) processQueue();
 }
 
 function processQueue() {
-	forEach(queue, function(fn) { setTimeout(fn); });
+	forEach(queue, setTimeout);
 	queue.length = 0;
 }
 
