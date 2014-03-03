@@ -1731,17 +1731,18 @@ decorate: function(decorDocument, decorURL) {
 		});
 	},
 	function() { return scriptQueue.empty(); },
-	function() {	
-		return wait(function() { return checkStyleSheets(); });
-	},
-	function() {
-		return notify({
-			module: "decor",
-			stage: "after",
-			type: "decorReady",
-			node: decorDocument
+	function() { // this doesn't stall the Promise returned by decorate() 
+		wait(function() { return checkStyleSheets(); })
+		.then(function() {
+			return notify({
+				module: "decor",
+				stage: "after",
+				type: "decorReady",
+				node: decorDocument
+			});
 		});
 	}
+
 	]);
 
 	// NOTE decorate() returns now. The following functions are hoisted
@@ -2215,9 +2216,9 @@ function pageIn(oldDoc, newDoc) {
 		
 		return preach(function(i) { // NOTE if this sourcing function returns nothing (or a promise that resolves with nothing) then preach() terminates
 			if (newDoc) return newDoc.body.firstChild;
-			return new Promise(function(resolve, reject) { // Promise.race([ dom-is-ready, content-is-ready ])
+			return new Promise(function(resolve, reject) { // Promise.race([ all-content-loaded, some-content-available ])
 				DOM.ready(resolve);
-				wait(function() { return !!decorEnd.nextSibling; }).then(resolve);
+				wait(function() { return decorEnd.nextSibling; }).then(resolve); // TODO feature-detect if replaceNode below can throw
 			})
 			.then(function() { return decorEnd.nextSibling; }); 
 		},
@@ -2228,7 +2229,7 @@ function pageIn(oldDoc, newDoc) {
 				return beforeReplace(node, target)
 				.then(function() {
 					return wait(function() {
-						try { replaceNode(target, node); } // NOTE fails in IE <= 8 if node is still loading
+						try { replaceNode(target, node); } // NOTE throws in IE <= 8 if node is still loading. Very slow in IE9 on large pages.
 						catch (error) { return false; } // TODO what error does IE throw? Is it always because the node is still loading?
 						return true;
 					});
