@@ -490,7 +490,9 @@ var style = document.createElement("style");
 fragment.appendChild(style); // NOTE on IE this realizes style.styleSheet 
 
 // NOTE hide the page until the decor is ready
-var cssText = 'body { visibility: hidden; }';
+var selector = 'body', property = 'visibility', value = 'hidden';
+
+var cssText = selector + ' { ' + property + ': ' + value + '; }\n';
 if (style.styleSheet) style.styleSheet.cssText = cssText;
 else style.textContent = cssText;
 
@@ -505,8 +507,9 @@ function unhide() {
 	// NOTE on IE sometimes content stays hidden although 
 	// the stylesheet has been removed.
 	// The following forces the content to be revealed
-	document.body.style.visibility = "hidden";
-	setTimeout(function() { document.body.style.visibility = ""; }, pollingInterval);
+	var el = $$(selector)[0];
+	el.style[property] = value;
+	setTimeout(function() { el.style[property] = ""; }, pollingInterval);
 }
 
 return {
