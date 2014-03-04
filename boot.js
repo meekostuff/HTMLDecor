@@ -490,8 +490,9 @@ var style = document.createElement("style");
 fragment.appendChild(style); // NOTE on IE this realizes style.styleSheet 
 
 // NOTE hide the page until the decor is ready
-if (style.styleSheet) style.styleSheet.cssText = "body { visibility: hidden; }";
-else style.textContent = "body { visibility: hidden; }";
+var cssText = 'body { visibility: hidden; }';
+if (style.styleSheet) style.styleSheet.cssText = cssText;
+else style.textContent = cssText;
 
 function hide() {
 	head.insertBefore(style, head.firstChild);
