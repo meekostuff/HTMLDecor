@@ -1943,7 +1943,7 @@ panner.options = {
 			return doc;
 		}
 		]);
-	},
+	}
 
 	/* The following options are also available *
 	nodeRemoved: { before: hide, after: show },
