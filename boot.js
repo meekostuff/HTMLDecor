@@ -241,6 +241,7 @@ var loaded = false;
 var queue = [];
 
 function domReady(fn) {
+	if (typeof fn !== 'function') return;
 	queue.push(fn);
 	if (loaded) processQueue();
 }
@@ -489,8 +490,11 @@ var style = document.createElement("style");
 fragment.appendChild(style); // NOTE on IE this realizes style.styleSheet 
 
 // NOTE hide the page until the decor is ready
-if (style.styleSheet) style.styleSheet.cssText = "body { visibility: hidden; }";
-else style.textContent = "body { visibility: hidden; }";
+var selector = 'body', property = 'visibility', value = 'hidden';
+
+var cssText = selector + ' { ' + property + ': ' + value + '; }\n';
+if (style.styleSheet) style.styleSheet.cssText = cssText;
+else style.textContent = cssText;
 
 function hide() {
 	head.insertBefore(style, head.firstChild);
@@ -503,8 +507,9 @@ function unhide() {
 	// NOTE on IE sometimes content stays hidden although 
 	// the stylesheet has been removed.
 	// The following forces the content to be revealed
-	document.body.style.visibility = "hidden";
-	setTimeout(function() { document.body.style.visibility = ""; }, pollingInterval);
+	var el = $$(selector)[0];
+	el.style[property] = value;
+	setTimeout(function() { el.style[property] = ""; }, pollingInterval);
 }
 
 return {
@@ -542,7 +547,7 @@ start: function() {
 },
 
 getDocument: function() { // WARN this assumes HTMLDecor is ready
-	return new Meeko.Future(function() { var r = this;
+	return new Meeko.Promise(function(resolve, reject) {
 		domReady(function() {
 			var elts = $$('plaintext');
 			var plaintext = elts[elts.length - 1]; // NOTE There should only be one, but take the last just to be sure
@@ -550,7 +555,7 @@ getDocument: function() { // WARN this assumes HTMLDecor is ready
 			plaintext.parentNode.removeChild(plaintext);
 			
 			if (!/\s*<!DOCTYPE/i.test(html)) html = capturedHTML + html;
-			r.accept(new String(html));
+			resolve(new String(html));
 		});
 	})
 	.then(function(text) {
@@ -643,7 +648,7 @@ html5prepare(); // no doc arg means use document and add block element styles
 function config() {
 	Meeko.DOM.ready = domReady;
 	Meeko.DOM.HTMLParser.prototype.prepare = html5prepare;
-	Meeko.Future.pollingInterval = bootOptions["polling_interval"];
+	Meeko.Promise.pollingInterval = bootOptions["polling_interval"];
 	Meeko.decor.config({
 		decorReady: Viewport.unhide
 	});
