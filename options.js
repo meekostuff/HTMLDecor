@@ -14,7 +14,7 @@ Meeko.options = { // these are the default values
 	"autostart": true,
 	"capturing": false,
 	"log_level": "warn", // debug, info, warn, error, none
-	"no_cookie_options": false,
+	"ignore_cookie_options": false,
 	"hidden_timeout": 3000,
 	"startup_timeout": 10000, // abort if startup takes longer than this
 	"polling_interval": 50,
