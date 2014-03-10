@@ -559,7 +559,7 @@ getDocument: function() { // WARN this assumes HTMLDecor is ready
 		});
 	})
 	.then(function(text) {
-		return Meeko.panner.options.loadFromString(text, document.URL, { mustResolve: false });
+		return Meeko.DOM.parseHTML(text, { url: document.URL, mustResolve: false });
 	});
 }
 

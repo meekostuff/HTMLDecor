@@ -1590,9 +1590,14 @@ start: function(startOptions) {
 		},
 		function() {
 			return startOptions.contentDocument
-				.then(function(doc) {
-					return pageIn(null, doc);
-				});
+			.then(function(doc) {
+				if (panner.options.normalize) panner.options.normalize(doc, { url: document.URL });
+				if (!STAGING_DOCUMENT_IS_INERT) deneutralizeAll(doc);
+				return doc;
+			})
+			.then(function(doc) {
+				return pageIn(null, doc);
+			});
 		}
 		]);
 		else return pipe(null, [
@@ -2033,23 +2038,6 @@ panner.options = {
 		var loader = new HTMLLoader(panner.options);
 		details.mustResolve = false;
 		return loader.load(method, url, data, details);
-	},
-	loadFromString: function(textFu, url, details) { // for capturing. TODO ideally this functionality is refactored into HTMLLoader
-		var loader = this;
-		if (!details) details = {};
-		if (!details.url) details.url = url;
-		if (!details.method) details.method = 'get';
-		
-		return pipe(textFu, [
-		function(text) {
-			return parseHTML(new String(text), details);
-		},
-		function(doc) {
-			if (loader.normalize) loader.normalize(doc, details);
-			if (details.isNeutralized) deneutralizeAll(doc);
-			return doc;
-		}
-		]);
 	}
 
 	/* The following options are also available *
