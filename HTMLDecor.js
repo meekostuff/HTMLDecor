@@ -2314,18 +2314,21 @@ function pageIn(oldDoc, newDoc) {
 	},
 	
 	function() {
+		var contentLoaded = false;
 		var decorEnd;
-		if (!newDoc) decorEnd = $$('plaintext')[0];
+		if (newDoc) contentLoaded = true;
+		else {
+			DOM.ready(function() { contentLoaded = true; });
+			decorEnd = $$('plaintext')[0];
+		}
 		
 		var afterReplaceFu;
 		
 		return preach(function(i) { // NOTE if this sourcing function returns nothing (or a promise that resolves with nothing) then preach() terminates
 			if (newDoc) return newDoc.body.firstChild;
-			return new Promise(function(resolve, reject) { // Promise.race([ all-content-loaded, some-content-available ])
-				DOM.ready(resolve);
-				wait(function() { return decorEnd.nextSibling; }).then(resolve); // TODO feature-detect if replaceNode below can throw
-			})
-			.then(function() { return decorEnd.nextSibling; }); 
+
+			return wait(function() { return decorEnd.nextSibling || contentLoaded; })
+				.then(function() { return decorEnd.nextSibling; });
 		},
 		function(i, node) {
 			var target;
