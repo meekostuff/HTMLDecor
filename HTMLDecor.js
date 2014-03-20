@@ -1507,10 +1507,51 @@ var checkStyleSheets = function() { // TODO would be nice if this didn't need to
 	});
 }
 
+// proxy for `history` especially to guarantee `history.state` for older Webkit browsers that DO support `history.pushState`
+var historyProxy = (function() {
+
+var historyProxy = {};
+
+if (!history.pushState) return historyProxy;
+
+extend(historyProxy, {
+
+state: undefined,
+
+pushState: function(object, title, url) {
+	updateState(object);
+	if (typeof url === "undefined") history.pushState(object, title);
+	else history.pushState(object, title, url);
+},
+
+replaceState: function(object, title, url) {
+	updateState(object);
+	if (typeof url === "undefined") history.replaceState(object, title);
+	else history.replaceState(object, title, url);
+}
+
+});
+
+window.addEventListener('popstate', function(e) { updateState(e.state); });
+
+function updateState(src) {
+	if (typeof src === 'object' && src !== null) {
+		historyProxy.state = {};
+		config(historyProxy.state, src);
+	}
+	else historyProxy.state = src;
+}
+
+return historyProxy;
+
+})();
+
+
 var polyfill = function(doc) { // NOTE more stuff could be added here if *necessary*
 	if (!doc) doc = document;
 	if (!doc.head) doc.head = firstChild(doc.documentElement, "head");
 }
+
 
 var DOM = Meeko.DOM || (Meeko.DOM = {});
 extend(DOM, {
@@ -1617,7 +1658,7 @@ start: function(startOptions) {
 	function() {
 		scrollToId(location.hash && location.hash.substr(1));
 
-		if (!history.pushState) return;
+		if (!historyProxy.pushState) return;
 
 		/*
 			If this is the landing page then `history.state` will be null.
@@ -1625,22 +1666,23 @@ start: function(startOptions) {
 			Ideally the page would be in bfcache and this startup wouldn't even run,
 			but that doesn't seem to work on Chrome & IE10.
 		*/
-		var state = history.state;
-		if (panner.ownsState(state)) {
+		var state;
+		if (panner.ownsBrowserState(historyProxy.state)) {
+			state = panner.getStateFromBrowserState(historyProxy.state);
 			panner.restoreState(state);
 			panner.restoreScroll(state);
 		}
 		else {
 			state = panner.createState({ url: document.URL });
 			panner.commitState(state, true); // replaceState
-			panner.saveScroll();
+			panner.saveScroll(state);
 		}
 
 		// NOTE fortuitously all the browsers that support pushState() also support addEventListener() and dispatchEvent()
 		window.addEventListener("click", function(e) { panner.onClick(e); }, true);
 		window.addEventListener("submit", function(e) { panner.onSubmit(e); }, true);
 		window.addEventListener("popstate", function(e) { panner.onPopState(e); }, true);
-		window.addEventListener('scroll', function(e) { panner.saveScroll(); }, false); // NOTE first scroll after popstate might be cancelled
+		window.addEventListener('scroll', function(e) { panner.saveScroll(panner.getState()); }, false); // NOTE first scroll after popstate might be cancelled
 	}
 	
 	]);
@@ -1860,28 +1902,66 @@ onForm: function(form) {
 	}
 },
 
+triggerStateChange: (function() {
+	
+	var nextStateQueue = [];
+	var processing = false;
+	
+	function push(newState) {	
+		nextStateQueue.push(newState);		
+		asap(process);
+	}
+	
+	function process() {
+		if (processing) return;
+		if (nextStateQueue.length <= 0) return;
+		
+		processing = true;
+		var newState = nextStateQueue.pop();
+		nextStateQueue.length = 0;
+		panner.handleStateChange(newState)
+		.then(processCallback); // FIXME what about errors
+	}
+	
+	function processCallback() {
+		processing = false;
+		asap(process);
+	}
+	
+	return push;
+	
+})(),
+
+handleStateChange: function(newState) {
+	var oldState = panner.getState();
+	panner.restoreState(newState);
+
+	var newURL = URL(newState.url).nohash;
+	if (newURL != URL(oldState.url).nohash) {
+		return pan(oldState, newState)
+			.then(function() {
+				panner.restoreScroll(newState);
+			});
+	}
+	else return asap(function() {
+		panner.restoreScroll(newState);
+	});
+	
+},
+
 onPopState: function(e) {
-	var newState = e.state;
-	if (!panner.ownsState(newState)) return;
+	var browserState = e.state;
+	if (!panner.ownsBrowserState(browserState)) { // FIXME how to stop external use of history.pushState() ??
+		logger.warn('HTMLDecor should be the only history.state manager');
+		return;
+	}
 	if (e.stopImmediatePropagation) e.stopImmediatePropagation();
 	else e.stopPropagation();
 	// NOTE there is no default-action for popstate
 
-	var oldState = panner.state;
-	var complete = false;
-	var newURL = URL(newState.url).nohash;
-	if (newURL != URL(oldState.url).nohash) {
-		pan(oldState, newState)
-		.then(function() {
-			panner.restoreScroll(newState);
-			complete = true;
-		});
-	}
-	else asap(function() {
-		panner.restoreScroll(newState);
-		complete = true;
-	});
-	
+	var newState = panner.getStateFromBrowserState(browserState);
+	panner.triggerStateChange(newState);
+
 	/*
 	  All browsers seem to scroll the page around the popstate event.
 	  This causes the page to jump at popstate, as though the content of the incoming state is already present.
@@ -1889,19 +1969,17 @@ onPopState: function(e) {
 	  so the following listens for that event and restores the page offsets from the outgoing state.
 	  If there is no scroll event then it is effectively a no-op. 
 	*/
-	panner.restoreState(newState);
-	window.scroll(oldState.pageXOffset, oldState.pageYOffset); // TODO IE10 sometimes scrolls visibly before `scroll` event. This might help.
+
+	var oldState = panner.getState();
+	panner.restoreScroll(oldState); // TODO IE10 sometimes scrolls visibly before `scroll` event. This might help.
 	// var refresh = document.documentElement.scrollTop;
 	window.addEventListener('scroll', undoScroll, true);
-	var count = 0;
+	setTimeout(function() { window.removeEventListener('scroll', undoScroll, true); });
+
 	function undoScroll(scrollEv) { // undo the popstate triggered scroll if appropriate
-		if (complete) {
-			window.removeEventListener('scroll', undoScroll, true);
-			return;
-		}
 		scrollEv.stopPropagation(); // prevent the saveScroll function
-		scrollEv.preventDefault(); // TODO should really use this
-		window.scroll(oldState.pageXOffset, oldState.pageYOffset);
+		scrollEv.preventDefault(); // TODO should really use preventDefault() instead of stopPropagation()
+		panner.restoreScroll(oldState);
 		// var refresh = document.documentElement.scrollTop;
 	}
 },
@@ -1920,52 +1998,83 @@ replace: function(url) {
 	});
 },
 
-navigate: history.pushState ? navigate : defaultNavigate,
+navigate: historyProxy.pushState ? navigate : defaultNavigate,
 
+stateId: null,
+stateTable: {},
 bfcache: {},
 
 createState: function(options) {
+	var timeStamp = +(new Date);
 	var state = {
 		'meeko-panner': true,
 		pageXOffset: 0,
 		pageYOffset: 0,
 		url: null,
-		timeStamp: +(new Date)
+		timeStamp: timeStamp
 	};
 	if (options) config(state, options);
 	return state;
 },
 
 commitState: function(state, replace) {
-	panner.state = state;
+	var timeStamp = state.timeStamp;
+	panner.stateTable[timeStamp] = state;
+	panner.stateId = timeStamp;
+
 	var modifier = replace ? 'replaceState' : 'pushState';
-	history[modifier](state, null, state.url);	
+	historyProxy[modifier](state, null, state.url);	
+	return state;
 },
 
-configState: function(options) {
-	if (options) config(panner.state, options);
-	history.replaceState(panner.state, null);
+updateState: function(options) {
+	var state = panner.getState();
+	config(state, options);
+	var browserState = historyProxy.state;
+	if (panner.ownsBrowserState(browserState) && browserState.timeStamp === state.timeStamp) {
+		historyProxy.replaceState(state);
+	}
 },
 
-ownsState: function(state) {
-	if (!state) state = history.state;
-	if (!state) return false;
-	return !!state['meeko-panner'];
+ownsBrowserState: function(browserState) {
+	if (!browserState) browserState = historyProxy.state;
+	if (!browserState) return false;
+	return !!browserState['meeko-panner'];
 },
 
-restoreState: function(state) { // called from popstate
-	if (!state) state = history.state;
-	panner.state = state;
+getStateFromBrowserState: function(browserState) {
+	if (!browserState) browserState = historyProxy.state;
+	if (!panner.ownsBrowserState(browserState)) return;
+	var timeStamp = browserState.timeStamp;
+	var state = panner.stateTable[timeStamp];
+	if (!state) panner.stateTable[timeStamp] = state = browserState;
+	return state;
 },
 
-saveScroll: function() {
-	panner.configState({pageXOffset: window.pageXOffset, pageYOffset: window.pageYOffset });
-	history.replaceState(panner.state, null);	
+getState: function() {
+	var state = panner.stateTable[panner.stateId];
+	return state;
+},
+
+restoreState: function(state) {
+	panner.stateId = state.timeStamp;
+},
+
+saveScroll: function(state) {
+	var msg = 'saveScroll(state) not in sync with panner.state';
+	if (state && state.timeStamp !== panner.getState().timeStamp) {
+		console.log(msg);
+		throw msg;
+	}
+	panner.updateState({pageXOffset: window.pageXOffset, pageYOffset: window.pageYOffset });
 },
 
 restoreScroll: function(state) {
-	if (!state) state = history.state;
-	// if (!state['meeko-panner']) return;
+	var msg = 'restoreScroll(state) not in sync with panner.state';
+	if (state && state.timeStamp !== panner.getState().timeStamp) {
+		console.log(msg);
+		throw msg;
+	}
 	window.scroll(state.pageXOffset, state.pageYOffset);
 }
 
@@ -1982,7 +2091,7 @@ return new Promise(function(resolve, reject) {
 		return;
 	}
 
-	var oldState = panner.state;
+	var oldState = panner.getState();
 	var newState = panner.createState({ // FIXME
 		url: url
 	});
@@ -1992,7 +2101,7 @@ return new Promise(function(resolve, reject) {
 		var oURL = URL(newState.url);
 		scrollToId(oURL.hash && oURL.hash.substr(1));
 
-		panner.saveScroll();
+		panner.saveScroll(newState);
 
 		resolve(msg);
 	});
@@ -2084,7 +2193,6 @@ var pan = function(oldState, newState) {
 	if (!getDecorMarker()) throw "Cannot pan if the document has not been decorated"; // FIXME r.reject()
 
 	var durationFu = delay(panner.options.duration);
-
 	var oldDoc = panner.bfcache[oldState.timeStamp];
 	if (!oldDoc) {
 		oldDoc = document.implementation.createHTMLDocument(''); // FIXME
@@ -2094,7 +2202,9 @@ var pan = function(oldState, newState) {
 
 	var newDoc, newDocFu;
 	newDoc = panner.bfcache[newState.timeStamp];
-	if (newDoc) newDocFu = Promise.resolve(newDoc);
+	if (newDoc) {
+		newDocFu = Promise.resolve(newDoc);
+	}
 	else {
 		var url = newState.url;
 		var method = 'get'; // newState.method
@@ -2164,7 +2274,7 @@ var pan = function(oldState, newState) {
 	},
 
 	function() { return newDocFu; },
-		
+	
 	function() { return pageIn(oldDocSaved ? null : oldDoc, newDoc); },
 	
 	function() {
@@ -2177,7 +2287,7 @@ var pan = function(oldState, newState) {
 }
 
 function pageIn(oldDoc, newDoc) {
-	
+
 	return pipe(null, [
 		
 	function() { // before pageIn
@@ -2266,7 +2376,7 @@ function pageIn(oldDoc, newDoc) {
 			target: document
 		});
 	}
-	
+
 	]);
 
 }
