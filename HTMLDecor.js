@@ -1007,7 +1007,7 @@ var canResolve = (function() {
 var AttrDesc = function(tagName, attrName, loads) {
 	var testEl = document.createElement(tagName);
 	var supported = attrName in testEl;
-	lcAttr = lc(attrName); // NOTE for longDesc, etc
+	var lcAttr = lc(attrName); // NOTE for longDesc, etc
 	var resolves = false;
 	if (supported && canResolve) {
 		testEl = document.createElement('<' + tagName + ' ' + lcAttr + '="' + testURL + '">');
