@@ -1841,9 +1841,7 @@ onClick: function(e) {
 },
 
 onPageLink: function(url) {	// TODO Need to handle anchor links. The following just replicates browser behavior
-	var state = panner.createState({ url: url });
-	panner.commitState(state, false); // pushState
-	scrollToId(URL(url).hash.substr(1));
+	panner.assign(url);
 },
 
 onSiteLink: function(url) {	// Now attempt to pan
@@ -1936,8 +1934,7 @@ handleStateChange: function(newState) {
 	var oldState = panner.getState();
 	panner.restoreState(newState);
 
-	var newURL = URL(newState.url).nohash;
-	if (newURL != URL(oldState.url).nohash) {
+	if (newState.cacheId != oldState.cacheId) {
 		return pan(oldState, newState)
 			.then(function() {
 				panner.restoreScroll(newState);
@@ -1946,7 +1943,6 @@ handleStateChange: function(newState) {
 	else return asap(function() {
 		panner.restoreScroll(newState);
 	});
-	
 },
 
 onPopState: function(e) {
@@ -2011,7 +2007,8 @@ createState: function(options) {
 		pageXOffset: 0,
 		pageYOffset: 0,
 		url: null,
-		timeStamp: timeStamp
+		timeStamp: timeStamp,
+		cacheId: timeStamp // WARN this will be over-ridden for same-page links
 	};
 	if (options) config(state, options);
 	return state;
@@ -2083,26 +2080,36 @@ restoreScroll: function(state) {
 function navigate(options) {
 return new Promise(function(resolve, reject) {
 	var url = options.url;
+
+	var baseURL = URL(document.URL);
+	var oURL = URL(url);
+	var isPageLink = (oURL.nohash === baseURL.nohash); // TODO what about page-links that match the current hash
+
+	var oldState = panner.getState();
+	var newState = panner.createState({ url: url });
+
+	if (isPageLink) {
+		newState.cacheId = oldState.cacheId;
+		panner.commitState(newState, false); // pushState
+		scrollToId(oURL.hash.substr(1));
+		panner.saveScroll(newState);
+		resolve();
+		return;
+	}
+
 	var decorURL = decor.options.lookup(url);
 	if (typeof decorURL !== "string" || URL(document.URL).resolve(decorURL) !== decor.current.url) {
 		var modifier = options.replace ? "replace" : "assign";
 		location[modifier](url);
-		resolve();	// TODO should this be an error??
-		return;
+		resolve(); // TODO should this be an error??
+		return; // NOTE discard newState
 	}
-
-	var oldState = panner.getState();
-	var newState = panner.createState({ // FIXME
-		url: url
-	});
 
 	pan(oldState, newState)
 	.then(function(msg) {
 		var oURL = URL(newState.url);
 		scrollToId(oURL.hash && oURL.hash.substr(1));
-
 		panner.saveScroll(newState);
-
 		resolve(msg);
 	});
 	
@@ -2115,7 +2122,7 @@ return new Promise(function(resolve, reject) {
 
 function defaultNavigate(options) {
 return new Promise(function(resolve, reject) {
-	var url = options.url;			  
+	var url = options.url;
 	var modifier = options.replace ? "replace" : "assign";
 	location[modifier](url);
 	resolve();
@@ -2193,15 +2200,15 @@ var pan = function(oldState, newState) {
 	if (!getDecorMarker()) throw "Cannot pan if the document has not been decorated"; // FIXME r.reject()
 
 	var durationFu = delay(panner.options.duration);
-	var oldDoc = panner.bfcache[oldState.timeStamp];
+	var oldDoc = panner.bfcache[oldState.cacheId];
 	if (!oldDoc) {
 		oldDoc = document.implementation.createHTMLDocument(''); // FIXME
-		panner.bfcache[oldState.timeStamp] = oldDoc;
+		panner.bfcache[oldState.cacheId] = oldDoc;
 	}
 	var oldDocSaved = false;
 
 	var newDoc, newDocFu;
-	newDoc = panner.bfcache[newState.timeStamp];
+	newDoc = panner.bfcache[newState.cacheId];
 	if (newDoc) {
 		newDocFu = Promise.resolve(newDoc);
 	}
@@ -2212,7 +2219,7 @@ var pan = function(oldState, newState) {
 		newDocFu.then(
 			function(result) {
 				newDoc = result;
-				panner.bfcache[newState.timeStamp] = newDoc;
+				panner.bfcache[newState.cacheId] = newDoc;
 			},
 			function(error) { logger.error("HTMLLoader failed"); } // FIXME pan() will stall. Need elegant error handling
 		);
