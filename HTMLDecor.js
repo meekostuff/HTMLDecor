@@ -2060,8 +2060,8 @@ restoreState: function(state) {
 saveScroll: function(state) {
 	var msg = 'saveScroll(state) not in sync with panner.state';
 	if (state && state.timeStamp !== panner.getState().timeStamp) {
-		console.log(msg);
-		throw msg;
+		logger.warn(msg);
+		return;
 	}
 	panner.updateState({pageXOffset: window.pageXOffset, pageYOffset: window.pageYOffset });
 },
@@ -2069,8 +2069,8 @@ saveScroll: function(state) {
 restoreScroll: function(state) {
 	var msg = 'restoreScroll(state) not in sync with panner.state';
 	if (state && state.timeStamp !== panner.getState().timeStamp) {
-		console.log(msg);
-		throw msg;
+		logger.warn(msg);
+		return;
 	}
 	window.scroll(state.pageXOffset, state.pageYOffset);
 }
