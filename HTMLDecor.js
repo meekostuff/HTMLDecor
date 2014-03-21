@@ -1586,6 +1586,10 @@ start: function(startOptions) {
 	
 	if (decor.started) throw "Already started";
 	decor.started = true;
+	
+	var done; // grab panner.token
+	panner.ready(true).then(function(callback) { done = callback; }); // WARN done is not available immediately. Ok here cos everything is async. 
+	
 	var domReadyFu = startOptions && startOptions.contentDocument ?
 		startOptions.contentDocument :
 		new Promise(function(resolve, reject) {
@@ -1683,7 +1687,9 @@ start: function(startOptions) {
 		window.addEventListener("submit", function(e) { panner.onSubmit(e); }, true);
 		window.addEventListener("popstate", function(e) { panner.onPopState(e); }, true);
 		window.addEventListener('scroll', function(e) { panner.saveScroll(panner.getState()); }, false); // NOTE first scroll after popstate might be cancelled
-	}
+	},
+	
+	function() { done(); } // release panner token
 	
 	]);
 
@@ -1807,6 +1813,23 @@ decorate: function(decorDocument, decorURL) {
 
 extend(panner, {
 
+ready: (function() {
+	var busy = false;
+	var current = Promise.resolve();
+	
+	function ready(immediate) {
+		if (immediate && busy) return Promise.reject();
+		else return current.then(function() {
+			busy = true;
+			var done, promise = new Promise(function(resolve, reject) { done = resolve; });
+			current = promise.then(function() { busy = false; });
+			return Promise.resolve(done);
+		});
+	}
+	
+	return ready;
+})(),
+
 onClick: function(e) {
 	// NOTE only pushState enabled browsers use this
 	// We want panning to be the default behavior for clicks on hyperlinks - <a href>
@@ -1904,17 +1927,23 @@ triggerStateChange: (function() {
 	
 	var nextStateQueue = [];
 	var processing = false;
+	var done;
 	
 	function push(newState) {	
-		nextStateQueue.push(newState);		
-		asap(process);
+		nextStateQueue.push(newState);
+		bump();
+	}
+	
+	function bump() {
+		if (processing) return;
+		processing = true;
+		panner.ready().then(function(callback) {
+			done = callback;
+			process();
+		});
 	}
 	
 	function process() {
-		if (processing) return;
-		if (nextStateQueue.length <= 0) return;
-		
-		processing = true;
 		var newState = nextStateQueue.pop();
 		nextStateQueue.length = 0;
 		panner.handleStateChange(newState)
@@ -1922,8 +1951,12 @@ triggerStateChange: (function() {
 	}
 	
 	function processCallback() {
-		processing = false;
-		asap(process);
+		if (nextStateQueue.length <= 0) {
+			processing = false;
+			done();
+			return;
+		}
+		process();
 	}
 	
 	return push;
@@ -2079,44 +2112,53 @@ restoreScroll: function(state) {
 
 function navigate(options) {
 return new Promise(function(resolve, reject) {
-	var url = options.url;
+	
+	panner.ready(true).then(function(done) { // grab panner token immediately or fail
+		var url = options.url;
+	
+		var baseURL = URL(document.URL);
+		var oURL = URL(url);
+		var isPageLink = (oURL.nohash === baseURL.nohash); // TODO what about page-links that match the current hash
+	
+		var oldState = panner.getState();
+		var newState = panner.createState({ url: url });
+	
+		if (isPageLink) {
+			newState.cacheId = oldState.cacheId;
+			panner.commitState(newState, false); // pushState
+			scrollToId(oURL.hash.substr(1));
+			panner.saveScroll(newState);
+			done(); // release panner token
+			resolve();
+			return;
+		}
+	
+		var decorURL = decor.options.lookup(url);
+		if (typeof decorURL !== "string" || URL(document.URL).resolve(decorURL) !== decor.current.url) {
+			var modifier = options.replace ? "replace" : "assign";
+			location[modifier](url);
+			resolve(); // TODO should this be an error??
+			done(); // release panner token. TODO Maybe this shouldn't happen??
+			return; // NOTE discard newState
+		}
+	
+		// Change document.URL
+		// FIXME When should this happen?
+		panner.commitState(newState, options.replace);
 
-	var baseURL = URL(document.URL);
-	var oURL = URL(url);
-	var isPageLink = (oURL.nohash === baseURL.nohash); // TODO what about page-links that match the current hash
-
-	var oldState = panner.getState();
-	var newState = panner.createState({ url: url });
-
-	if (isPageLink) {
-		newState.cacheId = oldState.cacheId;
-		panner.commitState(newState, false); // pushState
-		scrollToId(oURL.hash.substr(1));
-		panner.saveScroll(newState);
-		resolve();
-		return;
-	}
-
-	var decorURL = decor.options.lookup(url);
-	if (typeof decorURL !== "string" || URL(document.URL).resolve(decorURL) !== decor.current.url) {
-		var modifier = options.replace ? "replace" : "assign";
-		location[modifier](url);
-		resolve(); // TODO should this be an error??
-		return; // NOTE discard newState
-	}
-
-	pan(oldState, newState)
-	.then(function(msg) {
-		var oURL = URL(newState.url);
-		scrollToId(oURL.hash && oURL.hash.substr(1));
-		panner.saveScroll(newState);
-		resolve(msg);
+		pan(oldState, newState)
+		.then(function(msg) {
+			var oURL = URL(newState.url);
+			scrollToId(oURL.hash && oURL.hash.substr(1));
+			panner.saveScroll(newState);
+			resolve(msg);
+			done();
+		});
+	},
+	function() {
+		logger.warn('Panner busy when attempting to navigate');
 	});
 	
-	// Change document.URL
-	// FIXME When should this happen?
-	panner.commitState(newState, options.replace);
-
 });
 }
 
