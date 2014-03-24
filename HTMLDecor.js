@@ -1904,39 +1904,7 @@ onForm: function(form) {
 	}
 },
 
-triggerStateChange: (function() {
-	
-	var nextStateQueue = [];
-	var processing = false;
-	var done;
-	
-	function push(newState) {	
-		nextStateQueue.push(newState);
-		bump();
-	}
-	
-	function bump() {
-		if (processing) return;
-		processing = true;
-		bfScheduler.whenever(process);
-	}
-	
-	function process() {
-		if (nextStateQueue.length <= 0) {
-			processing = false;
-			return;
-		}
-		var newState = nextStateQueue.pop();
-		nextStateQueue.length = 0;
-		return panner.handleStateChange(newState)
-		.then(process); // FIXME what about errors
-	}
-	
-	return push;
-	
-})(),
-
-handleStateChange: function(newState) {
+handlePopState: function(newState) {
 	var oldState = panner.getState();
 	panner.restoreState(newState);
 
@@ -1962,7 +1930,7 @@ onPopState: function(e) {
 	// NOTE there is no default-action for popstate
 
 	var newState = panner.getStateFromBrowserState(browserState);
-	panner.triggerStateChange(newState);
+	bufferPopState(newState);
 
 	/*
 	  All browsers seem to scroll the page around the popstate event.
@@ -2137,6 +2105,38 @@ return new Promise(function(resolve, reject) {
 	resolve();
 });
 }
+
+var bufferPopState = (function() {
+	
+	var nextStateQueue = [];
+	var processing = false;
+	var done;
+	
+	function push(newState) {
+		nextStateQueue.push(newState);
+		bump();
+	}
+	
+	function bump() {
+		if (processing) return;
+		processing = true;
+		bfScheduler.whenever(process);
+	}
+	
+	function process() {
+		if (nextStateQueue.length <= 0) {
+			processing = false;
+			return;
+		}
+		var newState = nextStateQueue.pop();
+		nextStateQueue.length = 0;
+		return panner.handlePopState(newState)
+		.then(process); // FIXME what about errors
+	}
+	
+	return push;
+	
+})();
 
 var bfScheduler = (function() {
 	
