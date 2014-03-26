@@ -550,10 +550,15 @@ var $id = function(id, doc) {
 }
 var $$ = function(selector, context) { // WARN only selects by tagName
 	context = context || document;
-	try { return context.getElementsByTagName(selector); }
+	var nodeList = [];
+	try { 
+		var coll = context.getElementsByTagName(selector);
+		for (var i=0, n=coll.length; i<n; i++) nodeList[i] = coll[i];
+	}
 	catch (error) {
 		throw (selector + " can only be a tagName selector in $$()");
 	}
+	return nodeList;
 }
 
 var forSiblings = function(conf, refNode, conf2, refNode2, fn) {
