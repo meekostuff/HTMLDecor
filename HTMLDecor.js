@@ -2231,7 +2231,7 @@ panner.options = {
 var notify = function(msg) {
 	var module = Meeko[msg.module];
 	var handler = module.options[msg.type];
-	if (!handler) return;
+	if (!handler) return Promise.resolve();
 	var listener;
 
 	if (handler[msg.stage]) listener = handler[msg.stage];
