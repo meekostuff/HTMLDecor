@@ -610,7 +610,8 @@ var firstChild = function(parent, matcher) {
 	}
 }
 var replaceNode = function(current, next) {
-	if (document.adoptNode) next = document.adoptNode(next); // Safari 5 was throwing because imported nodes had been added to a document node
+	var doc = current.ownerDocument;
+	if (doc.adoptNode) next = doc.adoptNode(next); // Safari 5 was throwing because imported nodes had been added to a document node
 	current.parentNode.replaceChild(next, current);
 	return current;
 }
@@ -673,6 +674,33 @@ document.implementation.createHTMLDocument && function() { // modern browsers
 } ||
 document.createDocumentFragment().getElementById && function() { return document.createDocumentFragment(); } || // IE <= 8 
 function() { return document.cloneNode(false); }  // old IE
+
+var createHTMLDocument = document.implementation.createHTMLDocument && function(title) {
+	return document.implementation.createHTMLDocument(title);
+} ||
+function(titleText) { // TODO space optimization
+	var doc = createDocument();
+	var parent = doc;
+	var docEl;
+	// the following is equivalent of `doc.innerHTML = '<html><head><title>' + titleText + '</title></head><body></body></html>';`
+	forEach(words('html head title body'), function(tagName) {
+		var el = doc.createElement(tagName);
+		parent.appendChild(el);
+		switch (tagName) {
+		case 'title':
+			el.appendChild(doc.createTextNode(titleText));
+			parent = docEl;
+			break;
+		case 'html':
+			docEl = el;
+			// fall-thru
+		default:
+			parent = el;
+			break;
+		}
+	});
+	return doc;
+};
 
 var scrollToId = function(id) {
 	if (id) {
@@ -771,6 +799,9 @@ var overrideDefaultAction = function(e, fn) {
 }
 
 var URL = (function() {
+
+// TODO investigate making neutralize() / deneutralize() et al static methods of URL so external code can use them.
+// TODO is this URL class compatible with the proposed DOM4 URL class??
 
 var URL = function(str) {
 	if (!(this instanceof URL)) return new URL(str);
@@ -1561,7 +1592,7 @@ var polyfill = function(doc) { // NOTE more stuff could be added here if *necess
 var DOM = Meeko.DOM || (Meeko.DOM = {});
 extend(DOM, {
 	$id: $id, $$: $$, tagName: tagName, hasAttribute: hasAttribute, forSiblings: forSiblings, matchesElement: matchesElement, firstChild: firstChild,
-	replaceNode: replaceNode, copyAttributes: copyAttributes, scrollToId: scrollToId, createDocument: createDocument,
+	replaceNode: replaceNode, copyAttributes: copyAttributes, scrollToId: scrollToId, createDocument: createDocument, createHTMLDocument: createHTMLDocument,
 	addEvent: addEvent, removeEvent: removeEvent, ready: domReady, overrideDefaultAction: overrideDefaultAction,
 	URL: URL, HTMLLoader: HTMLLoader, HTMLParser: HTMLParser, loadHTML: loadHTML, parseHTML: parseHTML,
 	polyfill: polyfill
@@ -1645,7 +1676,7 @@ return bfScheduler.now(function() {
 				return doc;
 			})
 			.then(function(doc) {
-				return pageIn(null, doc);
+				return pageIn(null, doc); // NOTE this returns the saved landing document
 			});
 		}
 		]);
@@ -1659,11 +1690,11 @@ return bfScheduler.now(function() {
 			return decor.decorate(decorDocument, decorURL); // FIXME what if decorate fails??
 		},
 		function() {
-			return pageIn(null, null);
+			return pageIn(null, null); // NOTE this returns the saved landing document
 		}
 		]);
 	},
-	function() {
+	function(landingDocument) {
 		scrollToId(location.hash && location.hash.substr(1));
 
 		if (!historyProxy.pushState) return;
@@ -1686,6 +1717,8 @@ return bfScheduler.now(function() {
 			panner.saveScroll(state);
 		}
 
+		panner.bfcache[state.cacheId] = landingDocument;
+		
 		// NOTE fortuitously all the browsers that support pushState() also support addEventListener() and dispatchEvent()
 		window.addEventListener("click", function(e) { panner.onClick(e); }, true);
 		window.addEventListener("submit", function(e) { panner.onSubmit(e); }, true);
@@ -1832,7 +1865,7 @@ onClick: function(e) {
 	if (tagName(target) != "a") return; // only handling hyperlink clicks
 	var href = target.getAttribute("href");
 	if (!href) return; // not really a hyperlink
-	
+
 	// test hyperlinks
 	if (target.target) return; // no iframe
 	var baseURL = URL(document.URL);
@@ -2266,7 +2299,7 @@ var pan = function(oldState, newState) {
 	var durationFu = delay(panner.options.duration);
 	var oldDoc = panner.bfcache[oldState.cacheId];
 	if (!oldDoc) {
-		oldDoc = document.implementation.createHTMLDocument(''); // FIXME
+		oldDoc = createHTMLDocument('');
 		panner.bfcache[oldState.cacheId] = oldDoc;
 	}
 	var oldDocSaved = false;
@@ -2324,7 +2357,12 @@ var pan = function(oldState, newState) {
 		return preach(decor.placeHolders, function(id, node) {
 			var target = $id(id);
 			replaceNode(target, node);
-			oldDoc.body.appendChild(target); // FIXME should use adoptNode()
+			var placeHolder = $id(id, oldDoc);
+			// FIXME should check that `placeHolder` is a shallow-clone of `target`
+			if (placeHolder) replaceNode(placeHolder, target); // FIXME should use adoptNode()
+			else { // FIXME assume this is the first time oldDoc is being populated
+				oldDoc.body.appendChild(target); // FIXME should use adoptNode()
+			}
 			return notify({
 				module: "panner",
 				stage: "after",
@@ -2358,7 +2396,11 @@ var pan = function(oldState, newState) {
 }
 
 function pageIn(oldDoc, newDoc) {
-
+/* NOTE:
+ `newDoc` undefined means this is a *landing* page AND capturing is OFF
+ `oldDoc` undefined means this is a *landing* page OR old-content has already been paged out (by `page()`)
+ */
+	var returnDoc;
 	return pipe(null, [
 		
 	function() { // before pageIn
@@ -2372,74 +2414,13 @@ function pageIn(oldDoc, newDoc) {
 	},
 
 	function() {
-		if (newDoc) mergeHead(newDoc, false, function(target) {
-			if (oldDoc) oldDoc.head.appendChild(target);
-		});
+		if (newDoc) return normalPageIn();
+		newDoc = createHTMLDocument(''); // FIXME this doesn't work for IE <= 8
+		return landingPageIn();
 	},
 	
-	function() {
-		var contentLoaded = false;
-		var decorEnd;
-		if (newDoc) contentLoaded = true;
-		else {
-			DOM.ready(function() { contentLoaded = true; });
-			decorEnd = $$('plaintext')[0];
-		}
-		
-		var afterReplaceFu;
-		
-		return preach(function(i) { // NOTE if this sourcing function returns nothing (or a promise that resolves with nothing) then preach() terminates
-			if (newDoc) return newDoc.body.firstChild;
-
-			return wait(function() { return decorEnd.nextSibling || contentLoaded; })
-				.then(function() { return decorEnd.nextSibling; });
-		},
-		function(i, node) {
-			var target;
-			if (node.id && (target = $id(node.id)) != node) {
-				// TODO compat check between node and target
-				return beforeReplace(node, target)
-				.then(function() {
-					return wait(function() {
-						try { replaceNode(target, node); } // NOTE throws in IE <= 8 if node is still loading. Very slow in IE9 on large pages.
-						catch (error) { return false; } // TODO what error does IE throw? Is it always because the node is still loading?
-						return true;
-					});
-				}).
-				then(function() { afterReplaceFu = afterReplace(node, target); });
-			}
-			else return wait(function() {
-				try { node.parentNode.removeChild(node); }
-				catch (error) { return false; }
-				return true;
-			});
-		})
-		.then(function() { return afterReplaceFu; }); // this will be the last `afterReplaceFu`
-
-		function beforeReplace(node, target) {
-			return notify({
-				module: "panner",
-				stage: "before",
-				type: "nodeInserted",
-				target: document.body,
-				node: node
-			});
-		}
-		function afterReplace(node, target) {
-			if (oldDoc) oldDoc.body.appendChild(target);
-			if (!oldDoc) decor.placeHolders[target.id] = target;
-			return delay(0).then(function() {
-				return notify({
-					module: "panner",
-					stage: "after",
-					type: "nodeInserted",
-					target: document.body,
-					node: node
-				});
-			});
-		}
-	},
-
+	function(doc) { returnDoc = doc; },
+	
 	function() { return scriptQueue.empty(); },
 	
 	function() { // after pageIn
@@ -2449,9 +2430,132 @@ function pageIn(oldDoc, newDoc) {
 			type: "pageIn",
 			target: document
 		});
-	}
+	},
+	
+	function() { return returnDoc; }
 
 	]);
+	
+	function normalPageIn() { // `newDoc` is stand-along, `oldDoc` may exist
+		return pipe(null, [
+
+		function() {
+			mergeHead(newDoc, false, function(target) {
+				if (oldDoc) oldDoc.head.appendChild(target);
+			});
+		},
+		
+		function() {
+			var cursor = newDoc.body.firstChild;
+			var afterReplaceFu;
+			
+			return preach(function(i) { // NOTE if this sourcing function returns nothing (or a promise that resolves with nothing) then preach() terminates
+				var node = cursor;
+				cursor = cursor && cursor.nextSibling;
+				return node;
+			},
+			function(i, node) {
+				var id = node.id;
+				if (!id) return;
+				var target = $id(node.id);
+				if (!target) return;
+				// TODO compat check between node and target
+				return beforeReplace(node, target)
+				.then(function() {
+					var newPlaceHolder = node.cloneNode(false);
+					replaceNode(node, newPlaceHolder);
+					replaceNode(target, node);
+					if (oldDoc) {
+						var oldPlaceHolder = $id(target.id, oldDoc);
+						if (oldPlaceHolder) { // FIXME should test that oldPlaceHolder is shallow-clone of target & is child of oldDoc.body
+							replaceNode(oldPlaceHolder, target); // FIXME should use adoptNode()
+						}
+						else { // FIXME assuming first time populating `oldDoc`
+							oldDoc.body.appendChild(target); // FIXME should use adoptNode();
+						}
+					}
+					else decor.placeHolders[target.id] = target;
+				}).
+				then(function() { afterReplaceFu = afterReplace(node, target); });
+			})
+			.then(function() { return afterReplaceFu; }); // this will be the last `afterReplaceFu`
+		},
+		
+		function() {
+			return newDoc;
+		}
+			
+		]);
+	}
+
+	function landingPageIn() { // there will be no `oldDoc`, `newDoc` is empty, content-nodes are sourced from `document` at end-of-decor
+		return pipe(null, [
+
+		function() {
+			var contentLoaded = false;
+			DOM.ready(function() { contentLoaded = true; });
+			var decorEnd = $$('plaintext')[0];
+			var afterReplaceFu;
+			
+			return preach(function(i) { // NOTE if this sourcing function returns nothing (or a promise that resolves with nothing) then preach() terminates
+				return wait(function() { return decorEnd.nextSibling || contentLoaded; })
+					.then(function() {
+						return decorEnd.nextSibling;
+					});
+			},
+			function(i, node) {
+				var target;
+				var id = node.id;
+				if (id) target = $id(id);
+				if (!target || target === node) return wait(function() { // nowhere for content-node to be placed
+					try { node.parentNode.removeChild(node); }
+					catch (error) { return false; }
+					newDoc.body.appendChild(node); // FIXME should use adoptNode()
+					return true;
+				});
+				
+				// TODO compat check between node and target
+				return beforeReplace(node, target)
+				.then(function() {
+					var placeHolder = node.cloneNode(false);
+					return wait(function() {
+						try { replaceNode(target, node); } // NOTE throws in IE <= 8 if node is still loading. Very slow in IE9 on large pages.
+						catch (error) { return false; } // TODO what error does IE throw? Is it always because the node is still loading?
+						newDoc.body.appendChild(placeHolder); // FIXME should use adoptNode()
+						decor.placeHolders[target.id] = target;
+						return true;
+					});
+				}).
+				then(function() { afterReplaceFu = afterReplace(node, target); });
+			})
+			.then(function() { return afterReplaceFu; }) // this will be the last `afterReplaceFu`
+			.then(function() { return newDoc; });
+		}
+					
+		]);
+	}
+
+
+	function beforeReplace(node, target) {
+		return notify({
+			module: "panner",
+			stage: "before",
+			type: "nodeInserted",
+			target: document.body,
+			node: node
+		});
+	}
+	function afterReplace(node, target) {
+		return delay(0).then(function() {
+			return notify({
+				module: "panner",
+				stage: "after",
+				type: "nodeInserted",
+				target: document.body,
+				node: node
+			});
+		});
+	}
 
 }
 
