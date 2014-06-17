@@ -1,5 +1,5 @@
 /*!
- * Copyright 2012-2013 Sean Hogan (http://meekostuff.net/)
+ * Copyright 2012-2014 Sean Hogan (http://meekostuff.net/)
  * Mozilla Public License v2.0 (http://mozilla.org/MPL/2.0/)
  */
 
@@ -134,7 +134,7 @@ function addDataSource(name, key) {
 		var source = window[name] || Meeko[name];
 		if (!source) return;
 		var options = parseJSON(source.getItem(key));
-		if (options) dataSources.push( function(name) { return options[name] } );
+		if (options) dataSources.push( function(name) { return options[name]; } );
 	} catch(error) {
 		logger.warn(name + ' inaccessible');
 	}
@@ -152,13 +152,13 @@ var getData = function(name, type) {
 		var val = fn(name);
 		if (val == null) return false;
 		switch (type) {
-		case "string": data = val; break;
+		case "string": data = '' + val; break;
 		case "number":
 			if (!isNaN(val)) data = 1 * val;
 			// TODO else logger.warn("incorrect config option " + val + " for " + name); 
 			break;
 		case "boolean":
-			data = !!val;
+			data = val; // WARN this does NOT convert to Boolean
 			// if ([false, true, 0, 1].indexOf(val) < 0) logger.warn("incorrect config option " + val + " for " + name); 
 			break;
 		}
@@ -531,19 +531,28 @@ var Capture = {
 
 start: function() {
 	if (document.body) throw 'When capturing, boot-script MUST be in - or before - <head>';
-	if ($$('script').length > 1) throw 'When capturing, boot-script MUST be first <script>';
+	var errMsg = Capture.test();
+	if (errMsg) {
+		if (bootOptions['capturing'] === 'strict') throw errMsg;
+		else logger.warn(errMsg);
+	}
+	capturedHTML += getDocTypeTag(document); // WARN relies on document.doctype
+	capturedHTML += toStartTag(document.documentElement); // WARN relies on element.outerHTML
+	capturedHTML += toStartTag(document.head);
+	document.write('<plaintext style="display: none;">');
+},
+
+test: function() { // return `false` for strict, otherwise warning message
+	if ($$('script').length > 1) return 'When capturing, boot-script SHOULD be first <script>';
 	if (some($$('*', document.head), function(node) { // return true if invalid node
 		if (node.nodeType !== 1) return false; // comments and text-nodes are ok
 		if (node === bootScript) return false; // boot-script is ok. TODO should be last node in <head>
 		if (node.tagName === 'TITLE' && node.firstChild === null) return false; // IE6 adds a dummy <title>
 		if (node.tagName !== 'META') return true; 
 		if (node.httpEquiv || node.getAttribute('charset')) return false; // <meta http-equiv> are ok
-		return true;
-	})) throw 'When capturing, only <meta http-equiv> or <meta charset> nodes may precede boot-script';
-	capturedHTML += getDocTypeTag(document); // WARN relies on document.doctype
-	capturedHTML += toStartTag(document.documentElement); // WARN relies on element.outerHTML
-	capturedHTML += toStartTag(document.head);
-	document.write('<plaintext style="display: none;">');
+		return true; // WARN should never reach here
+	})) return 'When capturing, only <meta http-equiv> or <meta charset> nodes may precede boot-script';
+	return false; 
 },
 
 getDocument: function() { // WARN this assumes HTMLDecor is ready

@@ -425,8 +425,6 @@ Scripts in the `<body>` of the next page are **enabled** AFTER the content in th
 Capturing
 ---------
 
-<small> **This feature is in beta. It may be removed or redesigned.** </small>
-
 The **capturing** [boot option](#boot-options) prevents normal browser parsing of the *landing page*.  
 This allows HTMLDecor to manage parsing in the same way that AJAXed pages are handled.
 The main benefits of this would be:
@@ -445,9 +443,13 @@ provides a short description and discussion of this approach.
 
 ### Restrictions
 
-- The boot-script must be the first `<script>` in the page.
-- The boot-script must be within - or before - `<head>`.
-- If within `<head>` the boot-script may only be preceded by `<meta http-equiv>` elements.
+1. The boot-script must be within - or before - `<head>`.
+2. The boot-script must be the first `<script>` in the page.
+3. If within `<head>` the boot-script may only be preceded by `<meta http-equiv>` elements.
+
+Capturing should be enabled by setting the **capturing** boot option to "strict". This enforces all the preceding restrictions.
+
+Setting the option to true only enforces the first restriction, with warnings given about the other two.
 
 
 Debugging
@@ -546,8 +548,8 @@ The boot-script has the following options (default values in **bold**).
 - htmldecor_script: **"{bootscriptdir}HTMLDecor.js"**
 - log_level: "none", "error", **"warn"**, "info", "debug"
 - polling_interval: **50** (milliseconds)
-- autostart: **true**, false
-- capturing: true, **false**
+- autostart: false, **true**
+- capturing: **false**, true, "strict"
 - hidden_timeout: **3000** (milliseconds)
 - html5\_block\_elements: **"article aside figcaption figure footer header hgroup main nav section"**
 - html5\_inline\_elements: **"abbr mark output time audio video picture"**

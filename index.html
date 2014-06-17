@@ -442,8 +442,6 @@ Scripts in the <code>&lt;body&gt;</code> of the next page are <strong>enabled</s
 
 <h2>Capturing</h2>
 
-<p><small> <strong>This feature is in beta. It may be removed or redesigned.</strong> </small></p>
-
 <p>The <strong>capturing</strong> <a href="#boot-options">boot option</a> prevents normal browser parsing of the <em>landing page</em>. <br />
 This allows HTMLDecor to manage parsing in the same way that AJAXed pages are handled.
 The main benefits of this would be:</p>
@@ -465,11 +463,15 @@ provides a short description and discussion of this approach.</p>
 
 <h3>Restrictions</h3>
 
-<ul>
-<li>The boot-script must be the first <code>&lt;script&gt;</code> in the page.</li>
+<ol>
 <li>The boot-script must be within - or before - <code>&lt;head&gt;</code>.</li>
+<li>The boot-script must be the first <code>&lt;script&gt;</code> in the page.</li>
 <li>If within <code>&lt;head&gt;</code> the boot-script may only be preceded by <code>&lt;meta http-equiv&gt;</code> elements.</li>
-</ul>
+</ol>
+
+<p>Capturing should be enabled by setting the <strong>capturing</strong> boot option to "strict". This enforces all the preceding restrictions.</p>
+
+<p>Setting the option to true only enforces the first restriction, with warnings given about the other two.</p>
 
 <h2>Debugging</h2>
 
@@ -582,8 +584,8 @@ The boot-script has the following options (default values in <strong>bold</stron
 <li>htmldecor_script: <strong>"{bootscriptdir}HTMLDecor.js"</strong></li>
 <li>log_level: "none", "error", <strong>"warn"</strong>, "info", "debug"</li>
 <li>polling_interval: <strong>50</strong> (milliseconds)</li>
-<li>autostart: <strong>true</strong>, false</li>
-<li>capturing: true, <strong>false</strong></li>
+<li>autostart: false, <strong>true</strong></li>
+<li>capturing: <strong>false</strong>, true, "strict"</li>
 <li>hidden_timeout: <strong>3000</strong> (milliseconds)</li>
 <li>html5_block_elements: <strong>"article aside figcaption figure footer header hgroup main nav section"</strong></li>
 <li>html5_inline_elements: <strong>"abbr mark output time audio video picture"</strong></li>
