@@ -1,5 +1,5 @@
 /*!
- * Copyright 2009-2013 Sean Hogan (http://meekostuff.net/)
+ * Copyright 2009-2014 Sean Hogan (http://meekostuff.net/)
  * Mozilla Public License v2.0 (http://mozilla.org/MPL/2.0/)
  */
 
