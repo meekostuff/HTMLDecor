@@ -800,7 +800,6 @@ var overrideDefaultAction = function(e, fn) {
 
 var URL = (function() {
 
-// TODO investigate making neutralize() / deneutralize() et al static methods of URL so external code can use them.
 // TODO is this URL class compatible with the proposed DOM4 URL class??
 
 var URL = function(str) {
@@ -860,6 +859,23 @@ URL.prototype.resolve = function resolve(relURL) {
 return URL;
 
 })();
+
+var neutralProtocol = vendorPrefix + '-href:';
+var neutralProtocolLen = neutralProtocol.length;
+function neutralizeURL(url) {
+	return neutralProtocol + url;
+}
+function deneutralizeURL(url) {
+	var confirmed = url.indexOf(neutralProtocol) === 0;
+	if (confirmed) return url.substr(neutralProtocolLen);
+	return url;
+}
+
+extend(URL, {
+	neutralProtocol: neutralProtocol,
+	neutralize: neutralizeURL,
+	deneutralize: deneutralizeURL
+});
 
 var loadHTML = function(url) { // WARN only performs GET
 	var htmlLoader = new HTMLLoader();
@@ -1097,18 +1113,6 @@ resolveURL: function(url, baseURL, force, neutralized, stayNeutral) {
 }
 
 });
-
-var neutralProtocol = vendorPrefix + '-href:';
-var neutralProtocolLen = neutralProtocol.length;
-function neutralizeURL(url) {
-	return neutralProtocol + url;
-}
-function deneutralizeURL(url) {
-	var confirmed = url.indexOf(neutralProtocol) === 0;
-	if (confirmed) return url.substr(neutralProtocolLen);
-	return url;
-}
-
 
 var urlAttrs = {};
 forEach(words("link@<href script@<src img@<longDesc,<src,srcset iframe@<longDesc,<src object@<data embed@<src video@<poster,<src audio@<src source@<src,srcset input@formAction,<src button@formAction,<src a@ping,href area@href q@cite blockquote@cite ins@cite del@cite form@action"), function(text) {
