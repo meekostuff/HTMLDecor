@@ -823,10 +823,10 @@ URL.prototype.parse = function parse(str) {
 	this.supportsResolve = /^(http|https|ftp|file):$/i.test(this.protocol);
 	if (!this.supportsResolve) return;
 	if (this.pathname == '') this.pathname = '/';
-	this.nopathname = this.protocol + (this.supportsResolve ? '//' : '') + this.host;
+	this.origin = this.protocol + (this.supportsResolve ? '//' : '') + this.host;
 	this.basepath = this.pathname.replace(/[^\/]*$/,'');
-	this.base = this.nopathname + this.basepath;
-	this.nosearch = this.nopathname + this.pathname;
+	this.base = this.origin + this.basepath;
+	this.nosearch = this.origin + this.pathname;
 	this.nohash = this.nosearch + this.search;
 	this.href = this.nohash + this.hash;
 	this.toString = function() { return this.href; }
@@ -839,7 +839,7 @@ URL.prototype.resolve = function resolve(relURL) {
 	var absURL =
 		/^[a-zA-Z0-9-]+:/.test(relURL) ? relURL :
 		substr2 == '//' ? this.protocol + relURL :
-		substr1 == '/' ? this.nopathname + relURL :
+		substr1 == '/' ? this.origin + relURL :
 		substr1 == '?' ? this.nosearch + relURL :
 		substr1 == '#' ? this.nohash + relURL :
 		substr1 != '.' ? this.base + relURL :
@@ -851,7 +851,7 @@ URL.prototype.resolve = function resolve(relURL) {
 				myRel = myRel.replace('../', '');
 				myDir = myDir.replace(/[^\/]+\/$/, '');
 			}
-			return this.nopathname + myDir + myRel;
+			return this.origin + myDir + myRel;
 		}).call(this);
 	return absURL;
 }
@@ -1871,7 +1871,7 @@ onClick: function(e) {
 	var baseURL = URL(document.URL);
 	var url = baseURL.resolve(href); // TODO probably don't need to resolve on browsers that support pushstate
 	var oURL = URL(url);
-	if (oURL.nopathname != baseURL.nopathname) return; // no external urls
+	if (oURL.origin != baseURL.origin) return; // no external urls
 		
 	// TODO perhaps should test same-site and same-page links
 	var isPageLink = (oURL.nohash == baseURL.nohash); // TODO what about page-links that match the current hash
@@ -1904,7 +1904,7 @@ onSubmit: function(e) {
 	var baseURL = URL(document.URL);
 	var url = baseURL.resolve(form.action); // TODO probably don't need to resolve on browsers that support pushstate
 	var oURL = URL(url);
-	if (oURL.nopathname != baseURL.nopathname) return; // no external urls
+	if (oURL.origin != baseURL.origin) return; // no external urls
 	
 	var method = lc(form.method);
 	switch(method) {

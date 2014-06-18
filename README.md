@@ -728,7 +728,7 @@ The most useful of these are in the `Meeko.DOM` namespace, and include
 	This provides overlapping functionality with the [proposed URL API](http://url.spec.whatwg.org/#api). 
 	`Meeko.DOM.URL(absoluteURL)` will return a URL object with the following (read-only) fields:  
 	- `href`, `protocol`, `host`, `hostname`, `port`, `pathname`, `search`, `hash` **(Standard)**  
-	- `nopathname`, `basepath`, `base`, `nosearch`, `nohash` **(Extensions)**  
+	- `origin`, `basepath`, `base`, `nosearch`, `nohash` **(Extensions)**  
 	The URL object also has the `resolve(relativeURL)` method which performs a
 	fast conversion of a relative URL to absolute, using itself for the `baseURL`.
 	
