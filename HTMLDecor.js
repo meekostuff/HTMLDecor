@@ -609,11 +609,17 @@ var firstChild = function(parent, matcher) {
 		if (fn(node)) return node;
 	}
 }
-var replaceNode = function(current, next) {
-	var doc = current.ownerDocument;
-	if (doc.adoptNode) next = doc.adoptNode(next); // Safari 5 was throwing because imported nodes had been added to a document node
-	current.parentNode.replaceChild(next, current);
-	return current;
+var insertNode = function(conf, refNode, node) { // like imsertAdjacentHTML but with a node and auto-adoption
+	var doc = refNode.ownerDocument;
+	if (doc.adoptNode) node = doc.adoptNode(node); // Safari 5 was throwing because imported nodes had been added to a document node
+	switch(conf) {
+	case "beforebegin": refNode.parentNode.insertBefore(node, refNode); break;
+	case "afterend": refNode.parentNode.insertBefore(node, refNode.nextSilbing); break;
+	case "afterbegin": refNode.insertBefore(node, refNode.firstChild); break;
+	case "beforeend": refNode.appendChild(node); break;
+	case "replace": refNode.parentNode.replaceChild(node, refNode);
+	}
+	return refNode;
 }
 
 var composeNode = function(srcNode) { // document.importNode() NOT available on IE < 9
@@ -965,7 +971,7 @@ var polyfill = function(doc) { // NOTE more stuff could be added here if *necess
 var DOM = Meeko.DOM || (Meeko.DOM = {});
 extend(DOM, {
 	$id: $id, $$: $$, tagName: tagName, hasAttribute: hasAttribute, forSiblings: forSiblings, matchesElement: matchesElement, firstChild: firstChild,
-	replaceNode: replaceNode, copyAttributes: copyAttributes, scrollToId: scrollToId, createDocument: createDocument, createHTMLDocument: createHTMLDocument,
+	insertNode: insertNode, copyAttributes: copyAttributes, scrollToId: scrollToId, createDocument: createDocument, createHTMLDocument: createHTMLDocument,
 	importDocument: importDocument, importSingleNode: importSingleNode,
 	addEvent: addEvent, removeEvent: removeEvent, ready: domReady, overrideDefaultAction: overrideDefaultAction,
 	polyfill: polyfill
@@ -2421,17 +2427,17 @@ var pan = function(oldState, newState) {
 		if (newDoc) return; // pageIn will take care of pageOut
 
 		separateHead(false, function(target) {
-			oldDoc.head.appendChild(target); // FIXME will need to use some of mergeHead()
+			insertNode('beforeend', oldDoc.head, target); // FIXME will need to use some of mergeHead()
 		});
 
 		return preach(decor.placeHolders, function(id, node) {
 			var target = $id(id);
-			replaceNode(target, node);
+			insertNode('replace', target, node);
 			var placeHolder = $id(id, oldDoc);
 			// FIXME should check that `placeHolder` is a shallow-clone of `target`
-			if (placeHolder) replaceNode(placeHolder, target);
+			if (placeHolder) insertNode('replace', placeHolder, target);
 			else { // FIXME assume this is the first time oldDoc is being populated
-				oldDoc.body.appendChild(target); // FIXME should use adoptNode()
+				insertNode('beforeend', oldDoc.body, target);
 			}
 			return notify({
 				module: "panner",
@@ -2511,7 +2517,7 @@ function pageIn(oldDoc, newDoc) {
 
 		function() {
 			mergeHead(newDoc, false, function(target) {
-				if (oldDoc) oldDoc.head.appendChild(target);
+				if (oldDoc) insertNode('beforeend', oldDoc.head, target);
 			});
 		},
 		
@@ -2533,15 +2539,15 @@ function pageIn(oldDoc, newDoc) {
 				return beforeReplace(node, target)
 				.then(function() {
 					var newPlaceHolder = node.cloneNode(false);
-					replaceNode(node, newPlaceHolder);
-					replaceNode(target, node);
+					insertNode('replace', node, newPlaceHolder);
+					insertNode('replace', target, node);
 					if (oldDoc) {
 						var oldPlaceHolder = $id(target.id, oldDoc);
 						if (oldPlaceHolder) { // FIXME should test that oldPlaceHolder is shallow-clone of target & is child of oldDoc.body
-							replaceNode(oldPlaceHolder, target);
+							insertNode('replace', oldPlaceHolder, target);
 						}
 						else { // FIXME assuming first time populating `oldDoc`
-							oldDoc.body.appendChild(target); // FIXME should use adoptNode();
+							insertNode('beforeend', oldDoc.body, target);
 						}
 					}
 					else decor.placeHolders[target.id] = target;
@@ -2580,7 +2586,7 @@ function pageIn(oldDoc, newDoc) {
 				if (!target || target === node) return wait(function() { // nowhere for content-node to be placed
 					try { node.parentNode.removeChild(node); }
 					catch (error) { return false; }
-					newDoc.body.appendChild(node); // FIXME should use adoptNode()
+					insertNode('beforeend', newDoc.body, node);
 					return true;
 				});
 				
@@ -2589,9 +2595,9 @@ function pageIn(oldDoc, newDoc) {
 				.then(function() {
 					var placeHolder = node.cloneNode(false);
 					return wait(function() {
-						try { replaceNode(target, node); } // NOTE throws in IE <= 8 if node is still loading. Very slow in IE9 on large pages.
+						try { insertNode('replace', target, node); } // NOTE throws in IE <= 8 if node is still loading. Very slow in IE9 on large pages.
 						catch (error) { return false; } // TODO what error does IE throw? Is it always because the node is still loading?
-						newDoc.body.appendChild(placeHolder); // FIXME should use adoptNode()
+						insertNode('beforeend', newDoc.body, placeHolder);
 						decor.placeHolders[target.id] = target;
 						return true;
 					});
@@ -2687,8 +2693,8 @@ function mergeHead(doc, isDecor, afterRemove) { // FIXME more callback than just
 		case "script":  // FIXME no duplicate @src
 			break;
 		}
-		if (isDecor) dstHead.insertBefore(srcNode, marker);
-		else dstHead.appendChild(srcNode);
+		if (isDecor) insertNode('beforebegin', marker, srcNode);
+		else insertNode('beforeend', dstHead, srcNode);
 		if (tagName(srcNode) == "link") srcNode.href = srcNode.getAttribute("href"); // Otherwise <link title="..." /> stylesheets don't work on Chrome
 	});
 	// allow scripts to run
@@ -2803,7 +2809,7 @@ this.push = function(node) {
 		preloadedFu.then(_enable, function(err) { logger.error('Script preloading failed'); });
 	}
 	function _enable() {
-		replaceNode(node, script);
+		insertNode('replace', node, script);
 		enabledRe.resolve(); 
 		if (!script.src) {
 			remove(queue, current);
