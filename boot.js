@@ -656,7 +656,7 @@ html5prepare(); // no doc arg means use document and add block element styles
 
 function config() {
 	Meeko.DOM.ready = domReady;
-	Meeko.DOM.HTMLParser.prototype.prepare = html5prepare;
+	Meeko.HTMLParser.prototype.prepare = html5prepare;
 	Meeko.Promise.pollingInterval = bootOptions["polling_interval"];
 	Meeko.decor.config({
 		decorReady: Viewport.unhide

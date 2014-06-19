@@ -724,11 +724,11 @@ HTMLDecor defines various utility classes and functions for internal use.
 Many of these are also available for external use if appropriate.
 The most useful of these are in the `Meeko.DOM` namespace, and include 
 
-+ `Meeko.DOM.URL`
++ `Meeko.URL`
 	This provides overlapping functionality with the [proposed URL API](http://url.spec.whatwg.org/#api). 
-	`Meeko.DOM.URL(absoluteURL)` will return a URL object with the following (read-only) fields:  
+	`Meeko.URL(absoluteURL)` will return a URL object with the following (read-only) fields:  
 	- `href`, `protocol`, `host`, `hostname`, `port`, `pathname`, `search`, `hash` **(Standard)**  
-	- `origin`, `basepath`, `base`, `nosearch`, `nohash` **(Extensions)**  
+	- `origin`, `basepath`, `base`, `filename`, `nosearch`, `nohash` **(Extensions)**  
 	The URL object also has the `resolve(relativeURL)` method which performs a
 	fast conversion of a relative URL to absolute, using itself for the `baseURL`.
 	
